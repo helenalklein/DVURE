@@ -1,9 +1,16 @@
 import { useState } from "react";
-import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea } from "../shared/ui";
+import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus } from "lucide-react";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT } from "../shared/mockData";
+import type { RosterModel } from "../shared/types";
 
 const AGENCY_NAME = "Elite Model Mgmt.";
+
+// Seed roster from the existing mock talent — in Milestone B this becomes
+// a real `talent_profiles` query scoped to the agency's org.
+const INITIAL_ROSTER: RosterModel[] = SAMPLE_TALENT
+  .filter(t=>t.agency===AGENCY_NAME)
+  .map(t=>({ id:t.id, name:t.name, email:`${t.name.toLowerCase().replace(/\s+/g,".")}@models.example`, agency:AGENCY_NAME, location:t.location, rate:t.rate, height:t.height, exp:t.exp }));
 
 type View = "invitations" | "submit" | "roster" | "payments" | "messaging";
 
@@ -46,34 +53,57 @@ function InvitationsView({ onSubmitTalent }: { onSubmitTalent: () => void }) {
   );
 }
 
-function SubmitTalentView() {
-  const [submitted, setSubmitted] = useState<string[]>([]);
+function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onGoToRoster: () => void }) {
+  const [submitted, setSubmitted] = useState<{ modelId: number; campaign: string }[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const roster = SAMPLE_TALENT.filter(t=>t.agency===AGENCY_NAME);
+  const [pickedCampaign, setPickedCampaign] = useState(INVITATIONS[0]?.campaign ?? "");
+  const [pickedModelId, setPickedModelId] = useState<number | "">("");
+
+  const submittedIds = new Set(submitted.map(s=>s.modelId));
+  const pending = roster.filter(m=>!submittedIds.has(m.id));
+
+  function openForm() {
+    setPickedCampaign(INVITATIONS[0]?.campaign ?? "");
+    setPickedModelId(pending[0]?.id ?? "");
+    setShowForm(true);
+  }
 
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Submit talent from your roster to open campaigns.</p>
-        <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={()=>setShowForm(true)}>Submit Talent</Btn>
+        <p className="text-sm text-muted-foreground">Submit models from your roster to open campaigns.</p>
+        <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={openForm} disabled={roster.length===0}>Submit Talent</Btn>
       </div>
+
+      {roster.length===0 && (
+        <div className="border border-dashed border-border rounded-md p-8 text-center space-y-3">
+          <div className="text-sm text-muted-foreground">Your roster is empty — add a model before you can submit talent to a campaign.</div>
+          <Btn variant="primary" size="sm" icon={<UserPlus size={12}/>} onClick={onGoToRoster}>Add Model</Btn>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {roster.map(t=>(
-          <div key={t.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+        {roster.filter(m=>submittedIds.has(m.id)).map(m=>{
+          const sub = submitted.find(s=>s.modelId===m.id)!;
+          return (
+            <div key={m.id} className="bg-card border border-dashed border-border rounded-md p-4 flex items-center gap-4 opacity-70">
+              <XBox className="w-12 h-12 rounded-md shrink-0"/>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold">{m.name}</div>
+                <div className="text-xs text-muted-foreground">{sub.campaign} · awaiting brand review</div>
+              </div>
+              <Badge label="Submitted" variant="pending"/>
+            </div>
+          );
+        })}
+        {roster.filter(m=>!submittedIds.has(m.id)).map(m=>(
+          <div key={m.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
             <XBox className="w-12 h-12 rounded-md shrink-0"/>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">{t.name}</div>
-              <div className="text-xs text-muted-foreground">{t.location} · {t.rate}</div>
+              <div className="text-sm font-semibold">{m.name}</div>
+              <div className="text-xs text-muted-foreground">{m.location} · {m.rate}</div>
             </div>
-            <Badge label={t.stage==="submitted"?"Submitted":t.stage==="approved"?"Approved":t.stage==="booked"?"Booked":"Rejected"}
-              variant={t.stage==="booked"?"active":t.stage==="approved"?"info":t.stage==="rejected"?"draft":"pending"}/>
-          </div>
-        ))}
-        {submitted.map(name=>(
-          <div key={name} className="bg-card border border-dashed border-border rounded-md p-4 flex items-center gap-4 opacity-70">
-            <XBox className="w-12 h-12 rounded-md shrink-0"/>
-            <div className="flex-1"><div className="text-sm font-semibold">{name}</div><div className="text-xs text-muted-foreground">Just submitted — awaiting brand review</div></div>
-            <Badge label="Submitted" variant="pending"/>
+            <Btn variant="outline" size="sm" onClick={()=>{ setPickedModelId(m.id); setPickedCampaign(INVITATIONS[0]?.campaign ?? ""); setShowForm(true); }}>Submit</Btn>
           </div>
         ))}
       </div>
@@ -86,13 +116,24 @@ function SubmitTalentView() {
               <button onClick={()=>setShowForm(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="p-5 space-y-3">
+              <div>
+                <FieldLabel>Model</FieldLabel>
+                <div className="relative">
+                  <select value={pickedModelId} onChange={e=>setPickedModelId(Number(e.target.value))}
+                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+                    {pending.map(m=><option key={m.id} value={m.id}>{m.name} — {m.rate}</option>)}
+                  </select>
+                </div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-1">From your roster — pulled from their DVURE profile.</div>
+              </div>
               <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)}/>
-              <TextInput label="Model Name" placeholder="e.g. Nadia Petrov"/>
-              <TextInput label="Day Rate" placeholder="e.g. $1,000/day"/>
               <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
             </div>
             <div className="px-5 pb-5 flex gap-2">
-              <Btn variant="primary" onClick={()=>{ setSubmitted(p=>[...p,"New Submission"]); setShowForm(false); }}>Submit</Btn>
+              <Btn variant="primary" disabled={pickedModelId===""} onClick={()=>{
+                if (pickedModelId!=="") setSubmitted(p=>[...p,{ modelId:pickedModelId, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"" }]);
+                setShowForm(false);
+              }}>Submit</Btn>
               <Btn variant="outline" onClick={()=>setShowForm(false)}>Cancel</Btn>
             </div>
           </div>
@@ -102,21 +143,64 @@ function SubmitTalentView() {
   );
 }
 
-function RosterView() {
-  const roster = SAMPLE_TALENT.filter(t=>t.agency===AGENCY_NAME);
+function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omit<RosterModel,"id"|"agency">) => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [location, setLocation] = useState("");
+  const [rate, setRate] = useState("");
+
   return (
-    <div className="max-w-2xl space-y-2">
-      <p className="text-sm text-muted-foreground mb-2">Your full talent roster.</p>
-      {roster.map(t=>(
-        <div key={t.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
-          <XBox className="w-12 h-12 rounded-md shrink-0"/>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold">{t.name}</div>
-            <div className="text-xs text-muted-foreground">{t.location} · {t.height} · {t.exp} experience</div>
-          </div>
-          <div className="text-xs font-mono">{t.rate}</div>
+    <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="text-sm font-semibold">Add Model to Roster</div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
         </div>
-      ))}
+        <div className="p-5 space-y-3">
+          <TextInput label="Full Name" placeholder="e.g. Nadia Petrov" value={name} onChange={e=>setName(e.target.value)}/>
+          <TextInput label="Email" placeholder="model@example.com" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+          <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
+          <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
+          <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+            An invitation email will be sent to this model to set up their DVURE login, so they can see their own bookings and payment status.
+          </div>
+        </div>
+        <div className="px-5 pb-5 flex gap-2">
+          <Btn variant="primary" disabled={!name || !email} onClick={()=>{
+            onAdd({ name, email, location: location||"—", rate: rate||"—", height:"—", exp:"—" });
+            onClose();
+          }}>Send Invitation</Btn>
+          <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel: (m: Omit<RosterModel,"id"|"agency">) => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Your full talent roster — it's the agency's responsibility to add models here.</p>
+        <Btn variant="primary" size="sm" icon={<UserPlus size={12}/>} onClick={()=>setShowAdd(true)}>Add Model</Btn>
+      </div>
+      <div className="space-y-2">
+        {roster.map(m=>(
+          <div key={m.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+            <XBox className="w-12 h-12 rounded-md shrink-0"/>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold">{m.name}</div>
+              <div className="text-xs text-muted-foreground">{m.location} · {m.email}</div>
+            </div>
+            <div className="text-xs font-mono">{m.rate}</div>
+          </div>
+        ))}
+        {roster.length===0 && (
+          <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No models yet — add your first one.</div>
+        )}
+      </div>
+      {showAdd && <AddModelModal onClose={()=>setShowAdd(false)} onAdd={onAddModel}/>}
     </div>
   );
 }
@@ -181,6 +265,11 @@ function PaymentsView() {
 
 export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   const [view, setView] = useState<View>("invitations");
+  const [roster, setRoster] = useState<RosterModel[]>(INITIAL_ROSTER);
+
+  function addModel(m: Omit<RosterModel,"id"|"agency">) {
+    setRoster(prev => [...prev, { ...m, id: Date.now(), agency: AGENCY_NAME }]);
+  }
 
   return (
     <div className="h-screen flex bg-background overflow-hidden">
@@ -218,8 +307,8 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
         <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${AGENCY_NAME} · Agency`}/>
         <div className="flex-1 overflow-auto p-6">
           {view === "invitations" && <InvitationsView onSubmitTalent={()=>setView("submit")}/>}
-          {view === "submit" && <SubmitTalentView/>}
-          {view === "roster" && <RosterView/>}
+          {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")}/>}
+          {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
           {view === "payments" && <PaymentsView/>}
           {view === "messaging" && (
             <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
