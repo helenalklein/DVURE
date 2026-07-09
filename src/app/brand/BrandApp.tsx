@@ -1344,7 +1344,7 @@ function Reports() {
       <TopBar title="Reports" sub="Generate reports from available data"/>
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl">
-          <p className="text-sm text-muted-foreground mb-6">Generate reports from any data available in CasFlow.</p>
+          <p className="text-sm text-muted-foreground mb-6">Generate reports from any data available in DVURE.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {reportTypes.map(r=>{
               const RIcon = r.icon;
@@ -1448,10 +1448,10 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
           <div className="max-w-xl">
             {tab === "subscription" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your CasFlow Brand subscription.</p></div>
+                <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your DVURE Brand subscription.</p></div>
                 <div className="bg-card border border-border rounded-md overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                    <div><div className="text-sm font-semibold">CasFlow Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
+                    <div><div className="text-sm font-semibold">DVURE Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
                     <Badge label="Active Trial" variant="success"/>
                   </div>
                   <div className="px-5 py-4 space-y-3 text-sm">

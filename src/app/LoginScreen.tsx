@@ -22,9 +22,9 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-14 h-14 bg-foreground rounded-xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-primary-foreground text-2xl font-bold tracking-tight">C</span>
+            <span className="text-primary-foreground text-2xl font-bold tracking-tight">D</span>
           </div>
-          <div className="text-2xl font-semibold tracking-tight">CasFlow</div>
+          <div className="text-2xl font-semibold tracking-tight">DVURE</div>
           <div className="text-xs text-muted-foreground font-mono uppercase tracking-widest mt-1">Talent Operating System</div>
         </div>
 
@@ -70,7 +70,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
         </div>
 
         <div className="text-center mt-5 text-xs text-muted-foreground">
-          New to CasFlow?{" "}
+          New to DVURE?{" "}
           <button className="text-foreground font-medium cursor-pointer hover:underline">Request access</button>
         </div>
       </div>
