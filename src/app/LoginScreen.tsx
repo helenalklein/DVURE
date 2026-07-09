@@ -21,14 +21,14 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
     <div className="h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 bg-foreground rounded-xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-primary-foreground text-2xl font-bold tracking-tight">D</span>
+          <div className="w-14 h-14 bg-foreground rounded-full flex items-center justify-center mx-auto mb-5 shadow-md">
+            <span className="font-display text-primary-foreground text-2xl">D</span>
           </div>
-          <div className="text-2xl font-semibold tracking-tight">DVURE</div>
-          <div className="text-xs text-muted-foreground font-mono uppercase tracking-widest mt-1">Talent Operating System</div>
+          <div className="font-display text-4xl tracking-tight">DVURE</div>
+          <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-[0.25em] mt-2">Talent Operating System</div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 shadow-lg space-y-4">
+        <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">
           <div>
             <FieldLabel>Email</FieldLabel>
             <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden">

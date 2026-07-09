@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel } from "../shared/ui";
+import { useState, useMemo } from "react";
+import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT } from "../shared/mockData";
 import type { RosterModel } from "../shared/types";
 
@@ -53,18 +53,87 @@ function InvitationsView({ onSubmitTalent }: { onSubmitTalent: () => void }) {
   );
 }
 
+// Visual, alphabetically-indexed model picker — a card board, not a
+// dropdown. This industry casts off photos and physical presence, not
+// text lists, so selection should feel like flipping through a board.
+function RosterPickerModal({ roster, onPick, onClose }: { roster: RosterModel[]; onPick: (id: number) => void; onClose: () => void }) {
+  const [search, setSearch] = useState("");
+
+  const groups = useMemo(() => {
+    const filtered = roster
+      .filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
+      .sort((a,b) => a.name.localeCompare(b.name));
+    const byLetter = new Map<string, RosterModel[]>();
+    for (const m of filtered) {
+      const letter = m.name.trim()[0]?.toUpperCase() ?? "#";
+      if (!byLetter.has(letter)) byLetter.set(letter, []);
+      byLetter.get(letter)!.push(m);
+    }
+    return [...byLetter.entries()].sort(([a],[b]) => a.localeCompare(b));
+  }, [roster, search]);
+
+  const letters = groups.map(([l]) => l);
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-2xl">
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-sm font-semibold">Choose a Model</div>
+          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">From your roster, A–Z</div>
+        </div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+      </div>
+      <div className="px-6 py-3 border-b border-border flex items-center gap-3 shrink-0">
+        <div className="flex-1 flex items-center border border-border rounded-md bg-input-background px-3 gap-2 h-9">
+          <Search size={13} className="text-muted-foreground"/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search roster…"
+            className="flex-1 text-sm bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
+        </div>
+        {letters.length>0 && (
+          <div className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-muted-foreground shrink-0">
+            {letters.map(l=><span key={l} className="w-4 text-center">{l}</span>)}
+          </div>
+        )}
+      </div>
+      <div className="max-h-[26rem] overflow-y-auto px-6 py-4 space-y-6">
+        {groups.length===0 && <div className="text-center text-sm text-muted-foreground py-10">No models match "{search}"</div>}
+        {groups.map(([letter, models]) => (
+          <div key={letter}>
+            <div className="text-xs font-display italic text-muted-foreground mb-2 sticky -top-4 bg-transparent">{letter}</div>
+            <div className="grid grid-cols-3 gap-3">
+              {models.map(m=>(
+                <button key={m.id} onClick={()=>onPick(m.id)}
+                  className="text-left bg-card border border-border rounded-md overflow-hidden hover:border-foreground hover:shadow-md transition-all group">
+                  <XBox className="w-full h-24"/>
+                  <div className="p-2.5 space-y-0.5">
+                    <div className="text-xs font-semibold truncate">{m.name}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{m.location}</div>
+                    <div className="text-[10px] font-mono font-medium mt-1">{m.rate}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onGoToRoster: () => void }) {
   const [submitted, setSubmitted] = useState<{ modelId: number; campaign: string }[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [pickedCampaign, setPickedCampaign] = useState(INVITATIONS[0]?.campaign ?? "");
   const [pickedModelId, setPickedModelId] = useState<number | "">("");
 
   const submittedIds = new Set(submitted.map(s=>s.modelId));
-  const pending = roster.filter(m=>!submittedIds.has(m.id));
+  const pickedModel = roster.find(m=>m.id===pickedModelId);
 
-  function openForm() {
+  function selectModel(id: number) {
+    setPickedModelId(id);
     setPickedCampaign(INVITATIONS[0]?.campaign ?? "");
-    setPickedModelId(pending[0]?.id ?? "");
+    setShowPicker(false);
     setShowForm(true);
   }
 
@@ -72,7 +141,7 @@ function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onG
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Submit models from your roster to open campaigns.</p>
-        <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={openForm} disabled={roster.length===0}>Submit Talent</Btn>
+        <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={()=>setShowPicker(true)} disabled={roster.length===0}>Submit Talent</Btn>
       </div>
 
       {roster.length===0 && (
@@ -103,41 +172,46 @@ function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onG
               <div className="text-sm font-semibold">{m.name}</div>
               <div className="text-xs text-muted-foreground">{m.location} · {m.rate}</div>
             </div>
-            <Btn variant="outline" size="sm" onClick={()=>{ setPickedModelId(m.id); setPickedCampaign(INVITATIONS[0]?.campaign ?? ""); setShowForm(true); }}>Submit</Btn>
+            <Btn variant="outline" size="sm" onClick={()=>selectModel(m.id)}>Submit</Btn>
           </div>
         ))}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Submit Talent</div>
-              <button onClick={()=>setShowForm(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
-            </div>
-            <div className="p-5 space-y-3">
-              <div>
-                <FieldLabel>Model</FieldLabel>
-                <div className="relative">
-                  <select value={pickedModelId} onChange={e=>setPickedModelId(Number(e.target.value))}
-                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
-                    {pending.map(m=><option key={m.id} value={m.id}>{m.name} — {m.rate}</option>)}
-                  </select>
-                </div>
-                <div className="text-[10px] text-muted-foreground font-mono mt-1">From your roster — pulled from their DVURE profile.</div>
-              </div>
-              <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)}/>
-              <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
-            </div>
-            <div className="px-5 pb-5 flex gap-2">
-              <Btn variant="primary" disabled={pickedModelId===""} onClick={()=>{
-                if (pickedModelId!=="") setSubmitted(p=>[...p,{ modelId:pickedModelId, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"" }]);
-                setShowForm(false);
-              }}>Submit</Btn>
-              <Btn variant="outline" onClick={()=>setShowForm(false)}>Cancel</Btn>
-            </div>
+      {showPicker && (
+        <RosterPickerModal roster={roster.filter(m=>!submittedIds.has(m.id))} onPick={selectModel} onClose={()=>setShowPicker(false)}/>
+      )}
+
+      {showForm && pickedModel && (
+        <Modal onClose={()=>setShowForm(false)}>
+          <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+            <div className="text-sm font-semibold">Submit Talent</div>
+            <button onClick={()=>setShowForm(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
           </div>
-        </div>
+          <div className="p-5 space-y-3">
+            <div>
+              <FieldLabel>Model</FieldLabel>
+              <button onClick={()=>{ setShowForm(false); setShowPicker(true); }}
+                className="w-full flex items-center gap-3 border border-border rounded-md p-2.5 hover:border-foreground transition-colors text-left">
+                <XBox className="w-10 h-10 rounded-sm shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold truncate">{pickedModel.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{pickedModel.location} · {pickedModel.rate}</div>
+                </div>
+                <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-0.5 shrink-0">Change <ChevronRight size={11}/></span>
+              </button>
+              <div className="text-[10px] text-muted-foreground font-mono mt-1">Pulled from their DVURE profile.</div>
+            </div>
+            <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)}/>
+            <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
+          </div>
+          <div className="px-5 pb-5 flex gap-2">
+            <Btn variant="primary" onClick={()=>{
+              setSubmitted(p=>[...p,{ modelId:pickedModel.id, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"" }]);
+              setShowForm(false);
+            }}>Submit</Btn>
+            <Btn variant="outline" onClick={()=>setShowForm(false)}>Cancel</Btn>
+          </div>
+        </Modal>
       )}
     </div>
   );
@@ -150,30 +224,28 @@ function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omi
   const [rate, setRate] = useState("");
 
   return (
-    <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <div className="text-sm font-semibold">Add Model to Roster</div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
-        </div>
-        <div className="p-5 space-y-3">
-          <TextInput label="Full Name" placeholder="e.g. Nadia Petrov" value={name} onChange={e=>setName(e.target.value)}/>
-          <TextInput label="Email" placeholder="model@example.com" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
-          <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
-          <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
-          <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
-            An invitation email will be sent to this model to set up their DVURE login, so they can see their own bookings and payment status.
-          </div>
-        </div>
-        <div className="px-5 pb-5 flex gap-2">
-          <Btn variant="primary" disabled={!name || !email} onClick={()=>{
-            onAdd({ name, email, location: location||"—", rate: rate||"—", height:"—", exp:"—" });
-            onClose();
-          }}>Send Invitation</Btn>
-          <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+    <Modal onClose={onClose}>
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-sm font-semibold">Add Model to Roster</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-3">
+        <TextInput label="Full Name" placeholder="e.g. Nadia Petrov" value={name} onChange={e=>setName(e.target.value)}/>
+        <TextInput label="Email" placeholder="model@example.com" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+        <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
+        <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
+        <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+          An invitation email will be sent to this model to set up their DVURE login, so they can see their own bookings and payment status.
         </div>
       </div>
-    </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <Btn variant="primary" disabled={!name || !email} onClick={()=>{
+          onAdd({ name, email, location: location||"—", rate: rate||"—", height:"—", exp:"—" });
+          onClose();
+        }}>Send Invitation</Btn>
+        <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+      </div>
+    </Modal>
   );
 }
 
@@ -273,7 +345,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="h-screen flex bg-background overflow-hidden">
-      <aside className="w-52 shrink-0 bg-card border-r border-border flex flex-col">
+      <aside className="w-52 shrink-0 glass border-r flex flex-col">
         <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
           <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center">
             <span className="text-primary-foreground text-xs font-bold">E</span>

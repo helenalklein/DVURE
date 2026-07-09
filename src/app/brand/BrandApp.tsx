@@ -21,8 +21,8 @@ type CampaignSection = "overview" | "moodboard" | "requirements" | "deliverables
 
 function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: () => void; onLater: () => void }) {
   return (
-    <div className="fixed inset-0 bg-foreground/40 flex items-center justify-center z-50">
-      <div className="bg-card border border-border rounded-md w-full max-w-md mx-4 overflow-hidden shadow-xl">
+    <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="glass-strong border rounded-md w-full max-w-md mx-4 overflow-hidden shadow-xl">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="text-sm font-semibold">Contract Generated</div>
           <button onClick={onLater} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
@@ -72,7 +72,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
   active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: () => void; onLogout: () => void;
 }) {
   return (
-    <aside className="w-52 shrink-0 bg-card border-r border-border flex flex-col h-full">
+    <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">A</span>
@@ -140,7 +140,7 @@ function CampaignSidebar({ section, onSection, onBack, onNewCampaign, counts }: 
   onBack: () => void; onNewCampaign: () => void; counts: Record<string,number>;
 }) {
   return (
-    <aside className="w-52 shrink-0 bg-card border-r border-border flex flex-col h-full">
+    <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">A</span>
@@ -455,8 +455,8 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
       )}
 
       {declineModal && (
-        <div className="fixed inset-0 bg-foreground/40 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-md w-80 overflow-hidden shadow-xl">
+        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass-strong border rounded-md w-80 overflow-hidden shadow-xl">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div className="text-sm font-semibold">Reject — {declineModal.name}</div>
               <button onClick={()=>{setDeclineModal(null);setDeclineReason("");}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
@@ -1191,8 +1191,8 @@ function GlobalPayments() {
       </div>
 
       {showPayModal && selected && bd && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden relative">
+        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-strong border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden relative">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold">{selected.id}</div>
@@ -1267,8 +1267,8 @@ function MessagingScreen() {
         ))}
       </div>
       {openMsg && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-strong border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
             <div className="px-6 py-4 border-b border-border flex items-start justify-between gap-4 shrink-0">
               <div>
                 <div className="text-sm font-semibold mt-1">{openMsg.subject}</div>
