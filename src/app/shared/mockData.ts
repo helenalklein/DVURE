@@ -1,0 +1,106 @@
+import type { Talent, PaymentStatus } from "./types";
+
+// ─── TALENT / SUBMISSIONS ──────────────────────────────────────────────────
+// Simplified pipeline vs. the original prototype: Submitted -> Approved/Rejected -> Booked.
+// (Negotiation/counter-offer states are a deliberate Phase-1 cut, not an oversight.)
+
+export const SAMPLE_TALENT: Talent[] = [
+  { id:1,  name:"Zara Okafor",     agency:"Elite Model Mgmt.", location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
+  { id:2,  name:"Amara Diallo",    agency:"Elite Model Mgmt.", location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
+  { id:3,  name:"Mila Tran",       agency:"IMG Models",        location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
+  { id:4,  name:"Petra Novak",     agency:"IMG Models",        location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+  { id:5,  name:"Ines Ferreira",   agency:"Storm Models",      location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
+  { id:6,  name:"Nadia Petrov",    agency:"Next Models",       location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:7,  name:"Caleb Stone",     agency:"Wilhelmina",        location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
+  { id:8,  name:"Sofia Brandt",    agency:"DNA Models",        location:"Miami, FL",       rate:"$1,200/day", stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/22.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"11 yrs", score:5 },
+  { id:9,  name:"James Whitfield", agency:"Elite Model Mgmt.", location:"New York, NY",    rate:"$950/day",   stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/14.", height:`6'0"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"6 yrs",  score:5 },
+  { id:10, name:"Lena Vogel",      agency:"IMG Models",        location:"Berlin, DE",      rate:"$780/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"3 yrs",  score:3 },
+  { id:11, name:"Amir Hassan",     agency:"Storm Models",      location:"London, UK",      rate:"$1,050/day", stage:"rejected",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
+  { id:12, name:"Chiara Russo",    agency:"Next Models",       location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
+  { id:13, name:"Maya Chen",       agency:"Elite Model Mgmt.", location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:14, name:"Priya Sharma",    agency:"DNA Models",        location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+];
+
+export const PIPELINE_STAGES: { id: Talent["stage"]; label: string }[] = [
+  { id:"submitted", label:"Submitted" },
+  { id:"approved",  label:"Approved"  },
+  { id:"booked",    label:"Booked"    },
+];
+
+export const DECLINE_REASONS = ["Rate too high","Doesn't meet brief","Look not right","Dates conflict","Client preference","Agency preference","Other"];
+
+// ─── BOOKINGS / PAYMENTS ───────────────────────────────────────────────────
+// One shared dataset — Brand, Agency, and Model views each read a different
+// slice of the same booking record. This is exactly the shape Supabase's
+// `bookings` + `payments` tables take on in Milestone B, and the same
+// Gross/Agency-Commission/Platform-Fee/Net-Earnings split Stripe Connect's
+// "separate charges and transfers" pattern needs in Milestone C.
+
+export interface Booking {
+  id: string;
+  campaign: string;
+  brand: string;
+  agency: string;
+  model: string;
+  dayRate: number;
+  days: number;
+  shootDate: string;
+  agencyPct: number;   // agency commission, % of model fee
+  platformPct: number; // platform fee, % of (model fee + agency fee)
+  paymentStatus: PaymentStatus;
+}
+
+export function bookingBreakdown(b: Booking) {
+  const modelFee = b.dayRate * b.days;
+  const agencyFee = Math.round(modelFee * (b.agencyPct / 100));
+  const base = modelFee + agencyFee;
+  const platformFee = Math.round(base * (b.platformPct / 100));
+  const grossBookingValue = base + platformFee;
+  return { modelFee, agencyFee, platformFee, grossBookingValue };
+}
+
+export const BOOKINGS: Booking[] = [
+  { id:"BK-0841", campaign:"AW25 Womenswear Campaign", brand:"Acne Studios", agency:"Elite Model Mgmt.", model:"James Whitfield", dayRate:950,  days:3, shootDate:"07/14/2025", agencyPct:20, platformPct:3, paymentStatus:"paid" },
+  { id:"BK-0842", campaign:"AW25 Womenswear Campaign", brand:"Acne Studios", agency:"Elite Model Mgmt.", model:"Amara Diallo",    dayRate:1150, days:2, shootDate:"07/15/2025", agencyPct:20, platformPct:3, paymentStatus:"processing" },
+  { id:"BK-0791", campaign:"SS25 Fragrance Launch",    brand:"Acne Studios", agency:"IMG Models",        model:"Mila Tran",       dayRate:1100, days:1, shootDate:"07/20/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
+  { id:"BK-0768", campaign:"FW24 Campaign",            brand:"Acne Studios", agency:"DNA Models",        model:"Sofia Brandt",    dayRate:1200, days:3, shootDate:"06/01/2025", agencyPct:20, platformPct:3, paymentStatus:"paid" },
+  { id:"BK-0804", campaign:"Resort Lookbook 2025",     brand:"Acne Studios", agency:"Storm Models",      model:"Ines Ferreira",   dayRate:1340, days:2, shootDate:"07/22/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
+  { id:"BK-0850", campaign:"Resort Lookbook 2025",     brand:"Acne Studios", agency:"Elite Model Mgmt.", model:"James Whitfield", dayRate:950,  days:2, shootDate:"07/23/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
+];
+
+// ─── ORG / DIRECTORY ────────────────────────────────────────────────────────
+
+export const ORG_USERS = [
+  { id:1, name:"Marcus Webb",   title:"Brand Director",    email:"marcus@acne.com",  phone:"+1 212 555 0100", access:"administrator", group:"Creative Leadership", org:"Acne Studios"      },
+  { id:2, name:"Lena Chu",      title:"Campaign Manager",  email:"lena@acne.com",    phone:"+1 212 555 0101", access:"enhanced",      group:"Campaign Team",       org:"Acne Studios"      },
+  { id:3, name:"Jake Torres",   title:"Art Director",      email:"jake@acne.com",    phone:"+1 212 555 0102", access:"enhanced",      group:"Creative Leadership", org:"Acne Studios"      },
+  { id:4, name:"Priya Shah",    title:"Finance Lead",      email:"priya@acne.com",   phone:"+1 212 555 0103", access:"enhanced",      group:"Finance",             org:"Acne Studios"      },
+  { id:5, name:"Sam Brooks",    title:"Creative Producer", email:"sam@acne.com",     phone:"+1 212 555 0104", access:"basic",         group:"Campaign Team",       org:"Acne Studios"      },
+  { id:6, name:"Sofia Reyes",   title:"Legal Counsel",     email:"sofia@acne.com",   phone:"+1 212 555 0105", access:"administrator", group:"Legal",               org:"Acne Studios"      },
+  { id:7, name:"Sophie Chen",   title:"Senior Agent",      email:"sophie@elite.com", phone:"+1 212 555 0200", access:"enhanced",      group:"Elite Team",          org:"Elite Model Mgmt." },
+  { id:8, name:"James Kirk",    title:"Booking Agent",     email:"james@elite.com",  phone:"+1 212 555 0201", access:"basic",         group:"Elite Team",          org:"Elite Model Mgmt." },
+];
+
+export const ACCESS_BADGE: Record<string,"active"|"info"|"draft"> = { administrator:"active", enhanced:"info", basic:"draft" };
+
+// ─── ACTIVITY / NOTIFICATIONS ───────────────────────────────────────────────
+
+export const ACTIVITY_EVENTS = [
+  { id:1, ts:"Jun 15, 2:05 PM",  actor:"Acne Studios",      type:"Talent approved",        detail:"Amara Diallo approved for booking.",           system:false },
+  { id:2, ts:"Jun 15, 11:20 AM", actor:"Elite Model Mgmt.", type:"Submission received",    detail:"4 talent submitted to AW25 Womenswear.",       system:false },
+  { id:3, ts:"Jun 14, 4:01 PM",  actor:"System",            type:"Contract generated",     detail:"CF-2025-0841 generated for James Whitfield.",  system:true  },
+  { id:4, ts:"Jun 14, 3:14 PM",  actor:"Acne Studios",      type:"Contract signed",        detail:"CF-2025-0841 countersigned by brand.",         system:false },
+  { id:5, ts:"Jun 14, 11:30 AM", actor:"Elite Model Mgmt.", type:"Contract signed",        detail:"Sophie Chen signed CF-2025-0841 for agency.",  system:false },
+  { id:6, ts:"Jun 13, 1:22 PM",  actor:"Acne Studios",      type:"Talent approved",        detail:"Zara Okafor and Ines Ferreira approved.",      system:false },
+  { id:7, ts:"Jun 12, 9:00 AM",  actor:"System",            type:"Payout released",        detail:"Elite Model Mgmt. commission payout $2,940.",  system:true  },
+  { id:8, ts:"Jun 10, 11:02 AM", actor:"Elite Model Mgmt.", type:"Talent submitted",       detail:"4 talent submitted to campaign.",              system:false },
+  { id:9, ts:"Jun 10, 9:14 AM",  actor:"System",            type:"Campaign published",     detail:"AW25 Womenswear distributed to 5 agencies.",   system:true  },
+];
+
+export const NOTIFS = [
+  { id:1, text:"Elite Model Mgmt. submitted 4 talent", sub:"AW25 Womenswear", ts:"2m ago", unread:true  },
+  { id:2, text:"Amara Diallo approved",                 sub:"AW25 Womenswear", ts:"1h ago", unread:true  },
+  { id:3, text:"Payout released",                       sub:"Booking #0841",   ts:"3h ago", unread:true  },
+  { id:4, text:"Contract awaiting signature",           sub:"CF-2025-0842",    ts:"5h ago", unread:true  },
+  { id:5, text:"Resort Lookbook — 6 new submissions",  sub:"Resort Lookbook", ts:"1d ago", unread:false },
+];
