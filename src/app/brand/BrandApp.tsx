@@ -1053,23 +1053,22 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
               </div>
             )}
           </div>
-          {/* Standing summary column — flat and architectural rather than
-              boxed: a single hairline rule, no fill, no rounded corners.
-              Large light-weight serif numerals do the work instead of
-              chrome. Rows stretch to fill the full column height so the
-              column commands real presence instead of trailing into
-              empty page beneath a short stack. */}
-          <div className="w-80 shrink-0 border-l border-border pl-10 flex flex-col">
+          {/* Standing summary column — still flat, still a hairline rule
+              rather than boxes, but warmed: a whisper of cream behind the
+              column, softer ink than pure black, and italic serif captions
+              in place of cold mono-uppercase tracking. Elegant should still
+              feel inviting, not clinical. */}
+          <div className="w-80 shrink-0 border-l border-[#e8e1d3] pl-10 flex flex-col bg-gradient-to-b from-[#FBF7EE] to-transparent">
             {[
               { label:"Total",       value:"4",  sub:"3 active"       },
               { label:"Submissions", value:"44", sub:"Across active"  },
               { label:"Approved",    value:"17", sub:"Pending booking"},
               { label:"Booked",      value:"5",  sub:"This quarter"   },
             ].map((s,i)=>(
-              <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
-                <div className="font-display text-6xl font-light tabular-nums tracking-tight">{s.value}</div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.25em] mt-3">{s.label}</div>
-                <div className="text-xs text-muted-foreground/70 mt-1">{s.sub}</div>
+              <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-[#e8e1d3]")}>
+                <div className="font-display text-6xl font-light tabular-nums tracking-normal text-[#2b2620]">{s.value}</div>
+                <div className="font-display italic text-sm text-[#6b6255] mt-3">{s.label}</div>
+                <div className="font-display italic text-xs text-[#6b6255]/70 mt-1">{s.sub}</div>
               </div>
             ))}
           </div>
