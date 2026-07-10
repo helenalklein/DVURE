@@ -1033,24 +1033,22 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
             <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-3 gap-4">
             {filtered.map(c=>(
-              <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={openCampaign}>
-                <div className="flex items-start justify-between gap-4 mb-4">
+              <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={openCampaign}>
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
                   <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-sm font-semibold">{c.name}</span>
-                      <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
-                    </div>
-                    <div className="text-xs text-muted-foreground font-mono">{c.type} · Due {c.due}</div>
+                    <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
+                    <div className="text-sm font-semibold leading-snug mt-2">{c.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
                   </div>
-                  <Btn variant="secondary" size="sm">Open workspace →</Btn>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
                 </div>
-                <div className="flex items-stretch gap-0 border border-border rounded-md overflow-hidden text-center">
+                <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
                   {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
-                    <div key={l} className={cx("flex-1 py-2 border-r border-border last:border-0", i===arr.length-1&&v>0?"bg-foreground":"")}>
-                      <div className={cx("text-base font-semibold tabular-nums", i===arr.length-1&&v>0?"text-primary-foreground":"")}>{v}</div>
-                      <div className={cx("text-[10px] font-mono", i===arr.length-1&&v>0?"text-primary-foreground/70":"text-muted-foreground")}>{l}</div>
+                    <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-foreground":"")}>
+                      <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-primary-foreground":"")}>{v}</div>
+                      <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-primary-foreground/70":"text-muted-foreground")}>{l}</div>
                     </div>
                   ))}
                 </div>
