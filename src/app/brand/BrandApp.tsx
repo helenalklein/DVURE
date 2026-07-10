@@ -1014,7 +1014,7 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="All campaigns · Acne Studios"/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex gap-6 items-start">
+        <div className="flex gap-10">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1 mb-4 border-b border-border">
               {["active","drafts","archived"].map(t=>(
@@ -1053,20 +1053,23 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
               </div>
             )}
           </div>
-          {/* Standing summary column — individual tiles with room to breathe,
-              large numerals set in the display serif for a softer, more
-              editorial feel than the mono/sans used for labels. */}
-          <div className="w-56 shrink-0 space-y-4">
+          {/* Standing summary column — flat and architectural rather than
+              boxed: a single hairline rule, no fill, no rounded corners.
+              Large light-weight serif numerals do the work instead of
+              chrome. Rows stretch to fill the full column height so the
+              column commands real presence instead of trailing into
+              empty page beneath a short stack. */}
+          <div className="w-80 shrink-0 border-l border-border pl-10 flex flex-col">
             {[
               { label:"Total",       value:"4",  sub:"3 active"       },
               { label:"Submissions", value:"44", sub:"Across active"  },
               { label:"Approved",    value:"17", sub:"Pending booking"},
               { label:"Booked",      value:"5",  sub:"This quarter"   },
-            ].map(s=>(
-              <div key={s.label} className="glass-subtle border rounded-md px-5 py-5">
-                <div className="font-display text-3xl font-medium tabular-nums">{s.value}</div>
-                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wide mt-2">{s.label}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">{s.sub}</div>
+            ].map((s,i)=>(
+              <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
+                <div className="font-display text-6xl font-light tabular-nums tracking-tight">{s.value}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.25em] mt-3">{s.label}</div>
+                <div className="text-xs text-muted-foreground/70 mt-1">{s.sub}</div>
               </div>
             ))}
           </div>
