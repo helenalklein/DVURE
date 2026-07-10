@@ -1053,19 +1053,20 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
               </div>
             )}
           </div>
-          {/* Standing summary column — same "one overarching tile" motif as the
-              horizontal row, just rotated: rows instead of columns. */}
-          <div className="w-48 shrink-0 glass-subtle border rounded-md divide-y divide-border">
+          {/* Standing summary column — individual tiles with room to breathe,
+              large numerals set in the display serif for a softer, more
+              editorial feel than the mono/sans used for labels. */}
+          <div className="w-56 shrink-0 space-y-4">
             {[
               { label:"Total",       value:"4",  sub:"3 active"       },
               { label:"Submissions", value:"44", sub:"Across active"  },
               { label:"Approved",    value:"17", sub:"Pending booking"},
               { label:"Booked",      value:"5",  sub:"This quarter"   },
             ].map(s=>(
-              <div key={s.label} className="px-4 py-3.5">
-                <div className="text-2xl font-semibold tabular-nums">{s.value}</div>
-                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wide mt-1">{s.label}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
+              <div key={s.label} className="glass-subtle border rounded-md px-5 py-5">
+                <div className="font-display text-3xl font-medium tabular-nums">{s.value}</div>
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wide mt-2">{s.label}</div>
+                <div className="text-[11px] text-muted-foreground mt-1">{s.sub}</div>
               </div>
             ))}
           </div>
