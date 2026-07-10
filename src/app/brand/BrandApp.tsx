@@ -1014,11 +1014,19 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="All campaigns · Acne Studios"/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          <Stat label="Total" value="4" sub="3 active"/>
-          <Stat label="Submissions" value="44" sub="Across active"/>
-          <Stat label="Approved" value="17" sub="Pending booking"/>
-          <Stat label="Booked" value="5" sub="This quarter"/>
+        <div className="glass-subtle border rounded-md flex divide-x divide-border mb-6">
+          {[
+            { label:"Total",       value:"4",  sub:"3 active"       },
+            { label:"Submissions", value:"44", sub:"Across active"  },
+            { label:"Approved",    value:"17", sub:"Pending booking"},
+            { label:"Booked",      value:"5",  sub:"This quarter"   },
+          ].map(s=>(
+            <div key={s.label} className="flex-1 px-5 py-4 text-center">
+              <div className="text-2xl font-semibold tabular-nums">{s.value}</div>
+              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wide mt-1">{s.label}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
+            </div>
+          ))}
         </div>
         <div className="flex items-center gap-1 mb-4 border-b border-border">
           {["active","drafts","archived"].map(t=>(
