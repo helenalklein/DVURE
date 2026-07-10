@@ -1014,56 +1014,62 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="All campaigns · Acne Studios"/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="glass-subtle border rounded-md flex divide-x divide-border mb-6">
-          {[
-            { label:"Total",       value:"4",  sub:"3 active"       },
-            { label:"Submissions", value:"44", sub:"Across active"  },
-            { label:"Approved",    value:"17", sub:"Pending booking"},
-            { label:"Booked",      value:"5",  sub:"This quarter"   },
-          ].map(s=>(
-            <div key={s.label} className="flex-1 px-5 py-4 text-center">
-              <div className="text-2xl font-semibold tabular-nums">{s.value}</div>
-              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wide mt-1">{s.label}</div>
-              <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
+        <div className="flex gap-6 items-start">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1 mb-4 border-b border-border">
+              {["active","drafts","archived"].map(t=>(
+                <button key={t} onClick={()=>setTab(t)}
+                  className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors",
+                    tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
+                  )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-1 mb-4 border-b border-border">
-          {["active","drafts","archived"].map(t=>(
-            <button key={t} onClick={()=>setTab(t)}
-              className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors",
-                tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
-              )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
-          ))}
-        </div>
-        {filtered.length===0 ? (
-          <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
-            <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-4">
-            {filtered.map(c=>(
-              <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={openCampaign}>
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
-                    <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
-                    <div className="text-sm font-semibold leading-snug mt-2">{c.name}</div>
-                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
-                </div>
-                <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
-                  {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
-                    <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-foreground":"")}>
-                      <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-primary-foreground":"")}>{v}</div>
-                      <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-primary-foreground/70":"text-muted-foreground")}>{l}</div>
+            {filtered.length===0 ? (
+              <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
+                <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {filtered.map(c=>(
+                  <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={openCampaign}>
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
+                        <div className="text-sm font-semibold leading-snug mt-2">{c.name}</div>
+                        <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
                     </div>
-                  ))}
-                </div>
+                    <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
+                      {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
+                        <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-foreground":"")}>
+                          <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-primary-foreground":"")}>{v}</div>
+                          <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-primary-foreground/70":"text-muted-foreground")}>{l}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Standing summary column — same "one overarching tile" motif as the
+              horizontal row, just rotated: rows instead of columns. */}
+          <div className="w-48 shrink-0 glass-subtle border rounded-md divide-y divide-border">
+            {[
+              { label:"Total",       value:"4",  sub:"3 active"       },
+              { label:"Submissions", value:"44", sub:"Across active"  },
+              { label:"Approved",    value:"17", sub:"Pending booking"},
+              { label:"Booked",      value:"5",  sub:"This quarter"   },
+            ].map(s=>(
+              <div key={s.label} className="px-4 py-3.5">
+                <div className="text-2xl font-semibold tabular-nums">{s.value}</div>
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wide mt-1">{s.label}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
               </div>
             ))}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
