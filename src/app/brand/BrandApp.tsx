@@ -7,11 +7,11 @@ import {
   Settings, Building2,
   Calendar, FileText, Activity, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut
+  User, LogOut, Pin, Lock, Globe
 } from "lucide-react";
-import type { SubmissionStage, Talent, IconFn } from "../shared/types";
+import type { SubmissionStage, Talent, IconFn, CardComment } from "../shared/types";
 import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS } from "../shared/mockData";
 
 type GlobalView = "dashboard" | "campaigns" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -205,6 +205,16 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
   const [drawer, setDrawer] = useState<Talent|null>(null);
   const [declineModal, setDeclineModal] = useState<Talent|null>(null);
   const [declineReason, setDeclineReason] = useState("");
+  const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
+  const [commentDraft, setCommentDraft] = useState("");
+
+  const commentsFor = (talentId: number) => comments.filter(c => c.talentId === talentId);
+
+  function postComment(talentId: number) {
+    if (!commentDraft.trim()) return;
+    setComments(prev => [...prev, { id: Date.now(), talentId, author: "Marcus Webb", org: "Acne Studios", text: commentDraft, ts: "Now" }]);
+    setCommentDraft("");
+  }
 
   const byStage = (s: SubmissionStage) => talent.filter(t => t.stage === s);
   const totalNeeded = 4;
@@ -312,7 +322,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                         <div key={t.id} draggable
                           onDragStart={()=>setDragging(t.id)}
                           onDragEnd={()=>{setDragging(null);setDragOver(null);}}
-                          onClick={()=>{toggleSelect(t.id);setDrawer(t);}}
+                          onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
                           className={cx("glass-subtle rounded-md border overflow-hidden cursor-pointer select-none transition-all group",
                             isSel?"border-foreground ring-1 ring-foreground":"border-border hover:border-foreground/40",
                             isDrag&&"opacity-40"
@@ -336,6 +346,11 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                                 {[0,1,2,3,4].map(i=><Star key={i} size={7} className={i<t.score?"fill-foreground text-foreground":"text-muted-foreground"}/>)}
                               </div>
                             </div>
+                            {commentsFor(t.id).length>0 && (
+                              <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-mono pt-0.5">
+                                <Pin size={9}/> {commentsFor(t.id).length} comment{commentsFor(t.id).length!==1?"s":""}
+                              </div>
+                            )}
                           </div>
                           {actions.length>0&&(
                             <div className="border-t border-border flex divide-x divide-border opacity-0 group-hover:opacity-100 transition-opacity" onClick={e=>e.stopPropagation()}>
@@ -396,6 +411,36 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                     <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
                   </div>
                 ))}
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Pin size={10}/> Comments
+                </div>
+                <div className="space-y-2 mb-2">
+                  {commentsFor(drawer.id).length===0 && (
+                    <div className="text-[10px] text-muted-foreground italic">No comments yet — leave the first one for your team.</div>
+                  )}
+                  {commentsFor(drawer.id).map(c=>(
+                    <div key={c.id} className="glass-subtle border rounded-md px-3 py-2 relative">
+                      <div className="absolute top-0 left-3 -translate-y-1/2 w-2 h-2 rounded-full bg-foreground/70"/>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold">{c.author}</span>
+                        <span className="text-[9px] font-mono text-muted-foreground shrink-0">{c.ts}</span>
+                      </div>
+                      <div className="text-xs leading-relaxed">{c.text}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <textarea value={commentDraft} onChange={e=>setCommentDraft(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); postComment(drawer.id); }}}
+                    placeholder="Leave a comment for your team…" rows={2}
+                    className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+                  <button onClick={()=>postComment(drawer.id)} disabled={!commentDraft.trim()}
+                    className="shrink-0 px-3 rounded-md bg-foreground text-primary-foreground text-xs font-medium hover:bg-[#2a2a2a] transition-colors disabled:opacity-30 disabled:pointer-events-none">
+                    Post
+                  </button>
+                </div>
               </div>
               <div>
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Notes</div>
@@ -753,15 +798,30 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
 
 // ─── COLLABORATION ───────────────────────────────────────────────────────────
 
+type CollabScope = "internal" | "crossorg";
+
 function CollaborationTab() {
-  const campaignUsers = ORG_USERS.slice(0, 6);
-  const [msgs, setMsgs] = useState([
+  const brandUsers = ORG_USERS.filter(u=>u.org==="Acne Studios");
+  const crossOrgUsers = ORG_USERS; // brand + agency, everyone on the campaign
+  const ME = 1;
+
+  const [scope, setScope] = useState<CollabScope>("crossorg");
+  const [internalMsgs, setInternalMsgs] = useState([
+    { id:1, from:3, text:"Mood board direction is locked — sharing the deck before we brief the agencies.", ts:"Jun 18, 4:10 PM" },
+    { id:2, from:1, text:"Nice. Let's hold final budget sign-off until Priya confirms the number.", ts:"Jun 18, 4:22 PM" },
+    { id:3, from:4, text:"Confirmed — $18,000 total, $5,150 committed so far.", ts:"Jun 18, 4:30 PM" },
+  ]);
+  const [crossOrgMsgs, setCrossOrgMsgs] = useState([
     { id:1, from:2, text:"Just finished reviewing the submissions. Zara and Amara are strong leads.", ts:"Jun 19, 9:14 AM"  },
     { id:2, from:1, text:"Agreed. I'd like to schedule a quick call to align before EOD.", ts:"Jun 19, 9:32 AM" },
     { id:3, from:7, text:"Hi team — we can confirm Amara is available the full window.", ts:"Jun 19, 10:05 AM" },
   ]);
   const [input, setInput] = useState("");
-  const ME = 1;
+
+  const isInternal = scope === "internal";
+  const msgs = isInternal ? internalMsgs : crossOrgMsgs;
+  const setMsgs = isInternal ? setInternalMsgs : setCrossOrgMsgs;
+  const users = isInternal ? brandUsers : crossOrgUsers;
 
   function send() {
     if (!input.trim()) return;
@@ -769,23 +829,49 @@ function CollaborationTab() {
     setInput("");
   }
 
+  const SCOPES: { id: CollabScope; label: string; Icon: typeof Lock }[] = [
+    { id:"internal", label:"Brand Team", Icon:Lock  },
+    { id:"crossorg", label:"Cross-Org",  Icon:Globe },
+  ];
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-6 py-3 border-b glass flex items-center justify-between shrink-0">
-        <div>
-          <div className="text-xs font-semibold">AW25 Womenswear — Campaign Chat</div>
-          <div className="text-[10px] text-muted-foreground">{campaignUsers.length} participants · Acne Studios + Elite Model Mgmt.</div>
+      {/* Scope switcher — one big cross-org groupchat, one internal to this org */}
+      <div className="glass border-b px-6 pt-2.5 shrink-0">
+        <div className="flex items-center gap-1">
+          {SCOPES.map(s=>{
+            const SIcon = s.Icon;
+            return (
+              <button key={s.id} onClick={()=>setScope(s.id)}
+                className={cx("flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors",
+                  scope===s.id?"border-foreground text-foreground":"border-transparent text-muted-foreground hover:text-foreground"
+                )}>
+                <SIcon size={11}/>{s.label}
+              </button>
+            );
+          })}
         </div>
+      </div>
+      {/* Scope banner — always visible so it's unambiguous who can see this thread */}
+      <div className="px-6 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-xs font-semibold">{isInternal ? "Acne Studios — Internal" : "AW25 Womenswear — Campaign Chat"}</div>
+          <div className="text-[10px] text-muted-foreground">
+            {isInternal ? `${users.length} people · Visible only to Acne Studios` : `${users.length} participants · Acne Studios + Elite Model Mgmt.`}
+          </div>
+        </div>
+        <Badge label={isInternal ? "Internal" : "Shared with agency"} variant={isInternal ? "draft" : "info"}/>
       </div>
       <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
         {msgs.map(m => {
           const isMe = m.from === ME;
-          const user = campaignUsers.find(u=>u.id===m.from);
+          const user = users.find(u=>u.id===m.from);
           return (
             <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
               <div className={cx("rounded-xl px-4 py-2.5 text-sm max-w-md leading-relaxed", isMe ? "bg-foreground text-primary-foreground" : "bg-secondary text-foreground")}>{m.text}</div>
               <div className={cx("flex items-center gap-2 text-[10px] text-muted-foreground", isMe && "flex-row-reverse")}>
                 <span className="font-medium">{isMe ? "Me" : user?.name ?? "Unknown"}</span>
+                {!isMe && user && <span>· {user.org}</span>}
                 <span className="font-mono">{m.ts}</span>
               </div>
             </div>
@@ -796,7 +882,7 @@ function CollaborationTab() {
         <div className="flex gap-3 items-end">
           <textarea value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-            placeholder="Message the campaign group…" rows={2}
+            placeholder={isInternal ? "Message your team…" : "Message the campaign group…"} rows={2}
             className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
           <button onClick={send} className="p-2.5 bg-foreground hover:bg-[#2a2a2a] text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
             <Send size={15}/>

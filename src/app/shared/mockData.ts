@@ -1,4 +1,4 @@
-import type { Talent, PaymentStatus } from "./types";
+import type { Talent, PaymentStatus, CardComment } from "./types";
 
 // ─── TALENT / SUBMISSIONS ──────────────────────────────────────────────────
 // Simplified pipeline vs. the original prototype: Submitted -> Approved/Rejected -> Booked.
@@ -19,6 +19,14 @@ export const SAMPLE_TALENT: Talent[] = [
   { id:12, name:"Chiara Russo",    agency:"Next Models",       location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
   { id:13, name:"Maya Chen",       agency:"Elite Model Mgmt.", location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
   { id:14, name:"Priya Sharma",    agency:"DNA Models",        location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+];
+
+// Sticky-note-style comments on individual candidate cards — separate
+// from each talent's single "Notes" field. Threaded, multi-author.
+export const CARD_COMMENTS: CardComment[] = [
+  { id:1, talentId:2, author:"Marcus Webb", org:"Acne Studios", text:"Love the range in her book — strong pick for the hero shot.", ts:"Jun 13, 3:40 PM" },
+  { id:2, talentId:2, author:"Jake Torres", org:"Acne Studios", text:"Agreed. Let's confirm her availability for the 14th before we lock the shortlist.", ts:"Jun 13, 4:02 PM" },
+  { id:3, talentId:1, author:"Lena Chu", org:"Acne Studios", text:"Client specifically asked about her — flagging for priority review.", ts:"Jun 12, 11:15 AM" },
 ];
 
 export const PIPELINE_STAGES: { id: Talent["stage"]; label: string }[] = [

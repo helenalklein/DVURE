@@ -25,6 +25,18 @@ export interface Talent {
 
 export type IconFn = (props: { size?: number; className?: string }) => JSX.Element | null;
 
+// A sticky-note-style comment left on a talent card — distinct from the
+// single freeform "Notes" field: a threaded, multi-author discussion
+// tied to one candidate, visible to whoever can see the campaign.
+export interface CardComment {
+  id: number;
+  talentId: number;
+  author: string;
+  org: string;
+  text: string;
+  ts: string;
+}
+
 // A model on an agency's roster. Agencies add models (invite-style,
 // like a brand adding a teammate) — models don't self-register.
 // This becomes the `talent_profiles` table in Milestone B, with
