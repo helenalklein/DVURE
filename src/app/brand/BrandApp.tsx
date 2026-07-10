@@ -253,7 +253,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
 
   return (
     <div className="flex-1 flex flex-col h-full relative">
-      <div className="bg-card border-b border-border px-5 py-2 shrink-0 flex items-center gap-3 flex-wrap">
+      <div className="glass border-b px-5 py-2 shrink-0 flex items-center gap-3 flex-wrap">
         <div className="flex items-center border border-border rounded-md bg-input-background px-3 gap-2 h-8">
           <Search size={13} className="text-muted-foreground"/>
           <input placeholder="Search…" className="text-xs bg-transparent focus:outline-none w-24 placeholder:text-muted-foreground"/>
@@ -287,7 +287,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                   onDragLeave={()=>setDragOver(null)}
                   onDrop={()=>{if(dragging!==null){moveWithUndo(dragging,stage.id,stage.label);setDragging(null);setDragOver(null);}}}
                 >
-                  <div className={cx("px-4 py-3 border-b border-border flex items-center justify-between shrink-0", stage.id==="booked"?"bg-foreground":"bg-card")}>
+                  <div className={cx("px-4 py-3 border-b border-border flex items-center justify-between shrink-0", stage.id==="booked"?"bg-foreground":"glass")}>
                     <div className="flex items-center gap-2">
                       <span className={cx("text-sm font-semibold",stage.id==="booked"?"text-primary-foreground":"")}>{stage.label}</span>
                       <span className={cx("text-xs font-mono px-1.5 py-0.5 rounded-sm font-semibold",stage.id==="booked"?"bg-white/20 text-primary-foreground":"bg-secondary text-foreground")}>{cards.length}</span>
@@ -313,7 +313,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                           onDragStart={()=>setDragging(t.id)}
                           onDragEnd={()=>{setDragging(null);setDragOver(null);}}
                           onClick={()=>{toggleSelect(t.id);setDrawer(t);}}
-                          className={cx("bg-card rounded-md border overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all group",
+                          className={cx("glass-subtle rounded-md border overflow-hidden cursor-pointer select-none transition-all group",
                             isSel?"border-foreground ring-1 ring-foreground":"border-border hover:border-foreground/40",
                             isDrag&&"opacity-40"
                           )}
@@ -360,7 +360,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
         </div>
 
         {drawer && (
-          <div className="w-72 shrink-0 border-l border-border bg-card flex flex-col overflow-hidden">
+          <div className="w-72 shrink-0 border-l glass-strong flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
               <div className="text-sm font-semibold truncate">{drawer.name}</div>
               <button onClick={()=>{setDrawer(null);setSelected(p=>p.filter(x=>x!==drawer.id));}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
@@ -416,7 +416,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
       </div>
 
       {showRejected && byStage("rejected").length > 0 && (
-        <div className="border-t border-border bg-card shrink-0 max-h-36 overflow-auto">
+        <div className="border-t border-border glass shrink-0 max-h-36 overflow-auto">
           <div className="px-4 py-2 border-b border-border flex items-center justify-between">
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Rejected ({byStage("rejected").length})</span>
             <button onClick={()=>setShowRejected(false)} className="text-muted-foreground hover:text-foreground"><X size={13}/></button>
@@ -447,7 +447,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
       )}
 
       {toast && (
-        <div className="absolute bottom-6 right-6 bg-card border border-border rounded-md shadow-lg px-4 py-3 flex items-center gap-4 z-30 max-w-sm">
+        <div className="absolute bottom-6 right-6 glass-subtle border rounded-md shadow-lg px-4 py-3 flex items-center gap-4 z-30 max-w-sm">
           <span className="text-sm flex-1">{toast.msg}</span>
           <button onClick={toast.undo} className="text-xs font-semibold underline underline-offset-2 hover:no-underline shrink-0">Undo</button>
           <button onClick={()=>setToast(null)} className="text-muted-foreground hover:text-foreground shrink-0"><X size={13}/></button>
@@ -519,14 +519,14 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
               <div className="max-w-3xl space-y-5">
                 <div className="grid grid-cols-3 gap-3">
                   {[["Submitted",counts.submitted],["Approved",counts.approved],["Booked",counts.booked]].map(([l,v])=>(
-                    <div key={String(l)} className={cx("border rounded-md p-3 text-center cursor-pointer hover:border-foreground/40", String(l)==="Booked"&&Number(v)>0?"bg-foreground border-foreground":"bg-card border-border")} onClick={()=>onSection("moodboard")}>
+                    <div key={String(l)} className={cx("border rounded-md p-3 text-center cursor-pointer hover:border-foreground/40", String(l)==="Booked"&&Number(v)>0?"bg-foreground border-foreground":"glass-subtle")} onClick={()=>onSection("moodboard")}>
                       <div className={cx("text-xl font-semibold tabular-nums", String(l)==="Booked"&&Number(v)>0?"text-primary-foreground":"")}>{String(v)}</div>
                       <div className={cx("text-[10px] font-mono mt-0.5", String(l)==="Booked"&&Number(v)>0?"text-primary-foreground/70":"text-muted-foreground")}>{String(l)}</div>
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-card border border-border rounded-md p-4">
+                  <div className="glass-subtle border rounded-md p-4">
                     <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Details</div>
                     {[["Type","Editorial"],["Budget","$800–$1,200/day"],["Dates","07/14–07/16/2025"],["Location","Studio 9, New York"],["Talent needed","3"],["Status","Active"]].map(([k,v])=>(
                       <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
@@ -534,7 +534,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                       </div>
                     ))}
                   </div>
-                  <div className="bg-card border border-border rounded-md p-4">
+                  <div className="glass-subtle border rounded-md p-4">
                     <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Budget</div>
                     {[["Total budget","$18,000"],["Committed","$5,150"],["Remaining","$12,850"]].map(([k,v])=>(
                       <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
@@ -557,7 +557,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                   <h2 className="text-sm font-semibold">Requirements</h2>
                   <Badge label="Editable" variant="info"/>
                 </div>
-                <div className="bg-card border border-border rounded-md p-5 space-y-4">
+                <div className="glass-subtle border rounded-md p-5 space-y-4">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Talent Requirements</div>
                   <div className="grid grid-cols-2 gap-4">
                     <TextInput label="Models needed" placeholder="e.g. 3" defaultValue="3"/>
@@ -568,7 +568,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                     <TextInput label="Experience" placeholder="e.g. 5+ years" defaultValue="5+ years"/>
                   </div>
                 </div>
-                <div className="bg-card border border-border rounded-md p-5">
+                <div className="glass-subtle border rounded-md p-5">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Brief</div>
                   <Textarea placeholder="Campaign brief…" defaultValue="AW25 editorial campaign focusing on architectural minimalism." rows={5}/>
                 </div>
@@ -584,7 +584,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                   <h2 className="text-sm font-semibold">Deliverables</h2>
                   <Badge label="Editable" variant="info"/>
                 </div>
-                <div className="bg-card border border-border rounded-md p-5 space-y-4">
+                <div className="glass-subtle border rounded-md p-5 space-y-4">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Shoot Schedule</div>
                   {[["Mon 07/14","08:00–18:00","James Whitfield + Amara Diallo","Hero shots — Studio 9, NYC"],
                     ["Tue 07/15","09:00–17:00","Amara Diallo","Close-up editorial"]].map((d,i)=>(
@@ -616,7 +616,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                 {[["CF-2025-0841","James Whitfield","Fully Executed","$2,850","06/14/2025"],
                   ["CF-2025-0842","Amara Diallo","Awaiting Signature","$2,300","06/14/2025"],
                   ["CF-2025-0843","Zara Okafor","Draft — Not Sent","$1,960","06/15/2025"]].map(c=>(
-                  <div key={c[0]} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+                  <div key={c[0]} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
                     <FileCheck size={18} className="text-muted-foreground shrink-0"/>
                     <div className="flex-1">
                       <div className="text-sm font-semibold">{c[1]}</div>
@@ -642,7 +642,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
               <div className="max-w-2xl space-y-3">
                 <p className="text-xs text-muted-foreground mb-4">Bookings originate from this campaign's approved submissions.</p>
                 {talent.filter(t=>t.stage==="booked").map(t=>(
-                  <div key={t.id} className="bg-card border border-foreground/20 rounded-md p-4 flex items-center gap-4">
+                  <div key={t.id} className="glass-subtle border border-foreground/20 rounded-md p-4 flex items-center gap-4">
                     <XBox className="w-14 h-[72px] rounded-sm shrink-0"/>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
@@ -674,7 +674,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                   {campaignBookings.map(b=>{
                     const bd = bookingBreakdown(b);
                     return (
-                      <div key={b.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+                      <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
                         <div className="flex-1">
                           <div className="text-sm font-semibold">{b.model}</div>
                           <div className="text-xs text-muted-foreground">{b.agency} · Shoot {b.shootDate}</div>
@@ -723,7 +723,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                 <div className="space-y-2 mb-5">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Brand</div>
                   {ORG_USERS.filter(u=>u.org==="Acne Studios").slice(0,4).map(u=>(
-                    <div key={u.id} className="bg-card border border-border rounded-md px-4 py-3 flex items-center gap-3">
+                    <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
                       <XBox className="w-7 h-7 rounded-full shrink-0"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title}</div></div>
                       <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
@@ -733,7 +733,7 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
                 <div className="space-y-2">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency</div>
                   {ORG_USERS.filter(u=>u.org!=="Acne Studios").map(u=>(
-                    <div key={u.id} className="bg-card border border-border rounded-md px-4 py-3 flex items-center gap-3">
+                    <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
                       <XBox className="w-7 h-7 rounded-full shrink-0"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
                       <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
@@ -771,7 +771,7 @@ function CollaborationTab() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-6 py-3 border-b border-border bg-card flex items-center justify-between shrink-0">
+      <div className="px-6 py-3 border-b glass flex items-center justify-between shrink-0">
         <div>
           <div className="text-xs font-semibold">AW25 Womenswear — Campaign Chat</div>
           <div className="text-[10px] text-muted-foreground">{campaignUsers.length} participants · Acne Studios + Elite Model Mgmt.</div>
@@ -792,7 +792,7 @@ function CollaborationTab() {
           );
         })}
       </div>
-      <div className="px-6 py-4 border-t border-border bg-card shrink-0">
+      <div className="px-6 py-4 border-t glass shrink-0">
         <div className="flex gap-3 items-end">
           <textarea value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
@@ -824,7 +824,7 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Dashboard" sub="Acne Studios · Brand"/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
-        <div className="bg-card border border-border rounded-md overflow-hidden">
+        <div className="glass-subtle border rounded-md overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
             <AlertCircle size={13} className="text-foreground shrink-0"/>
             <span className="text-xs font-semibold">Needs Attention</span>
@@ -850,7 +850,7 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
               {campaigns.map(c=>{
                 const conv = c.submitted > 0 ? Math.round((c.booked/c.submitted)*100) : 0;
                 return (
-                  <div key={c.name} className="bg-card border border-border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={openCampaign}>
+                  <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={openCampaign}>
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div>
                         <div className="text-sm font-semibold">{c.name}</div>
@@ -894,7 +894,7 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
                 { label:"Submissions to Review", value:"44", action:"Review",   urgent:false },
                 { label:"Active Campaigns",      value:"3",  action:"View all", urgent:false },
               ].map(s=>(
-                <div key={s.label} className={cx("bg-card border rounded-md px-4 py-3 flex items-center justify-between gap-3",s.urgent?"border-foreground":"border-border")}>
+                <div key={s.label} className={cx("glass-subtle border rounded-md px-4 py-3 flex items-center justify-between gap-3",s.urgent?"border-foreground":"border-border")}>
                   <div>
                     <div className="text-xl font-semibold tabular-nums">{s.value}</div>
                     <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">{s.label}</div>
@@ -943,13 +943,13 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
           ))}
         </div>
         {filtered.length===0 ? (
-          <div className="bg-card border border-dashed border-border rounded-md p-10 text-center">
+          <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
             <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
           </div>
         ) : (
           <div className="space-y-2">
             {filtered.map(c=>(
-              <div key={c.name} className="bg-card border border-border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={openCampaign}>
+              <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={openCampaign}>
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
@@ -989,7 +989,7 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="New Campaign" sub={`Step ${step} of 4`} actions={<Btn variant="ghost" size="sm" onClick={onBack}><X size={13}/> Discard</Btn>}/>
-      <div className="bg-card border-b border-border px-6 py-4 shrink-0">
+      <div className="glass border-b px-6 py-4 shrink-0">
         <div className="max-w-xl mx-auto flex items-start">
           {STEPS.map((s,i)=>(
             <div key={s.n} className="flex-1 flex flex-col items-center relative">
@@ -1035,7 +1035,7 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
               <FieldLabel>Distribute to agencies</FieldLabel>
               <div className="flex flex-wrap gap-2 mt-1">{["Elite Model Management","IMG Models","Wilhelmina","DNA Models"].map(a=><Chip key={a} active>{a}</Chip>)}</div>
             </div>
-            <div className="bg-card border border-border rounded-md p-4 flex items-start gap-2.5">
+            <div className="glass-subtle border rounded-md p-4 flex items-start gap-2.5">
               <AlertCircle size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
               <div className="text-xs text-muted-foreground leading-relaxed">No payment is due until talent is booked.</div>
             </div>
@@ -1066,7 +1066,7 @@ function GlobalContracts() {
           <Stat label="Unsent drafts"    value="1" sub="Action required" accent/>
           <Stat label="Executed"         value="8" sub="All time"/>
         </div>
-        <div className="bg-card border border-border rounded-md overflow-hidden">
+        <div className="glass-subtle border rounded-md overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">All Contracts</span>
             <div className="flex items-center border border-border rounded-md bg-input-background px-3 gap-2 h-8">
@@ -1129,7 +1129,7 @@ function PaymentSuccessOverlay({ campaign, amount, onClose }: { campaign: string
     setTimeout(() => onClose(), 5000);
   });
   return (
-    <div className="absolute inset-0 bg-card/97 flex flex-col items-center justify-center gap-6 rounded-xl z-50">
+    <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-6 rounded-xl z-50">
       {phase === "processing" && (<>
         <div className="w-14 h-14 border-2 border-border border-t-foreground rounded-full animate-spin"/>
         <div className="text-base font-semibold text-foreground">Processing payment…</div>
@@ -1171,7 +1171,7 @@ function GlobalPayments() {
             const breakdown = bookingBreakdown(b);
             return (
               <div key={b.id} onClick={()=>{setSelectedBooking(b.id);setShowPayModal(true);}}
-                className="bg-card border border-border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all">
+                className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all">
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-[10px] font-mono text-muted-foreground">{b.id}</span>
                   <Badge label={b.paymentStatus==="processing"?"Processing":"Pending"} variant={b.paymentStatus==="processing"?"pending":"draft"}/>
@@ -1310,7 +1310,7 @@ function DirectoryScreen() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {filtered.map(u=>(
-            <div key={u.id} className="bg-card border border-border rounded-md p-3">
+            <div key={u.id} className="glass-subtle border rounded-md p-3">
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-secondary border border-border rounded-full flex items-center justify-center text-xs font-semibold shrink-0">
@@ -1350,7 +1350,7 @@ function Reports() {
               const RIcon = r.icon;
               const isRunning = running === r.id;
               return (
-                <div key={r.id} className="bg-card border border-border rounded-md p-5 hover:border-foreground/30 transition-colors">
+                <div key={r.id} className="glass-subtle border rounded-md p-5 hover:border-foreground/30 transition-colors">
                   <div className="flex items-start gap-3 mb-3">
                     <div className="w-8 h-8 bg-secondary border border-border rounded-md flex items-center justify-center shrink-0"><RIcon size={15} className="text-muted-foreground"/></div>
                     <div><div className="text-sm font-semibold">{r.label}</div><div className="text-xs text-muted-foreground leading-relaxed mt-0.5">{r.desc}</div></div>
@@ -1397,7 +1397,7 @@ function Network() {
           {agencies.map(a=>{
             const isAdded = added.includes(a.name);
             return (
-              <div key={a.name} className="bg-card border border-border rounded-md p-4 flex items-center gap-4 hover:border-foreground/30">
+              <div key={a.name} className="glass-subtle border rounded-md p-4 flex items-center gap-4 hover:border-foreground/30">
                 <XBox className="w-10 h-10 rounded-md"/>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
@@ -1431,7 +1431,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Settings" sub="Acne Studios · Account and billing"/>
       <div className="flex-1 flex min-h-0">
-        <div className="w-44 shrink-0 border-r border-border bg-card px-2 py-4 space-y-0.5">
+        <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
           {[["subscription","Subscription"],["billing","Billing"],["security","Security"],["org","Organization"]].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id as typeof tab)}
               className={cx("w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
@@ -1449,7 +1449,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             {tab === "subscription" && (
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your DVURE Brand subscription.</p></div>
-                <div className="bg-card border border-border rounded-md overflow-hidden">
+                <div className="glass-subtle border rounded-md overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                     <div><div className="text-sm font-semibold">DVURE Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
                     <Badge label="Active Trial" variant="success"/>
@@ -1472,7 +1472,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Security</h2><p className="text-sm text-muted-foreground">Manage access and authentication settings.</p></div>
                 {[{label:"Change password",action:"Update"},{label:"Two-factor authentication",action:"Enable"}].map(item=>(
-                  <div key={item.label} className="bg-card border border-border rounded-md px-4 py-3 flex items-center justify-between">
+                  <div key={item.label} className="glass-subtle border rounded-md px-4 py-3 flex items-center justify-between">
                     <div className="text-sm font-medium">{item.label}</div>
                     <Btn variant="outline" size="sm">{item.action}</Btn>
                   </div>
@@ -1534,7 +1534,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
 
       <div className="fixed bottom-6 right-6 z-40 group">
         {activityOpen ? (
-          <div className="w-72 bg-card border border-border rounded-md shadow-xl overflow-hidden">
+          <div className="w-72 glass-subtle border rounded-md shadow-xl overflow-hidden">
             <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
               <div className="text-xs font-semibold">Activity</div>
               <button onClick={()=>setActivityOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">

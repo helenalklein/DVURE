@@ -35,6 +35,7 @@
      top bars, modals, floating panels), not on dense content cards. */
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.88);
   --glass-border: rgba(255, 255, 255, 0.8);
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
@@ -205,6 +206,14 @@
     background-color: var(--glass-bg-strong);
     backdrop-filter: blur(28px) saturate(1.7);
     -webkit-backdrop-filter: blur(28px) saturate(1.7);
+    border-color: var(--glass-border);
+  }
+  /* Same frosted motif, tuned for dense content cards: higher opacity
+     so body text and tabular numbers stay legible over a busy page. */
+  .glass-subtle {
+    background-color: var(--glass-bg-subtle);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
     border-color: var(--glass-border);
   }
   .glass-dark {

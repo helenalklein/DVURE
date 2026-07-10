@@ -29,7 +29,7 @@ function BookingsView() {
       {myBookings.map(b=>{
         const bd = bookingBreakdown(b);
         return (
-          <div key={b.id} className="bg-card border border-border rounded-md p-4">
+          <div key={b.id} className="glass-subtle border rounded-md p-4">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div>
                 <div className="text-sm font-semibold">{b.campaign}</div>
@@ -68,7 +68,7 @@ function EarningsView() {
         {myBookings.map(b=>{
           const bd = bookingBreakdown(b);
           return (
-            <div key={b.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+            <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
               <div className="flex-1"><div className="text-sm font-semibold">{b.campaign}</div><div className="text-xs text-muted-foreground">{b.shootDate}</div></div>
               <span className="font-mono text-sm">${bd.modelFee.toLocaleString()}</span>
               {statusBadge(b.paymentStatus)}

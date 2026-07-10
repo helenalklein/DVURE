@@ -33,7 +33,7 @@ function InvitationsView({ onSubmitTalent }: { onSubmitTalent: () => void }) {
     <div className="max-w-2xl space-y-3">
       <p className="text-sm text-muted-foreground mb-4">Brand campaign invitations requiring talent submissions.</p>
       {INVITATIONS.map(inv=>(
-        <div key={inv.campaign} className="bg-card border border-border rounded-md p-4">
+        <div key={inv.campaign} className="glass-subtle border rounded-md p-4">
           <div className="flex items-start justify-between gap-3 mb-2">
             <div>
               <div className="text-sm font-semibold">{inv.campaign}</div>
@@ -103,7 +103,7 @@ function RosterPickerModal({ roster, onPick, onClose }: { roster: RosterModel[];
             <div className="grid grid-cols-3 gap-3">
               {models.map(m=>(
                 <button key={m.id} onClick={()=>onPick(m.id)}
-                  className="text-left bg-card border border-border rounded-md overflow-hidden hover:border-foreground hover:shadow-md transition-all group">
+                  className="text-left glass-subtle border rounded-md overflow-hidden hover:border-foreground hover:shadow-md transition-all group">
                   <XBox className="w-full h-24"/>
                   <div className="p-2.5 space-y-0.5">
                     <div className="text-xs font-semibold truncate">{m.name}</div>
@@ -155,7 +155,7 @@ function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onG
         {roster.filter(m=>submittedIds.has(m.id)).map(m=>{
           const sub = submitted.find(s=>s.modelId===m.id)!;
           return (
-            <div key={m.id} className="bg-card border border-dashed border-border rounded-md p-4 flex items-center gap-4 opacity-70">
+            <div key={m.id} className="glass-subtle border border-dashed rounded-md p-4 flex items-center gap-4 opacity-70">
               <XBox className="w-12 h-12 rounded-md shrink-0"/>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold">{m.name}</div>
@@ -166,7 +166,7 @@ function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onG
           );
         })}
         {roster.filter(m=>!submittedIds.has(m.id)).map(m=>(
-          <div key={m.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+          <div key={m.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
             <XBox className="w-12 h-12 rounded-md shrink-0"/>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold">{m.name}</div>
@@ -259,7 +259,7 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
       </div>
       <div className="space-y-2">
         {roster.map(m=>(
-          <div key={m.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+          <div key={m.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
             <XBox className="w-12 h-12 rounded-md shrink-0"/>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold">{m.name}</div>
@@ -301,7 +301,7 @@ function PaymentsView() {
           {myBookings.map(b=>{
             const bd = bookingBreakdown(b);
             return (
-              <div key={b.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+              <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
                 <div className="flex-1">
                   <div className="text-sm font-semibold">{b.model}</div>
                   <div className="text-xs text-muted-foreground">{b.campaign} · {b.brand}</div>
@@ -319,7 +319,7 @@ function PaymentsView() {
       {tab==="invoices" && (
         <div className="space-y-2">
           {myBookings.map(b=>(
-            <div key={b.id} className="bg-card border border-border rounded-md p-4 flex items-center gap-4">
+            <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
               <div className="flex-1">
                 <div className="text-sm font-semibold">{b.campaign}</div>
                 <div className="text-xs text-muted-foreground">{b.model} · Shoot {b.shootDate}</div>
