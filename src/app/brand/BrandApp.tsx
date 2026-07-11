@@ -1059,7 +1059,7 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
               chrome. Rows stretch to fill the full column height so the
               column commands real presence instead of trailing into
               empty page beneath a short stack. */}
-          <div className="w-80 shrink-0 border-l border-border pl-10 flex flex-col">
+          <div className="w-48 shrink-0 min-h-[34rem] border-l border-border pl-6 flex flex-col">
             {[
               { label:"Total",       value:"4",  sub:"3 active"       },
               { label:"Submissions", value:"44", sub:"Across active"  },
@@ -1067,8 +1067,8 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
               { label:"Booked",      value:"5",  sub:"This quarter"   },
             ].map((s,i)=>(
               <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
-                <div className="font-display text-6xl font-light tabular-nums tracking-tight">{s.value}</div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.25em] mt-3">{s.label}</div>
+                <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
                 <div className="text-xs text-muted-foreground/70 mt-1">{s.sub}</div>
               </div>
             ))}
