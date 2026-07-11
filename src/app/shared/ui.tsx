@@ -48,7 +48,7 @@ export function Btn({ children, variant="primary", size="md", onClick, disabled,
     ghost:"text-muted-foreground hover:text-foreground hover:bg-accent",
     outline:"bg-card text-foreground border border-border hover:bg-secondary",
   };
-  return <button className={cx(base, sizes[size], variants[variant], fullWidth&&"w-full", disabled&&"opacity-40 pointer-events-none")} onClick={onClick}>{icon}{children}</button>;
+  return <button type="button" disabled={disabled} className={cx(base, sizes[size], variants[variant], fullWidth&&"w-full", disabled&&"opacity-40 pointer-events-none")} onClick={onClick}>{icon}{children}</button>;
 }
 
 export function Stat({ label, value, sub, accent }: { label: string; value: string|number; sub?: string; accent?: boolean }) {

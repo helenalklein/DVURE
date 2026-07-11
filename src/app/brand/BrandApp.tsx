@@ -1081,12 +1081,16 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
 
 // ─── CREATE CAMPAIGN ──────────────────────────────────────────────────────────
 
+const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
+
 function CreateCampaign({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [genders, setGenders] = useState(["Female"]);
   const [cats, setCats] = useState(["Editorial"]);
+  const [selectedAgencies, setSelectedAgencies] = useState<string[]>(PARTNERED_AGENCIES);
   const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
     set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
+  const allAgenciesSelected = selectedAgencies.length === PARTNERED_AGENCIES.length;
   const STEPS = [{n:1,label:"Basics"},{n:2,label:"Talent"},{n:3,label:"Brief"},{n:4,label:"Publish"}];
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -1134,8 +1138,19 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
           {step===4&&(<><div><h2 className="text-base font-semibold mb-0.5">Review & Publish</h2><p className="text-sm text-muted-foreground">Distribute to agencies and open for submissions.</p></div>
             <div className="border-t border-border"/>
             <div className="bg-secondary border border-border rounded-md p-4">
-              <FieldLabel>Distribute to agencies</FieldLabel>
-              <div className="flex flex-wrap gap-2 mt-1">{["Elite Model Management","IMG Models","Wilhelmina","DNA Models"].map(a=><Chip key={a} active>{a}</Chip>)}</div>
+              <div className="flex items-center justify-between mb-1">
+                <FieldLabel>Distribute to partnered agencies</FieldLabel>
+                <button onClick={()=>setSelectedAgencies(allAgenciesSelected?[]:PARTNERED_AGENCIES)}
+                  className="text-[10px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer">
+                  {allAgenciesSelected?"Clear all":"Select all"}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {PARTNERED_AGENCIES.map(a=>(
+                  <Chip key={a} active={selectedAgencies.includes(a)} onClick={()=>toggle(selectedAgencies,a,setSelectedAgencies)}>{a}</Chip>
+                ))}
+              </div>
+              <div className="text-[10px] text-muted-foreground font-mono mt-2">{selectedAgencies.length} of {PARTNERED_AGENCIES.length} selected</div>
             </div>
             <div className="glass-subtle border rounded-md p-4 flex items-start gap-2.5">
               <AlertCircle size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
@@ -1148,7 +1163,7 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
               <Btn variant="ghost" size="sm">Save draft</Btn>
             </div>
             {step<4?<Btn variant="primary" onClick={()=>setStep(step+1)}>Continue <ChevronRight size={13}/></Btn>
-              :<Btn variant="primary" icon={<Check size={13}/>} onClick={onBack}>Publish Campaign</Btn>}
+              :<Btn variant="primary" icon={<Check size={13}/>} disabled={selectedAgencies.length===0} onClick={onBack}>Publish Campaign</Btn>}
           </div>
         </div>
       </div>

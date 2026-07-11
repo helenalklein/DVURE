@@ -25,7 +25,6 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
             <span className="font-display text-primary-foreground text-2xl">D</span>
           </div>
           <div className="font-display text-4xl tracking-tight">DVURE</div>
-          <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-[0.25em] mt-2">Talent Operating System</div>
         </div>
 
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">
