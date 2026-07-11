@@ -51,3 +51,82 @@ export interface RosterModel {
   height: string;
   exp: string;
 }
+
+// ─── CAMPAIGNS (shared record, individually addressable) ──────────────────
+
+export type CampaignType = "Runway" | "Editorial" | "Advertising" | "E-commerce" | "TV Commercial" | "Beauty" | "Other";
+export type CampaignStatus = "active" | "drafts" | "archived";
+
+export interface Campaign {
+  id: number;
+  name: string;
+  type: CampaignType;
+  status: CampaignStatus;
+  due: string;
+  dueLabel: string;
+  dueUrgency: "high" | "medium" | "low";
+  submitted: number;
+  approved: number;
+  booked: number;
+  talentNeeded: number;
+  budget: number;
+  committed: number;
+  remaining: number;
+  // Set only on Runway campaigns — the mechanism for "different brands
+  // walking the same physical show". Multiple campaigns (different
+  // brands) can point at the same RunwayShow id.
+  runwayShowId?: number;
+}
+
+// A physical runway show — the shared event. Not owned by any one
+// brand; each brand's Campaign references it via runwayShowId so two
+// brands walking the same show on the same day stay properly linked
+// instead of each re-describing the same venue/time independently.
+export interface RunwayShow {
+  id: number;
+  name: string;
+  venue: string;
+  date: string;
+  time: string;
+  timeZone: string;
+  season: string;
+}
+
+// ─── RUNWAY CASTING ─────────────────────────────────────────────────────────
+
+// Day-of checklist, not a linear pipeline — a model can be
+// fitting-complete before another is even optioned, so every stage is
+// independently toggleable rather than columns you drag between.
+export type CastingStageId = "confirmed" | "optioned" | "fittingComplete" | "rehearsalComplete" | "checkedIn" | "walked" | "wrapComplete";
+
+export interface CastingEntry {
+  modelId: number;
+  campaignId: number;
+  stages: Record<CastingStageId, boolean>;
+}
+
+// One numbered look for a runway campaign — garments/accessories plus
+// who's assigned to execute it (model, hair, makeup, dresser).
+export interface Look {
+  id: number;
+  campaignId: number;
+  number: number;
+  garments: string;
+  shoes: string;
+  jewelry: string;
+  accessories: string;
+  stylistNotes: string;
+  dressingNotes: string;
+  assignedModelId?: number;
+  assignedHairId?: number;
+  assignedMakeupId?: number;
+  assignedDresserId?: number;
+}
+
+export type CrewRole = "hair" | "makeup" | "dresser" | "photographer" | "production" | "security" | "transportation";
+
+export interface CrewMember {
+  id: number;
+  name: string;
+  role: CrewRole;
+}

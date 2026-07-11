@@ -7,15 +7,15 @@ import {
   Settings, Building2,
   Calendar, FileText, Activity, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut, Pin, Lock, Globe
+  User, LogOut, Pin, Lock, Globe, Shirt
 } from "lucide-react";
-import type { SubmissionStage, Talent, IconFn, CardComment } from "../shared/types";
+import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
 import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS } from "../shared/mockData";
 
 type GlobalView = "dashboard" | "campaigns" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "requirements" | "deliverables" | "contracts" | "bookings" | "payments" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "payments" | "activity" | "collaboration" | "users";
 
 // ─── CONTRACT MODAL ────────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
 ];
 
 function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
-  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: () => void; onLogout: () => void;
+  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void;
 }) {
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
@@ -98,10 +98,10 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
       </nav>
       <div className="px-3 pb-3 border-t border-border pt-3">
         <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 px-2">Recent</div>
-        {["AW25 Womenswear","SS25 Fragrance","Resort Lookbook"].map(name => (
-          <button key={name} onClick={onOpenCampaign}
+        {[{id:1,name:"AW25 Womenswear"},{id:2,name:"SS25 Fragrance"},{id:3,name:"Resort Lookbook"},{id:5,name:"AW26 Runway"}].map(c => (
+          <button key={c.id} onClick={()=>onOpenCampaign(c.id)}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-left">
-            <Camera size={11}/><span className="truncate">{name}</span>
+            <Camera size={11}/><span className="truncate">{c.name}</span>
           </button>
         ))}
       </div>
@@ -122,7 +122,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
   );
 }
 
-const CAMPAIGN_NAV: { id: CampaignSection; label: string; Icon: IconFn }[] = [
+const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] = [
   { id:"overview",      label:"Overview",      Icon:LayoutDashboard },
   { id:"moodboard",     label:"Submissions",   Icon:PolaroidIcon    },
   { id:"requirements",  label:"Requirements",  Icon:BookOpen        },
@@ -135,10 +135,20 @@ const CAMPAIGN_NAV: { id: CampaignSection; label: string; Icon: IconFn }[] = [
   { id:"users",         label:"Users",         Icon:User            },
 ];
 
-function CampaignSidebar({ section, onSection, onBack, onNewCampaign, counts }: {
-  section: CampaignSection; onSection: (s: CampaignSection) => void;
+// Runway campaigns swap the generic Submissions board for a day-of
+// Casting Board and gain a Looks tab — everything else (Requirements,
+// Deliverables, Contracts, ...) stays the same for now.
+function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: string; Icon: IconFn }[] {
+  if (type !== "Runway") return CAMPAIGN_NAV_BASE;
+  return CAMPAIGN_NAV_BASE.map(item => item.id==="moodboard" ? { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check } : item)
+    .flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
+}
+
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, counts }: {
+  campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
   onBack: () => void; onNewCampaign: () => void; counts: Record<string,number>;
 }) {
+  const nav = campaignNavFor(campaign.type);
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
@@ -156,12 +166,12 @@ function CampaignSidebar({ section, onSection, onBack, onNewCampaign, counts }: 
         </button>
       </div>
       <div className="px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2 mb-1"><Badge label="Active" variant="active"/></div>
-        <div className="text-xs font-semibold leading-snug">AW25 Womenswear Campaign</div>
-        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">Editorial · Due 06/20/2025</div>
+        <div className="flex items-center gap-2 mb-1"><Badge label={campaign.status==="archived"?"Archived":"Active"} variant={campaign.status==="archived"?"draft":"active"}/></div>
+        <div className="text-xs font-semibold leading-snug">{campaign.name}</div>
+        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{campaign.type} · Due {campaign.due}</div>
       </div>
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
-        {CAMPAIGN_NAV.map(item => {
+        {nav.map(item => {
           const NavIcon = item.Icon;
           return (
             <button key={item.id} onClick={() => onSection(item.id)}
@@ -534,13 +544,216 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
   );
 }
 
+// ─── RUNWAY: CASTING BOARD ──────────────────────────────────────────────────
+// Day-of checklist, not a drag pipeline — a model can be fitting-complete
+// before another is even optioned, so every stage is independently
+// toggleable per model rather than columns you move cards between.
+
+function CastingBoard({ campaign }: { campaign: Campaign }) {
+  const [entries, setEntries] = useState<CastingEntry[]>(() => CASTING_ENTRIES.filter(e=>e.campaignId===campaign.id));
+  const show = RUNWAY_SHOWS.find(s=>s.id===campaign.runwayShowId);
+  const otherBrands = campaign.runwayShowId ? RUNWAY_SHOW_OTHER_BRANDS[campaign.runwayShowId] ?? [] : [];
+
+  function toggleStage(modelId: number, stageId: CastingStageId) {
+    setEntries(prev => prev.map(e => e.modelId===modelId ? { ...e, stages: { ...e.stages, [stageId]: !e.stages[stageId] } } : e));
+  }
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-5xl space-y-4">
+        {show && (
+          <div className="glass-subtle border rounded-md p-4 flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1.5">{show.season} · {show.name}</div>
+              <div className="text-sm font-semibold">{show.venue}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{show.date} · {show.time} {show.timeZone}</div>
+            </div>
+            {otherBrands.length>0 && (
+              <div className="text-right">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Also on this show</div>
+                <div className="flex gap-1.5 flex-wrap justify-end">
+                  {otherBrands.map(b=><Badge key={b} label={b} variant="default"/>)}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        <p className="text-sm text-muted-foreground">Day-of casting checklist — toggle each stage as models move through it. Stages don't have to complete in order.</p>
+        <div className="glass-subtle border rounded-md overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground whitespace-nowrap">Model</th>
+                {CASTING_STAGES.map(s=>(
+                  <th key={s.id} className="px-2 py-2.5 text-center text-[9px] font-mono text-muted-foreground uppercase leading-tight w-16">{s.label}</th>
+                ))}
+                <th className="px-4 py-2.5 text-right text-xs font-mono text-muted-foreground whitespace-nowrap">Progress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(e=>{
+                const model = SAMPLE_TALENT.find(t=>t.id===e.modelId);
+                const doneCount = CASTING_STAGES.filter(s=>e.stages[s.id]).length;
+                return (
+                  <tr key={e.modelId} className="border-b border-border last:border-0 hover:bg-secondary/60">
+                    <td className="px-4 py-3 font-medium whitespace-nowrap">{model?.name ?? `Model #${e.modelId}`}</td>
+                    {CASTING_STAGES.map(s=>(
+                      <td key={s.id} className="px-2 py-3 text-center">
+                        <button onClick={()=>toggleStage(e.modelId, s.id)} title={s.label}
+                          className={cx("w-5 h-5 rounded-sm border flex items-center justify-center mx-auto transition-colors cursor-pointer",
+                            e.stages[s.id] ? "bg-foreground border-foreground text-primary-foreground" : "border-border text-transparent hover:border-foreground/50"
+                          )}>
+                          <Check size={11}/>
+                        </button>
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-right text-xs font-mono whitespace-nowrap">{doneCount}/{CASTING_STAGES.length}</td>
+                  </tr>
+                );
+              })}
+              {entries.length===0 && (
+                <tr><td colSpan={CASTING_STAGES.length+2} className="px-4 py-10 text-center text-sm text-muted-foreground">No models cast yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── RUNWAY: LOOKS ───────────────────────────────────────────────────────────
+
+function LooksScreen({ campaignId }: { campaignId: number }) {
+  const [looks, setLooks] = useState<Look[]>(() => LOOKS.filter(l=>l.campaignId===campaignId));
+  const [drawerId, setDrawerId] = useState<number|null>(null);
+  const drawer = looks.find(l=>l.id===drawerId) ?? null;
+
+  function addLook() {
+    const nextNumber = looks.reduce((max,l)=>Math.max(max,l.number),0) + 1;
+    const fresh: Look = { id:Date.now(), campaignId, number:nextNumber, garments:"", shoes:"", jewelry:"", accessories:"", stylistNotes:"", dressingNotes:"" };
+    setLooks(prev=>[...prev, fresh]);
+    setDrawerId(fresh.id);
+  }
+
+  function updateDrawer(patch: Partial<Look>) {
+    if (drawerId==null) return;
+    setLooks(prev => prev.map(l => l.id===drawerId ? { ...l, ...patch } : l));
+  }
+
+  const modelName = (id?: number) => SAMPLE_TALENT.find(t=>t.id===id)?.name ?? "Unassigned model";
+  const crewName = (id?: number) => CREW.find(c=>c.id===id)?.name ?? "Unassigned";
+  const crewByRole = (role: string) => CREW.filter(c=>c.role===role);
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-4xl">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">Numbered looks for this show — garments, accessories, and who's assigned to execute each one.</p>
+          <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={addLook}>Add Look</Btn>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {[...looks].sort((a,b)=>a.number-b.number).map(l=>(
+            <button key={l.id} onClick={()=>setDrawerId(l.id)}
+              className="text-left glass-subtle border rounded-md overflow-hidden hover:border-foreground/40 hover:shadow-md transition-all cursor-pointer">
+              <XBox className="w-full h-32"/>
+              <div className="p-3 space-y-1">
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">Look {l.number}</div>
+                <div className="text-sm font-semibold truncate">{l.garments || "Untitled look"}</div>
+                <div className="text-xs text-muted-foreground truncate">{modelName(l.assignedModelId)}</div>
+              </div>
+            </button>
+          ))}
+          {looks.length===0 && (
+            <div className="col-span-3 glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No looks yet — add the first one.</div>
+          )}
+        </div>
+      </div>
+
+      {drawer && (
+        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-strong border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+              <div className="text-sm font-semibold">Look {drawer.number}</div>
+              <button onClick={()=>setDrawerId(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            </div>
+            <div className="flex-1 overflow-auto p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <TextInput label="Garments" placeholder="e.g. Ivory wool coat" value={drawer.garments} onChange={e=>updateDrawer({garments:e.target.value})}/>
+                <TextInput label="Shoes" placeholder="e.g. Black leather boot" value={drawer.shoes} onChange={e=>updateDrawer({shoes:e.target.value})}/>
+                <TextInput label="Jewelry" placeholder="e.g. Silver cuff" value={drawer.jewelry} onChange={e=>updateDrawer({jewelry:e.target.value})}/>
+                <TextInput label="Accessories" placeholder="e.g. Leather clutch" value={drawer.accessories} onChange={e=>updateDrawer({accessories:e.target.value})}/>
+              </div>
+              <div>
+                <FieldLabel>Stylist Notes</FieldLabel>
+                <textarea value={drawer.stylistNotes} onChange={e=>updateDrawer({stylistNotes:e.target.value})} rows={2} placeholder="Direction for styling this look…"
+                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+              </div>
+              <div>
+                <FieldLabel>Dressing Notes</FieldLabel>
+                <textarea value={drawer.dressingNotes} onChange={e=>updateDrawer({dressingNotes:e.target.value})} rows={2} placeholder="Quick-change instructions for the dressing team…"
+                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+              </div>
+              <div className="border-t border-border pt-4">
+                <FieldLabel>Assignments</FieldLabel>
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground font-mono mb-1">Model</div>
+                    <select value={drawer.assignedModelId ?? ""} onChange={e=>updateDrawer({assignedModelId: e.target.value ? Number(e.target.value) : undefined})}
+                      className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
+                      <option value="">Unassigned</option>
+                      {SAMPLE_TALENT.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground font-mono mb-1">Hair</div>
+                    <select value={drawer.assignedHairId ?? ""} onChange={e=>updateDrawer({assignedHairId: e.target.value ? Number(e.target.value) : undefined})}
+                      className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
+                      <option value="">Unassigned</option>
+                      {crewByRole("hair").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground font-mono mb-1">Makeup</div>
+                    <select value={drawer.assignedMakeupId ?? ""} onChange={e=>updateDrawer({assignedMakeupId: e.target.value ? Number(e.target.value) : undefined})}
+                      className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
+                      <option value="">Unassigned</option>
+                      {crewByRole("makeup").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground font-mono mb-1">Dresser</div>
+                    <select value={drawer.assignedDresserId ?? ""} onChange={e=>updateDrawer({assignedDresserId: e.target.value ? Number(e.target.value) : undefined})}
+                      className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
+                      <option value="">Unassigned</option>
+                      {crewByRole("dresser").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-3">
+                  {modelName(drawer.assignedModelId)} · Hair: {crewName(drawer.assignedHairId)} · Makeup: {crewName(drawer.assignedMakeupId)} · Dresser: {crewName(drawer.assignedDresserId)}
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-border shrink-0">
+              <Btn variant="primary" fullWidth onClick={()=>setDrawerId(null)}>Done</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CAMPAIGN WORKSPACE ─────────────────────────────────────────────────────
 
-function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
-  section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void;
+function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign }: {
+  campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void;
 }) {
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [contractModal, setContractModal] = useState<Talent|null>(null);
+
+  const campaign = CAMPAIGNS.find(c=>c.id===campaignId) ?? CAMPAIGNS[0];
 
   const counts: Record<string,number> = {
     submitted: talent.filter(t=>t.stage==="submitted").length,
@@ -549,14 +762,14 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
     rejected:  talent.filter(t=>t.stage==="rejected").length,
   };
 
-  const sectionLabel = CAMPAIGN_NAV.find(n=>n.id===section)?.label ?? "";
-  const campaignBookings = BOOKINGS.filter(b=>b.campaign==="AW25 Womenswear Campaign");
+  const sectionLabel = campaignNavFor(campaign.type).find(n=>n.id===section)?.label ?? "";
+  const campaignBookings = BOOKINGS.filter(b=>b.campaign===campaign.name);
 
   return (
     <>
-      <CampaignSidebar section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} counts={counts}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} counts={counts}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <TopBar title={sectionLabel} sub="AW25 Womenswear Campaign"/>
+        <TopBar title={sectionLabel} sub={campaign.name}/>
         <div className="flex-1 min-h-0 overflow-hidden">
 
           {section==="overview" && (
@@ -594,6 +807,10 @@ function CampaignWorkspace({ section, onSection, onBack, onNewCampaign }: {
           )}
 
           {section==="moodboard" && <Moodboard talent={talent} setTalent={setTalent} onContractPrompt={t=>setContractModal(t)}/>}
+
+          {section==="casting" && <CastingBoard campaign={campaign}/>}
+
+          {section==="looks" && <LooksScreen campaignId={campaign.id}/>}
 
           {section==="requirements" && (
             <div className="flex-1 overflow-auto p-6">
@@ -895,16 +1112,12 @@ function CollaborationTab() {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
-function Dashboard({ openCampaign }: { openCampaign: () => void }) {
-  const campaigns = [
-    { name:"AW25 Womenswear Campaign", type:"Editorial",  submitted:14, approved:6, booked:2, dueLabel:"Due tomorrow",    dueUrgency:"high",   budget:18000, committed:5150, remaining:12850, talentNeeded:4 },
-    { name:"SS25 Fragrance Launch",    type:"Advertising", submitted:9,  approved:4, booked:0, dueLabel:"5 days remaining", dueUrgency:"medium", budget:10000, committed:0,    remaining:10000, talentNeeded:2 },
-    { name:"Resort Lookbook 2025",     type:"E-commerce", submitted:21, approved:7, booked:0, dueLabel:"14 days",          dueUrgency:"low",    budget:7000,  committed:0,    remaining:7000,  talentNeeded:3 },
-  ];
+function Dashboard({ openCampaign }: { openCampaign: (id: number) => void }) {
+  const campaigns = CAMPAIGNS.filter(c=>c.status==="active");
   const attention = [
-    { icon:"⚡", msg:"AW25 Womenswear — due tomorrow. 14 submissions need review.", action:"Review now", urgent:true  },
-    { icon:"✉",  msg:"1 unsent contract for Zara Okafor pending signature.",        action:"Send",       urgent:true  },
-    { icon:"👤", msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false },
+    { icon:"⚡", msg:"AW25 Womenswear — due tomorrow. 14 submissions need review.", action:"Review now", urgent:true,  campaignId:1 },
+    { icon:"✉",  msg:"1 unsent contract for Zara Okafor pending signature.",        action:"Send",       urgent:true,  campaignId:1 },
+    { icon:"👤", msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false, campaignId:2 },
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -921,7 +1134,7 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
               <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
                 <span className="text-sm shrink-0">{a.icon}</span>
                 <span className="flex-1 text-sm">{a.msg}</span>
-                <button onClick={openCampaign}
+                <button onClick={()=>openCampaign(a.campaignId)}
                   className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors",
                     a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
                   )}>{a.action}</button>
@@ -936,7 +1149,7 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
               {campaigns.map(c=>{
                 const conv = c.submitted > 0 ? Math.round((c.booked/c.submitted)*100) : 0;
                 return (
-                  <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={openCampaign}>
+                  <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={()=>openCampaign(c.id)}>
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div>
                         <div className="text-sm font-semibold">{c.name}</div>
@@ -976,16 +1189,16 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
           <div className="space-y-4">
             <div className="space-y-2">
               {[
-                { label:"Unsent Contracts",      value:"1",  action:"Send now", urgent:true  },
-                { label:"Submissions to Review", value:"44", action:"Review",   urgent:false },
-                { label:"Active Campaigns",      value:"3",  action:"View all", urgent:false },
+                { label:"Unsent Contracts",      value:"1",  action:"Send now", urgent:true,  campaignId:1 },
+                { label:"Submissions to Review", value:"44", action:"Review",   urgent:false, campaignId:1 },
+                { label:"Active Campaigns",      value:String(campaigns.length),  action:"View all", urgent:false, campaignId:1 },
               ].map(s=>(
                 <div key={s.label} className={cx("glass-subtle border rounded-md px-4 py-3 flex items-center justify-between gap-3",s.urgent?"border-foreground":"border-border")}>
                   <div>
                     <div className="text-xl font-semibold tabular-nums">{s.value}</div>
                     <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">{s.label}</div>
                   </div>
-                  <button onClick={openCampaign}
+                  <button onClick={()=>openCampaign(s.campaignId)}
                     className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors",
                       s.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
                     )}>{s.action}</button>
@@ -1001,15 +1214,9 @@ function Dashboard({ openCampaign }: { openCampaign: () => void }) {
 
 // ─── CAMPAIGNS LIST ───────────────────────────────────────────────────────────
 
-function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
+function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
   const [tab, setTab] = useState("active");
-  const all = [
-    { name:"AW25 Womenswear Campaign", type:"Editorial",  status:"active",   due:"06/20", submitted:14, approved:6, booked:2 },
-    { name:"SS25 Fragrance Launch",    type:"Advertising", status:"active",   due:"06/24", submitted:9,  approved:4, booked:0 },
-    { name:"Resort Lookbook 2025",     type:"E-commerce", status:"active",   due:"07/03", submitted:21, approved:7, booked:0 },
-    { name:"FW24 Campaign",            type:"Editorial",  status:"archived", due:"01/15", submitted:41, approved:11, booked:3 },
-  ];
-  const filtered = tab==="active"?all.filter(c=>c.status==="active"):tab==="drafts"?[]:all.filter(c=>c.status==="archived");
+  const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="All campaigns · Acne Studios"/>
@@ -1031,7 +1238,7 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 {filtered.map(c=>(
-                  <div key={c.name} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={openCampaign}>
+                  <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={()=>openCampaign(c.id)}>
                     <div className="flex-1 min-w-0 flex flex-col justify-between">
                       <div>
                         <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
@@ -1061,10 +1268,10 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
               empty page beneath a short stack. */}
           <div className="w-48 shrink-0 min-h-[34rem] border-l border-border pl-6 flex flex-col">
             {[
-              { label:"Total",       value:"4",  sub:"3 active"       },
-              { label:"Submissions", value:"44", sub:"Across active"  },
-              { label:"Approved",    value:"17", sub:"Pending booking"},
-              { label:"Booked",      value:"5",  sub:"This quarter"   },
+              { label:"Total",       value:String(CAMPAIGNS.length), sub:`${CAMPAIGNS.filter(c=>c.status==="active").length} active` },
+              { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"Across active" },
+              { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"Pending booking" },
+              { label:"Booked",      value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.booked,0)),    sub:"This quarter" },
             ].map((s,i)=>(
               <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
                 <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
@@ -1651,10 +1858,16 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
 export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [view, setView] = useState<AppView>("dashboard");
   const [globalNav, setGlobalNav] = useState<GlobalView>("dashboard");
+  const [activeCampaignId, setActiveCampaignId] = useState<number>(1);
   const [campaignSection, setCampaignSection] = useState<CampaignSection>("moodboard");
   const [activityOpen, setActivityOpen] = useState(false);
 
-  function openCampaign() { setView("campaign"); setCampaignSection("moodboard"); }
+  function openCampaign(id: number) {
+    const campaign = CAMPAIGNS.find(c=>c.id===id);
+    setActiveCampaignId(id);
+    setView("campaign");
+    setCampaignSection(campaign?.type==="Runway" ? "casting" : "moodboard");
+  }
   function backToCampaigns() { setView("campaigns"); setGlobalNav("campaigns"); }
   function handleGlobalNav(v: GlobalView) { setGlobalNav(v); setView(v); }
 
@@ -1663,7 +1876,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="h-screen flex bg-background overflow-hidden">
       {inCampaign ? (
-        <CampaignWorkspace section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")}/>
+        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")}/>
       ) : (
         <>
           <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>

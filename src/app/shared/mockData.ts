@@ -1,4 +1,4 @@
-import type { Talent, PaymentStatus, CardComment } from "./types";
+import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CastingStageId, CastingEntry, Look, CrewMember } from "./types";
 
 // ─── TALENT / SUBMISSIONS ──────────────────────────────────────────────────
 // Simplified pipeline vs. the original prototype: Submitted -> Approved/Rejected -> Booked.
@@ -111,4 +111,74 @@ export const NOTIFS = [
   { id:3, text:"Payout released",                       sub:"Booking #0841",   ts:"3h ago", unread:true  },
   { id:4, text:"Contract awaiting signature",           sub:"CF-2025-0842",    ts:"5h ago", unread:true  },
   { id:5, text:"Resort Lookbook — 6 new submissions",  sub:"Resort Lookbook", ts:"1d ago", unread:false },
+];
+
+// ─── CAMPAIGNS ────────────────────────────────────────────────────────────
+// Single shared source — Dashboard, CampaignsList, and CampaignWorkspace all
+// read the same records instead of each keeping their own inline copy, and
+// campaigns are now individually addressable by id.
+
+export const CAMPAIGNS: Campaign[] = [
+  { id:1, name:"AW25 Womenswear Campaign", type:"Editorial",    status:"active",   due:"06/20", dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850 },
+  { id:2, name:"SS25 Fragrance Launch",    type:"Advertising",  status:"active",   due:"06/24", dueLabel:"5 days remaining", dueUrgency:"medium", submitted:9,  approved:4,  booked:0, talentNeeded:2, budget:10000, committed:0,     remaining:10000 },
+  { id:3, name:"Resort Lookbook 2025",     type:"E-commerce",   status:"active",   due:"07/03", dueLabel:"14 days",          dueUrgency:"low",    submitted:21, approved:7,  booked:0, talentNeeded:3, budget:7000,  committed:0,     remaining:7000  },
+  { id:4, name:"FW24 Campaign",            type:"Editorial",    status:"archived", due:"01/15", dueLabel:"Archived",         dueUrgency:"low",    submitted:41, approved:11, booked:3, talentNeeded:4, budget:15000, committed:15000, remaining:0     },
+  { id:5, name:"AW26 Runway Presentation", type:"Runway",       status:"active",   due:"02/14", dueLabel:"5 weeks out",      dueUrgency:"medium", submitted:12, approved:8,  booked:6, talentNeeded:6, budget:42000, committed:26000, remaining:16000, runwayShowId:1 },
+];
+
+// ─── RUNWAY ─────────────────────────────────────────────────────────────────
+
+// The physical show — not owned by any one brand. Acne Studios' campaign
+// references it; otherBrands is read-only context proving the same show
+// serves multiple brands independently, without pretending this brand can
+// see into another brand's actual campaign (that'd be a real data-isolation
+// bug, not a feature).
+export const RUNWAY_SHOWS: RunwayShow[] = [
+  { id:1, name:"New York Fashion Week — Day 3", venue:"Spring Studios", date:"02/14/2026", time:"18:00", timeZone:"ET", season:"AW26" },
+];
+export const RUNWAY_SHOW_OTHER_BRANDS: Record<number, string[]> = {
+  1: ["Nocturne House", "Rivet & Sable"],
+};
+
+export const CASTING_STAGES: { id: CastingStageId; label: string }[] = [
+  { id:"confirmed",         label:"Confirmed"          },
+  { id:"optioned",          label:"Optioned"           },
+  { id:"fittingComplete",   label:"Fitting Complete"   },
+  { id:"rehearsalComplete", label:"Rehearsal Complete" },
+  { id:"checkedIn",         label:"Checked In"         },
+  { id:"walked",            label:"Walked"             },
+  { id:"wrapComplete",      label:"Wrap Complete"      },
+];
+
+const allStages = (v: boolean) => CASTING_STAGES.reduce((acc,s) => ({ ...acc, [s.id]: v }), {} as Record<CastingStageId, boolean>);
+
+export const CASTING_ENTRIES: CastingEntry[] = [
+  { modelId:1,  campaignId:5, stages:{ ...allStages(true), checkedIn:false, walked:false, wrapComplete:false } },   // Zara Okafor — mid-progress
+  { modelId:2,  campaignId:5, stages:{ ...allStages(true), wrapComplete:false } },                                  // Amara Diallo — near done
+  { modelId:5,  campaignId:5, stages:{ ...allStages(false), confirmed:true, optioned:true } },                     // Ines Ferreira — early
+  { modelId:6,  campaignId:5, stages:{ ...allStages(false), confirmed:true } },                                     // Nadia Petrov — just confirmed
+  { modelId:12, campaignId:5, stages:{ ...allStages(false), confirmed:true, optioned:true, fittingComplete:true } },// Chiara Russo
+  { modelId:9,  campaignId:5, stages:allStages(true) },                                                             // James Whitfield — fully wrapped
+];
+
+export const CREW: CrewMember[] = [
+  { id:1,  name:"Priya Anand",    role:"hair" },
+  { id:2,  name:"Marcus Reyes",   role:"hair" },
+  { id:3,  name:"Dana Kwon",      role:"makeup" },
+  { id:4,  name:"Théo Laurent",   role:"makeup" },
+  { id:5,  name:"Ola Bello",      role:"dresser" },
+  { id:6,  name:"Ren Fischer",    role:"dresser" },
+  { id:7,  name:"Ibrahim Sy",     role:"photographer" },
+  { id:8,  name:"Grace Whitman",  role:"production" },
+  { id:9,  name:"Diego Cruz",     role:"security" },
+  { id:10, name:"Nia Okoro",      role:"transportation" },
+];
+
+export const LOOKS: Look[] = [
+  { id:1, campaignId:5, number:1, garments:"Ivory wool coat, black tailored trouser", shoes:"Black leather knee boot", jewelry:"Silver cuff", accessories:"Structured leather clutch", stylistNotes:"Lead look — check coat drape under stage lights.", dressingNotes:"Quick-change collar clip, no zipper.", assignedModelId:1, assignedHairId:1, assignedMakeupId:3, assignedDresserId:5 },
+  { id:2, campaignId:5, number:2, garments:"Charcoal silk slip dress", shoes:"Nude satin pump", jewelry:"Drop earrings", accessories:"—", stylistNotes:"Steam before line-up, wrinkles easily.", dressingNotes:"Zip back, model needs help — allow 90 sec.", assignedModelId:2, assignedHairId:2, assignedMakeupId:3, assignedDresserId:5 },
+  { id:3, campaignId:5, number:3, garments:"Cream cable knit sweater, wide-leg trouser", shoes:"White leather loafer", jewelry:"—", accessories:"Wool scarf, draped", assignedModelId:5, assignedHairId:1, assignedMakeupId:4, assignedDresserId:6, stylistNotes:"Scarf drape must match lookbook reference photo.", dressingNotes:"Pre-drape scarf backstage, pin in place." },
+  { id:4, campaignId:5, number:4, garments:"Black leather trench", shoes:"Black combat boot", jewelry:"Chain belt", accessories:"Gloves", assignedModelId:6, assignedHairId:2, assignedMakeupId:4, assignedDresserId:6, stylistNotes:"Belt cinch — confirm waist measurement day-of.", dressingNotes:"Gloves on last, right before line-up." },
+  { id:5, campaignId:5, number:5, garments:"Emerald green satin gown", shoes:"Metallic stiletto", jewelry:"Statement necklace", accessories:"—", assignedModelId:12, assignedHairId:1, assignedMakeupId:3, assignedDresserId:5, stylistNotes:"Train needs a handler at the top of the runway.", dressingNotes:"Necklace clasp is delicate — two-person dress." },
+  { id:6, campaignId:5, number:6, garments:"Tailored pinstripe suit", shoes:"Black oxford", jewelry:"Cufflinks", accessories:"Pocket square", assignedModelId:9, assignedHairId:2, assignedMakeupId:4, assignedDresserId:6, stylistNotes:"Closing look — full lights, hold center stage 3 extra counts.", dressingNotes:"Pocket square folded on-site, not pre-set." },
 ];
