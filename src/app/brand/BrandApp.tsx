@@ -1140,6 +1140,22 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
           </>)}
           {step===2&&(<><div><h2 className="text-base font-semibold mb-0.5">Talent Requirements</h2><p className="text-sm text-muted-foreground">Agencies match their roster to these requirements.</p></div>
             <div className="border-t border-border"/>
+            {/* Runway-specific show planning — other types keep the generic
+                fields below for now; extend this pattern per type as those
+                requirements get defined. */}
+            {campaignType==="Runway" && (
+              <div className="bg-secondary border border-border rounded-md p-4 space-y-4">
+                <FieldLabel>Show Details</FieldLabel>
+                <div className="grid grid-cols-2 gap-4">
+                  <FSelect label="Season" options={["SS27","FW27","Resort","Couture"]}/>
+                  <TextInput label="Venue" placeholder="e.g. Park Avenue Armory"/>
+                  <TextInput label="Show Producer" placeholder="e.g. Bureau Betak"/>
+                  <FSelect label="Time Zone" options={["ET","CT","MT","PT","GMT","CET"]}/>
+                  <TextInput label="Show Date" placeholder="MM/DD/YYYY" type="date"/>
+                  <TextInput label="Show Time" placeholder="HH:MM" type="time"/>
+                </div>
+              </div>
+            )}
             <div><FieldLabel>Gender</FieldLabel><div className="flex flex-wrap gap-2">{["Female","Male","Non-binary","Any"].map(g=><Chip key={g} active={genders.includes(g)} onClick={()=>toggle(genders,g,setGenders)}>{g}</Chip>)}</div></div>
             <div className="grid grid-cols-2 gap-4"><FSelect label="Min Age" options={["18","20","22","25"]}/><FSelect label="Max Age" options={["No max","25","30","35","40"]}/></div>
             <div><FieldLabel>Categories</FieldLabel><div className="flex flex-wrap gap-2">{["Editorial","Runway","Beauty","Fitness","E-commerce","Luxury"].map(t=><Chip key={t} active={cats.includes(t)} onClick={()=>toggle(cats,t,setCats)}>{t}</Chip>)}</div></div>
