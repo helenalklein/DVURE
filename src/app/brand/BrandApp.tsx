@@ -898,7 +898,7 @@ function CollaborationTab() {
 function Dashboard({ openCampaign }: { openCampaign: () => void }) {
   const campaigns = [
     { name:"AW25 Womenswear Campaign", type:"Editorial",  submitted:14, approved:6, booked:2, dueLabel:"Due tomorrow",    dueUrgency:"high",   budget:18000, committed:5150, remaining:12850, talentNeeded:4 },
-    { name:"SS25 Fragrance Launch",    type:"Commercial", submitted:9,  approved:4, booked:0, dueLabel:"5 days remaining", dueUrgency:"medium", budget:10000, committed:0,    remaining:10000, talentNeeded:2 },
+    { name:"SS25 Fragrance Launch",    type:"Advertising", submitted:9,  approved:4, booked:0, dueLabel:"5 days remaining", dueUrgency:"medium", budget:10000, committed:0,    remaining:10000, talentNeeded:2 },
     { name:"Resort Lookbook 2025",     type:"E-commerce", submitted:21, approved:7, booked:0, dueLabel:"14 days",          dueUrgency:"low",    budget:7000,  committed:0,    remaining:7000,  talentNeeded:3 },
   ];
   const attention = [
@@ -1005,7 +1005,7 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
   const [tab, setTab] = useState("active");
   const all = [
     { name:"AW25 Womenswear Campaign", type:"Editorial",  status:"active",   due:"06/20", submitted:14, approved:6, booked:2 },
-    { name:"SS25 Fragrance Launch",    type:"Commercial", status:"active",   due:"06/24", submitted:9,  approved:4, booked:0 },
+    { name:"SS25 Fragrance Launch",    type:"Advertising", status:"active",   due:"06/24", submitted:9,  approved:4, booked:0 },
     { name:"Resort Lookbook 2025",     type:"E-commerce", status:"active",   due:"07/03", submitted:21, approved:7, booked:0 },
     { name:"FW24 Campaign",            type:"Editorial",  status:"archived", due:"01/15", submitted:41, approved:11, booked:3 },
   ];
@@ -1082,11 +1082,14 @@ function CampaignsList({ openCampaign }: { openCampaign: () => void }) {
 // ─── CREATE CAMPAIGN ──────────────────────────────────────────────────────────
 
 const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
+const CAMPAIGN_TYPES = ["Runway","Editorial","Advertising","E-commerce","TV Commercial","Beauty","Other"];
 
 function CreateCampaign({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState(1);
   const [genders, setGenders] = useState(["Female"]);
   const [cats, setCats] = useState(["Editorial"]);
+  const [campaignType, setCampaignType] = useState("Editorial");
+  const [customType, setCustomType] = useState("");
   const [selectedAgencies, setSelectedAgencies] = useState<string[]>(PARTNERED_AGENCIES);
   const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
     set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
@@ -1114,7 +1117,21 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
             <div className="border-t border-border"/>
             <TextInput label="Campaign Name" placeholder="e.g. AW25 Womenswear Campaign"/>
             <div className="grid grid-cols-2 gap-4">
-              <FSelect label="Type" options={["Select…","Editorial","Commercial","Runway","Beauty","E-commerce"]}/>
+              <div>
+                <FieldLabel>Type</FieldLabel>
+                <div className="relative">
+                  <select value={campaignType} onChange={e=>{ setCampaignType(e.target.value); if(e.target.value!=="Other") setCustomType(""); }}
+                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+                    {CAMPAIGN_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
+                </div>
+                {campaignType==="Other" && (
+                  <div className="mt-2">
+                    <TextInput placeholder="Describe the campaign type…" value={customType} onChange={e=>setCustomType(e.target.value)}/>
+                  </div>
+                )}
+              </div>
               <TextInput label="Brand" placeholder="e.g. Acne Studios"/>
               <TextInput label="Shoot Start" placeholder="MM/DD/YYYY" type="date"/>
               <TextInput label="Shoot End" placeholder="MM/DD/YYYY" type="date"/>
