@@ -15,7 +15,7 @@ import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreak
 
 type GlobalView = "dashboard" | "campaigns" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "payments" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
 // ─── CONTRACT MODAL ────────────────────────────────────────────────────────
 
@@ -129,7 +129,6 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"deliverables",  label:"Deliverables",  Icon:Calendar        },
   { id:"contracts",     label:"Contracts",     Icon:FileCheck       },
   { id:"bookings",      label:"Bookings",      Icon:Briefcase       },
-  { id:"payments",      label:"Payments",      Icon:CreditCard      },
   { id:"activity",      label:"Activity",      Icon:Activity        },
   { id:"collaboration", label:"Collaboration", Icon:MessageSquare   },
   { id:"users",         label:"Users",         Icon:User            },
@@ -763,7 +762,6 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
   };
 
   const sectionLabel = campaignNavFor(campaign.type).find(n=>n.id===section)?.label ?? "";
-  const campaignBookings = BOOKINGS.filter(b=>b.campaign===campaign.name);
 
   return (
     <>
@@ -799,7 +797,6 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                         <span className="text-muted-foreground">{k}</span><span className="font-mono font-medium">{v}</span>
                       </div>
                     ))}
-                    <button className="w-full text-xs text-muted-foreground hover:text-foreground mt-3 text-left" onClick={()=>onSection("payments")}>View payments →</button>
                   </div>
                 </div>
               </div>
@@ -920,35 +917,6 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {section==="payments" && (
-            <div className="flex-1 overflow-auto p-6">
-              <div className="max-w-2xl space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <Stat label="Campaign Budget" value="$18,000"/>
-                  <Stat label="Committed" value={`$${campaignBookings.reduce((s,b)=>s+bookingBreakdown(b).grossBookingValue,0).toLocaleString()}`}/>
-                  <Stat label="Remaining" value="$12,850"/>
-                </div>
-                <div className="space-y-2">
-                  {campaignBookings.map(b=>{
-                    const bd = bookingBreakdown(b);
-                    return (
-                      <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
-                        <div className="flex-1">
-                          <div className="text-sm font-semibold">{b.model}</div>
-                          <div className="text-xs text-muted-foreground">{b.agency} · Shoot {b.shootDate}</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-sm">${bd.grossBookingValue.toLocaleString()}</span>
-                          <Badge label={b.paymentStatus==="paid"?"Paid":b.paymentStatus==="processing"?"Processing":"Pending"} variant={b.paymentStatus==="paid"?"active":b.paymentStatus==="processing"?"pending":"draft"}/>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           )}
