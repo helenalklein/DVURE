@@ -7,7 +7,7 @@ import {
   Settings, Building2,
   Calendar, FileText, Activity, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut, Pin, Lock, Globe, Shirt
+  User, LogOut, Pin, Lock, Globe, Shirt, Home
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
 import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel } from "../shared/ui";
@@ -77,10 +77,14 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">A</span>
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold truncate">Acne Studios</div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
+        <button onClick={()=>onNav("dashboard")} title="Dashboard"
+          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+          <Home size={15}/>
+        </button>
       </div>
       <nav className="flex-1 px-2 py-3 space-y-0.5">
         {GLOBAL_NAV.map(item => {
@@ -143,9 +147,9 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
     .flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, counts }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
-  onBack: () => void; onNewCampaign: () => void; counts: Record<string,number>;
+  onBack: () => void; onNewCampaign: () => void; onHome: () => void; counts: Record<string,number>;
 }) {
   const nav = campaignNavFor(campaign.type);
   return (
@@ -154,10 +158,14 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">A</span>
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold truncate">Acne Studios</div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
+        <button onClick={onHome} title="Dashboard"
+          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+          <Home size={15}/>
+        </button>
       </div>
       <div className="px-3 pt-3 pb-2">
         <button onClick={onBack} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md transition-colors text-left">
@@ -746,8 +754,8 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
 
 // ─── CAMPAIGN WORKSPACE ─────────────────────────────────────────────────────
 
-function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign }: {
-  campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void;
+function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome }: {
+  campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void;
 }) {
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [contractModal, setContractModal] = useState<Talent|null>(null);
@@ -765,7 +773,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} counts={counts}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <TopBar title={sectionLabel} sub={campaign.name}/>
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -1844,7 +1852,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="h-screen flex bg-background overflow-hidden">
       {inCampaign ? (
-        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")}/>
+        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("dashboard")}/>
       ) : (
         <>
           <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
