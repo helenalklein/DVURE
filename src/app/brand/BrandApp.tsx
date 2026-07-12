@@ -13,7 +13,7 @@ import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingSta
 import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS } from "../shared/mockData";
 
-type GlobalView = "dashboard" | "campaigns" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
+type GlobalView = "campaigns" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
 type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
@@ -58,7 +58,6 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
 // ─── BRAND SIDEBAR ─────────────────────────────────────────────────────────
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
-  { id:"dashboard",        label:"Dashboard",  Icon:LayoutDashboard        },
   { id:"campaigns",        label:"Campaigns",  Icon:Camera,        badge:3 },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
@@ -81,7 +80,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
           <div className="text-sm font-semibold truncate">Acne Studios</div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <button onClick={()=>onNav("dashboard")} title="Dashboard"
+        <button onClick={()=>onNav("campaigns")} title="Campaigns"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={15}/>
         </button>
@@ -162,7 +161,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           <div className="text-sm font-semibold truncate">Acne Studios</div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <button onClick={onHome} title="Dashboard"
+        <button onClick={onHome} title="Campaigns"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={15}/>
         </button>
@@ -1086,27 +1085,31 @@ function CollaborationTab() {
   );
 }
 
-// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+// ─── CAMPAIGNS LIST (the landing screen — Dashboard was retired) ───────────────
 
-function Dashboard({ openCampaign }: { openCampaign: (id: number) => void }) {
-  const campaigns = CAMPAIGNS.filter(c=>c.status==="active");
-  const attention = [
-    { icon:"⚡", msg:"AW25 Womenswear — due tomorrow. 14 submissions need review.", action:"Review now", urgent:true,  campaignId:1 },
-    { icon:"✉",  msg:"1 unsent contract for Zara Okafor pending signature.",        action:"Send",       urgent:true,  campaignId:1 },
-    { icon:"👤", msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false, campaignId:2 },
-  ];
+const CAMPAIGNS_ATTENTION = [
+  { icon:"⚡", msg:"AW25 Womenswear — due tomorrow. 14 submissions need review.", action:"Review now", urgent:true,  campaignId:1 },
+  { icon:"✉",  msg:"1 unsent contract for Zara Okafor pending signature.",        action:"Send",       urgent:true,  campaignId:1 },
+  { icon:"👤", msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false, campaignId:2 },
+];
+
+function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
+  const [tab, setTab] = useState("active");
+  const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Dashboard" sub="Acne Studios · Brand"/>
+      <TopBar title="Campaigns" sub="Acne Studios · Brand"/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
+        {/* Campaigns is the landing screen now — carries the "Needs
+            Attention" alerting that used to live on a separate Dashboard. */}
         <div className="glass-subtle border rounded-md overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
             <AlertCircle size={13} className="text-foreground shrink-0"/>
             <span className="text-xs font-semibold">Needs Attention</span>
-            <span className="ml-1 text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{attention.length}</span>
+            <span className="ml-1 text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
           </div>
           <div className="divide-y divide-border">
-            {attention.map((a,i)=>(
+            {CAMPAIGNS_ATTENTION.map((a,i)=>(
               <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
                 <span className="text-sm shrink-0">{a.icon}</span>
                 <span className="flex-1 text-sm">{a.msg}</span>
@@ -1118,85 +1121,6 @@ function Dashboard({ openCampaign }: { openCampaign: (id: number) => void }) {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <h2 className="text-sm font-semibold mb-3">Active Campaigns</h2>
-            <div className="space-y-3">
-              {campaigns.map(c=>{
-                const conv = c.submitted > 0 ? Math.round((c.booked/c.submitted)*100) : 0;
-                return (
-                  <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/30 transition-colors" onClick={()=>openCampaign(c.id)}>
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div>
-                        <div className="text-sm font-semibold">{c.name}</div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-muted-foreground font-mono">{c.type}</span>
-                          <span className="text-muted-foreground">·</span>
-                          <span className={cx("text-xs font-semibold", c.dueUrgency==="high"?"text-foreground":"text-muted-foreground")}>
-                            {c.dueUrgency==="high"&&"⚡ "}{c.dueLabel}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[10px] font-mono text-muted-foreground">{c.submitted}→{c.booked} ({conv}%)</span>
-                        <Badge label="Active" variant="active"/>
-                      </div>
-                    </div>
-                    <div className="flex items-stretch gap-0 border border-border rounded-md overflow-hidden text-center text-xs mb-2">
-                      {[{ l:"Submitted", v:c.submitted },{ l:"Approved", v:c.approved },{ l:"Booked", v:c.booked, note:`of ${c.talentNeeded}` }].map((s,i,arr)=>(
-                        <div key={s.l} className={cx("flex-1 py-2 border-r border-border last:border-0", i===arr.length-1&&s.v>0?"bg-foreground":"")}>
-                          <div className={cx("font-semibold tabular-nums", i===arr.length-1&&s.v>0?"text-primary-foreground":"")}>{s.v}</div>
-                          <div className={cx("text-[9px] font-mono leading-tight", i===arr.length-1&&s.v>0?"text-primary-foreground/70":"text-muted-foreground")}>
-                            {s.l}{s.note&&<span className="block opacity-70">{s.note}</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>Budget <span className="font-mono font-medium text-foreground">${c.budget.toLocaleString()}</span></span>
-                      <span>Committed <span className="font-mono font-medium text-foreground">${c.committed.toLocaleString()}</span></span>
-                      <span>Remaining <span className="font-mono font-medium text-foreground">${c.remaining.toLocaleString()}</span></span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              {[
-                { label:"Unsent Contracts",      value:"1",  action:"Send now", urgent:true,  campaignId:1 },
-                { label:"Submissions to Review", value:"44", action:"Review",   urgent:false, campaignId:1 },
-                { label:"Active Campaigns",      value:String(campaigns.length),  action:"View all", urgent:false, campaignId:1 },
-              ].map(s=>(
-                <div key={s.label} className={cx("glass-subtle border rounded-md px-4 py-3 flex items-center justify-between gap-3",s.urgent?"border-foreground":"border-border")}>
-                  <div>
-                    <div className="text-xl font-semibold tabular-nums">{s.value}</div>
-                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">{s.label}</div>
-                  </div>
-                  <button onClick={()=>openCampaign(s.campaignId)}
-                    className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors",
-                      s.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                    )}>{s.action}</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── CAMPAIGNS LIST ───────────────────────────────────────────────────────────
-
-function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
-  const [tab, setTab] = useState("active");
-  const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
-  return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Campaigns" sub="All campaigns · Acne Studios"/>
-      <div className="flex-1 overflow-auto p-6">
         <div className="flex gap-10">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1 mb-4 border-b border-border">
@@ -1832,8 +1756,8 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 
 export default function BrandApp({ onLogout }: { onLogout: () => void }) {
-  const [view, setView] = useState<AppView>("dashboard");
-  const [globalNav, setGlobalNav] = useState<GlobalView>("dashboard");
+  const [view, setView] = useState<AppView>("campaigns");
+  const [globalNav, setGlobalNav] = useState<GlobalView>("campaigns");
   const [activeCampaignId, setActiveCampaignId] = useState<number>(1);
   const [campaignSection, setCampaignSection] = useState<CampaignSection>("moodboard");
   const [activityOpen, setActivityOpen] = useState(false);
@@ -1852,12 +1776,11 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="h-screen flex bg-background overflow-hidden">
       {inCampaign ? (
-        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("dashboard")}/>
+        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("campaigns")}/>
       ) : (
         <>
           <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
           <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {view==="dashboard"        && <Dashboard openCampaign={openCampaign}/>}
             {view==="campaigns"        && <CampaignsList openCampaign={openCampaign}/>}
             {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")}/>}
             {view==="contracts-global" && <GlobalContracts/>}
