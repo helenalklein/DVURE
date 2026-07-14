@@ -53,9 +53,12 @@
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
+  /* Cards sit a notch above the page background rather than matching it
+     exactly — the layered-panel look ops consoles (Linear/Stripe/Vercel)
+     rely on for hierarchy in a black/white/gray-only palette. */
+  --card: oklch(0.195 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
+  --popover: oklch(0.195 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.985 0 0);
   --primary-foreground: oklch(0.205 0 0);
@@ -191,6 +194,15 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+}
+
+@keyframes relayIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes relayPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 @layer utilities {
