@@ -150,23 +150,30 @@ function BellButton() {
         {unread > 0 && <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-foreground text-primary-foreground text-[8px] font-bold rounded-full flex items-center justify-center">{unread}</span>}
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-1 w-80 glass-strong border rounded-md shadow-xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <div className="text-sm font-semibold">Notifications</div>
-            <button onClick={() => setOpen(false)}><X size={14} className="text-muted-foreground"/></button>
-          </div>
-          <div className="max-h-72 overflow-auto divide-y divide-border">
-            {NOTIFS.map(n => (
-              <div key={n.id} className={cx("px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-secondary", n.unread&&"bg-muted/30")}>
-                <div className="flex-1 min-w-0">
-                  <div className={cx("text-sm", n.unread&&"font-medium")}>{n.text}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{n.sub} · {n.ts}</div>
+        <>
+          {/* Invisible click-catcher, not a dimming backdrop — sits below
+              the panel in z-index so any click outside it closes the
+              popover, same as the X button, without visually dimming the
+              rest of the page like a modal would. */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
+          <div className="absolute top-full right-0 mt-1 w-80 glass-strong border rounded-md shadow-xl z-50 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="text-sm font-semibold">Notifications</div>
+              <button onClick={() => setOpen(false)}><X size={14} className="text-muted-foreground"/></button>
+            </div>
+            <div className="max-h-72 overflow-auto divide-y divide-border">
+              {NOTIFS.map(n => (
+                <div key={n.id} className={cx("px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-secondary", n.unread&&"bg-muted/30")}>
+                  <div className="flex-1 min-w-0">
+                    <div className={cx("text-sm", n.unread&&"font-medium")}>{n.text}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{n.sub} · {n.ts}</div>
+                  </div>
+                  {n.unread && <span className="w-1.5 h-1.5 bg-foreground rounded-full shrink-0 mt-1.5"/>}
                 </div>
-                {n.unread && <span className="w-1.5 h-1.5 bg-foreground rounded-full shrink-0 mt-1.5"/>}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
