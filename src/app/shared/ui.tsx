@@ -1,4 +1,4 @@
-import { useState, useContext, createContext } from "react";
+import { useState, useContext, createContext, useEffect, useRef } from "react";
 import { Bell, X, ChevronDown, Settings } from "lucide-react";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 
@@ -143,37 +143,46 @@ export function ActivityFeedPanel({ onClose, permanent }: { onClose?: () => void
 function BellButton() {
   const [open, setOpen] = useState(false);
   const unread = NOTIFS.filter(n => n.unread).length;
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // A fixed-position click-catcher doesn't work here: TopBar uses the
+  // .glass utility (backdrop-filter), and backdrop-filter establishes a
+  // containing block for fixed-position descendants — so a "fixed inset-0"
+  // catcher ends up clipped to TopBar's own box instead of the viewport.
+  // A real document listener sidesteps that CSS quirk entirely.
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <button onClick={() => setOpen(p=>!p)} className="relative p-2 rounded-md hover:bg-secondary text-muted-foreground">
         <Bell size={15}/>
         {unread > 0 && <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-foreground text-primary-foreground text-[8px] font-bold rounded-full flex items-center justify-center">{unread}</span>}
       </button>
       {open && (
-        <>
-          {/* Invisible click-catcher, not a dimming backdrop — sits below
-              the panel in z-index so any click outside it closes the
-              popover, same as the X button, without visually dimming the
-              rest of the page like a modal would. */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)}/>
-          <div className="absolute top-full right-0 mt-1 w-80 glass-strong border rounded-md shadow-xl z-50 overflow-hidden">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Notifications</div>
-              <button onClick={() => setOpen(false)}><X size={14} className="text-muted-foreground"/></button>
-            </div>
-            <div className="max-h-72 overflow-auto divide-y divide-border">
-              {NOTIFS.map(n => (
-                <div key={n.id} className={cx("px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-secondary", n.unread&&"bg-muted/30")}>
-                  <div className="flex-1 min-w-0">
-                    <div className={cx("text-sm", n.unread&&"font-medium")}>{n.text}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{n.sub} · {n.ts}</div>
-                  </div>
-                  {n.unread && <span className="w-1.5 h-1.5 bg-foreground rounded-full shrink-0 mt-1.5"/>}
-                </div>
-              ))}
-            </div>
+        <div className="absolute top-full right-0 mt-1 w-80 glass-strong border rounded-md shadow-xl z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="text-sm font-semibold">Notifications</div>
+            <button onClick={() => setOpen(false)}><X size={14} className="text-muted-foreground"/></button>
           </div>
-        </>
+          <div className="max-h-72 overflow-auto divide-y divide-border">
+            {NOTIFS.map(n => (
+              <div key={n.id} className={cx("px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-secondary", n.unread&&"bg-muted/30")}>
+                <div className="flex-1 min-w-0">
+                  <div className={cx("text-sm", n.unread&&"font-medium")}>{n.text}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{n.sub} · {n.ts}</div>
+                </div>
+                {n.unread && <span className="w-1.5 h-1.5 bg-foreground rounded-full shrink-0 mt-1.5"/>}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
