@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal } from "../shared/ui";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT } from "../shared/mockData";
 import type { RosterModel } from "../shared/types";
 
@@ -344,62 +344,53 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <div className="h-screen flex bg-background overflow-hidden">
-      <aside className="w-52 shrink-0 glass border-r flex flex-col">
-        <div className="border-b border-border">
-          <div className="px-4 h-14 flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
+    <CurrentUserProvider user={{ name:"Sophie Chen", title:"Senior Agent" }}>
+      <div className="h-screen flex bg-background overflow-hidden">
+        <aside className="w-52 shrink-0 glass border-r flex flex-col">
+          <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
+            <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center">
               <span className="text-primary-foreground text-xs font-bold">E</span>
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <div className="text-sm font-semibold truncate">{AGENCY_NAME}</div>
               <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Agency</div>
             </div>
           </div>
-          <div className="px-3 pb-3">
-            <div className="flex items-center justify-end gap-2 px-2 py-1.5">
-              <div className="text-right min-w-0">
-                <div className="text-xs font-medium truncate">Sophie Chen</div>
-                <div className="text-[10px] text-muted-foreground truncate">Senior Agent</div>
-              </div>
-              <XBox className="w-6 h-6 rounded-full shrink-0"/>
-            </div>
+          <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+            {NAV.map(item=>{
+              const NavIcon = item.Icon;
+              return (
+                <button key={item.id} onClick={()=>setView(item.id)}
+                  className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors text-left",
+                    view===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  )}>
+                  <NavIcon size={15}/>{item.label}
+                  {item.count && <span className="ml-auto text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-full">{item.count}</span>}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="px-3 py-3 border-t border-border">
+            <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-md hover:bg-secondary">
+              <LogOut size={13}/> Sign out
+            </button>
           </div>
-        </div>
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {NAV.map(item=>{
-            const NavIcon = item.Icon;
-            return (
-              <button key={item.id} onClick={()=>setView(item.id)}
-                className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors text-left",
-                  view===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
-                )}>
-                <NavIcon size={15}/>{item.label}
-                {item.count && <span className="ml-auto text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-full">{item.count}</span>}
-              </button>
-            );
-          })}
-        </nav>
-        <div className="px-3 py-3 border-t border-border">
-          <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-md hover:bg-secondary">
-            <LogOut size={13}/> Sign out
-          </button>
-        </div>
-      </aside>
-      <main className="flex-1 flex flex-col min-h-0">
-        <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${AGENCY_NAME} · Agency`}/>
-        <div className="flex-1 overflow-auto p-6">
-          {view === "invitations" && <InvitationsView onSubmitTalent={()=>setView("submit")}/>}
-          {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")}/>}
-          {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
-          {view === "payments" && <PaymentsView/>}
-          {view === "messaging" && (
-            <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
-              <div className="text-sm text-muted-foreground">Messaging · shares the same thread data as Brand once Supabase lands</div>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+        </aside>
+        <main className="flex-1 flex flex-col min-h-0">
+          <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${AGENCY_NAME} · Agency`}/>
+          <div className="flex-1 overflow-auto p-6">
+            {view === "invitations" && <InvitationsView onSubmitTalent={()=>setView("submit")}/>}
+            {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")}/>}
+            {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
+            {view === "payments" && <PaymentsView/>}
+            {view === "messaging" && (
+              <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
+                <div className="text-sm text-muted-foreground">Messaging · shares the same thread data as Brand once Supabase lands</div>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </CurrentUserProvider>
   );
 }

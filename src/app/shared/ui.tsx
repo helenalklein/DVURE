@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Bell, X, ChevronDown } from "lucide-react";
+import { useState, useContext, createContext } from "react";
+import { Bell, X, ChevronDown, Settings } from "lucide-react";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
@@ -172,6 +172,34 @@ function BellButton() {
   );
 }
 
+// Who's signed in, provided once at each app's root (BrandApp, AgencyApp)
+// and read here via context rather than threaded through every TopBar
+// call site — TopBar is invoked from dozens of screens, so this keeps the
+// signed-in identity in one place instead of a prop drilled everywhere.
+export interface CurrentUser { name: string; title: string; onSettings?: () => void }
+const CurrentUserContext = createContext<CurrentUser | null>(null);
+export function CurrentUserProvider({ user, children }: { user: CurrentUser; children: React.ReactNode }) {
+  return <CurrentUserContext.Provider value={user}>{children}</CurrentUserContext.Provider>;
+}
+
+function UserMenuButton() {
+  const user = useContext(CurrentUserContext);
+  if (!user) return null;
+  return (
+    <div onClick={user.onSettings} title={user.onSettings ? "Settings" : undefined}
+      className={cx("flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-md transition-colors",
+        user.onSettings && "cursor-pointer hover:bg-secondary"
+      )}>
+      <div className="text-right leading-tight">
+        <div className="text-xs font-medium">{user.name}</div>
+        <div className="text-[10px] text-muted-foreground">{user.title}</div>
+      </div>
+      <XBox className="w-6 h-6 rounded-full shrink-0"/>
+      {user.onSettings && <Settings size={13} className="text-muted-foreground shrink-0"/>}
+    </div>
+  );
+}
+
 export function TopBar({ title, sub, actions }: { title: string; sub?: string; actions?: JSX.Element }) {
   return (
     <div className="h-14 border-b glass flex items-center px-6 gap-4 shrink-0 z-20 relative">
@@ -179,7 +207,7 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
         <div className="text-sm font-semibold truncate tracking-tight">{title}</div>
         {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
       </div>
-      <div className="flex items-center gap-2 shrink-0">{actions}<BellButton/></div>
+      <div className="flex items-center gap-2 shrink-0">{actions}<UserMenuButton/><BellButton/></div>
     </div>
   );
 }
