@@ -7,14 +7,14 @@ import {
   Settings, Building2,
   Calendar, FileText, Activity, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
+  User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio, AlertTriangle
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
 import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
-type GlobalView = "campaigns" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
+type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign" | "relay";
 type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
@@ -60,6 +60,7 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
   { id:"campaigns",        label:"Campaigns",  Icon:Camera,        badge:3 },
+  { id:"urgent",           label:"Urgent/Overdue", Icon:AlertTriangle      },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
   { id:"messaging",        label:"Messaging",  Icon:MessageSquare          },
@@ -1103,7 +1104,17 @@ const CAMPAIGNS_ATTENTION = [
   { icon:"👤", msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false, campaignId:2 },
 ];
 
-function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
+// Overdue actions — payment due dates and other time-sensitive items past
+// their deadline. Feeds both the standing-column metric and the
+// Urgent/Overdue nav page. Mock only; real due-date tracking comes later.
+const OVERDUE_ACTIONS = [
+  { id:1, type:"Payment",  msg:"Payment due for Zara Okafor booking — 3 days overdue.",             campaignId:1, due:"Jul 12, 2026" },
+  { id:2, type:"Contract", msg:"Unsent contract for Zara Okafor pending signature.",                 campaignId:1, due:"Jul 10, 2026" },
+  { id:3, type:"Review",   msg:"AW25 Womenswear — 14 submissions need review before due date.",      campaignId:1, due:"Jul 16, 2026" },
+  { id:4, type:"Payment",  msg:"Payment due for Ines Ferreira booking — 1 day overdue.",              campaignId:2, due:"Jul 14, 2026" },
+];
+
+function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: number) => void; onOpenUrgent: () => void }) {
   const [tab, setTab] = useState("active");
   const [attentionOpen, setAttentionOpen] = useState(false);
   const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
@@ -1158,18 +1169,26 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
               column commands real presence instead of trailing into
               empty page beneath a short stack. */}
           <div className="w-48 shrink-0 min-h-[34rem] border-l border-border pl-6 flex flex-col">
-            {[
-              { label:"Total",       value:String(CAMPAIGNS.length), sub:`${CAMPAIGNS.filter(c=>c.status==="active").length} active` },
-              { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"Across active" },
-              { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"Pending booking" },
-              { label:"Booked",      value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.booked,0)),    sub:"This quarter" },
-            ].map((s,i)=>(
-              <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
-                <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
-                <div className="text-xs text-muted-foreground/70 mt-1">{s.sub}</div>
-              </div>
-            ))}
+            <button onClick={onOpenUrgent}
+              className="text-left bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3 cursor-pointer hover:bg-[#2a2a2a] transition-colors">
+              <div className="text-3xl font-semibold tabular-nums tracking-tight">{OVERDUE_ACTIONS.length}</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Overdue Actions</div>
+              <div className="text-xs text-primary-foreground/60 mt-1">Needs review</div>
+            </button>
+            <div className="flex-1 flex flex-col">
+              {[
+                { label:"Total",       value:String(CAMPAIGNS.length), sub:`${CAMPAIGNS.filter(c=>c.status==="active").length} active` },
+                { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"Across active" },
+                { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"Pending booking" },
+                { label:"Booked",      value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.booked,0)),    sub:"This quarter" },
+              ].map((s,i)=>(
+                <div key={s.label} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
+                  <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
+                  <div className="text-xs text-muted-foreground/70 mt-1">{s.sub}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1212,6 +1231,35 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
             )}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── URGENT / OVERDUE ─────────────────────────────────────────────────────────
+// Minimal first pass per spec — this is the landing spot for the "Overdue
+// Actions" metric on the Campaigns screen. Deeper filtering/sorting/snooze
+// behavior can be layered on later; today it just needs to exist and show
+// the same items the metric is counting.
+
+function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => void }) {
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <TopBar title="Urgent/Overdue" sub={`Acne Studios · ${OVERDUE_ACTIONS.length} actions past due`}/>
+      <div className="flex-1 overflow-auto p-6 space-y-3 max-w-2xl">
+        {OVERDUE_ACTIONS.map(a=>(
+          <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
+            <AlertTriangle size={15} className="text-foreground mt-0.5 shrink-0"/>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Badge label={a.type} variant="draft"/>
+                <span className="text-[10px] font-mono text-muted-foreground">Due {a.due}</span>
+              </div>
+              <div className="text-sm">{a.msg}</div>
+            </div>
+            <Btn variant="primary" size="sm" onClick={()=>openCampaign(a.campaignId)}>Review</Btn>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1713,14 +1761,21 @@ function Network() {
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 
+const NOTIFICATION_CHANNELS = ["Text","Email"];
+const NOTIFICATION_TIMING = ["1 week before","3 days before","1 day before","Day of"];
+
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"subscription"|"billing"|"security"|"org">("subscription");
+  const [tab, setTab] = useState<"subscription"|"billing"|"security"|"org"|"notifications">("subscription");
+  const [channels, setChannels] = useState<string[]>(["Email"]);
+  const [timing, setTiming] = useState<string[]>(["1 day before","Day of"]);
+  const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
+    set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Settings" sub="Acne Studios · Account and billing"/>
       <div className="flex-1 flex min-h-0">
         <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
-          {[["subscription","Subscription"],["billing","Billing"],["security","Security"],["org","Organization"]].map(([id,label])=>(
+          {[["subscription","Subscription"],["billing","Billing"],["security","Security"],["org","Organization"],["notifications","Notifications"]].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id as typeof tab)}
               className={cx("w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
                 tab===id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -1777,6 +1832,30 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                 </div>
               </div>
             )}
+            {tab === "notifications" && (
+              <div className="space-y-5">
+                <div><h2 className="text-base font-semibold mb-0.5">Notifications</h2><p className="text-sm text-muted-foreground">Choose how and when you're notified about upcoming payment due dates.</p></div>
+                <div className="space-y-2">
+                  <FieldLabel>Delivery method</FieldLabel>
+                  <div className="flex flex-wrap gap-2">
+                    {NOTIFICATION_CHANNELS.map(c=>(
+                      <Chip key={c} active={channels.includes(c)} onClick={()=>toggle(channels,c,setChannels)}>{c}</Chip>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">Select both to receive text and email</div>
+                </div>
+                <div className="space-y-2">
+                  <FieldLabel>Remind me</FieldLabel>
+                  <div className="flex flex-wrap gap-2">
+                    {NOTIFICATION_TIMING.map(t=>(
+                      <Chip key={t} active={timing.includes(t)} onClick={()=>toggle(timing,t,setTiming)}>{t}</Chip>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">Select any combination</div>
+                </div>
+                <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1817,7 +1896,8 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
         <>
           <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
           <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {view==="campaigns"        && <CampaignsList openCampaign={openCampaign}/>}
+            {view==="campaigns"        && <CampaignsList openCampaign={openCampaign} onOpenUrgent={()=>handleGlobalNav("urgent")}/>}
+            {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign}/>}
             {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")}/>}
             {view==="contracts-global" && <GlobalContracts/>}
             {view==="payments-global"  && <GlobalPayments/>}
