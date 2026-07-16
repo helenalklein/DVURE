@@ -1105,32 +1105,13 @@ const CAMPAIGNS_ATTENTION = [
 
 function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
   const [tab, setTab] = useState("active");
+  const [attentionOpen, setAttentionOpen] = useState(false);
   const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
+  const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length;
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="Acne Studios · Brand"/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
-        {/* Campaigns is the landing screen now — carries the "Needs
-            Attention" alerting that used to live on a separate Dashboard. */}
-        <div className="glass-subtle border rounded-md overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-            <AlertCircle size={13} className="text-foreground shrink-0"/>
-            <span className="text-xs font-semibold">Needs Attention</span>
-            <span className="ml-1 text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
-          </div>
-          <div className="divide-y divide-border">
-            {CAMPAIGNS_ATTENTION.map((a,i)=>(
-              <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
-                <span className="text-sm shrink-0">{a.icon}</span>
-                <span className="flex-1 text-sm">{a.msg}</span>
-                <button onClick={()=>openCampaign(a.campaignId)}
-                  className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors",
-                    a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                  )}>{a.action}</button>
-              </div>
-            ))}
-          </div>
-        </div>
         <div className="flex gap-10">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1 mb-4 border-b border-border">
@@ -1191,6 +1172,46 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Needs Attention — moved off the page as a side pop-up rather than
+          a permanent banner eating vertical space; mirrors the Activity
+          widget's expand-in-place pattern, opposite corner. */}
+      <div className="fixed bottom-6 left-6 z-40">
+        {attentionOpen ? (
+          <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={13} className="text-foreground shrink-0"/>
+                <span className="text-xs font-semibold">Needs Attention</span>
+                <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
+              </div>
+              <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+                <span className="text-sm font-bold leading-none">−</span>
+              </button>
+            </div>
+            <div className="divide-y divide-border">
+              {CAMPAIGNS_ATTENTION.map((a,i)=>(
+                <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
+                  <span className="text-sm shrink-0">{a.icon}</span>
+                  <span className="flex-1 text-sm">{a.msg}</span>
+                  <button onClick={()=>{ openCampaign(a.campaignId); setAttentionOpen(false); }}
+                    className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors",
+                      a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                    )}>{a.action}</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <button onClick={()=>setAttentionOpen(true)}
+            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors">
+            <AlertCircle size={16}/>
+            {urgentCount>0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-foreground border border-foreground text-[9px] font-bold rounded-full flex items-center justify-center">{urgentCount}</span>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
