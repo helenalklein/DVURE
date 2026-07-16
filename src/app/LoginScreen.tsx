@@ -7,8 +7,11 @@ type SignupStep = "role" | "form" | "success";
 type SignupRole = "brand" | "agency";
 
 // One login form for everyone — role comes from the account itself once
-// Supabase Auth is wired in (Milestone B). Until then, the three buttons
-// below stand in for "which account did you sign in as" during local dev.
+// Supabase Auth is wired in (Milestone B). Until then there's no real
+// credential check here; the picker that used to sit on this screen let
+// anyone jump into any of the three role views, which real visitors
+// shouldn't see or be able to do — that switch now lives in a dev-only
+// control mounted at the App root (App.tsx), not on the public login form.
 
 export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
   const [email, setEmail] = useState("");
@@ -25,12 +28,6 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
     setSignup(null);
     setCompanyName(""); setFullName(""); setWorkEmail(""); setSignupPassword("");
   }
-
-  const demoRoles: { id: Role; label: string; Icon: typeof Building }[] = [
-    { id:"brand",  label:"Brand",  Icon:Building },
-    { id:"agency", label:"Agency", Icon:Users    },
-    { id:"model",  label:"Model",  Icon:User     },
-  ];
 
   return (
     <div className="h-screen flex items-center justify-center bg-background">
@@ -60,23 +57,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
             </div>
           </div>
 
-          <div className="pt-1 border-t border-border">
-            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mt-3 mb-2">
-              Demo access — real accounts land next milestone
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {demoRoles.map(r => {
-                const RIcon = r.Icon;
-                return (
-                  <button key={r.id} onClick={()=>onLogin(r.id)}
-                    className="flex flex-col items-center gap-1.5 py-3 rounded-md border border-border text-muted-foreground hover:border-foreground hover:text-foreground transition-colors cursor-pointer">
-                    <RIcon size={16}/>
-                    <span className="text-xs font-medium">{r.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <Btn variant="primary" fullWidth>Sign In</Btn>
 
           <div className="text-center text-xs text-muted-foreground">
             <button className="hover:text-foreground cursor-pointer underline underline-offset-2">Forgot password?</button>

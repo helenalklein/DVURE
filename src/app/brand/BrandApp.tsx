@@ -58,9 +58,20 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
 
 // ─── BRAND SIDEBAR ─────────────────────────────────────────────────────────
 
+// A lone "!" reads as far less alarming than any circled/triangled alert
+// glyph — lucide doesn't ship a bare exclamation mark, so this renders one
+// as plain text sized/positioned to drop into the same IconFn slot.
+function ExclamationIcon({ size = 15, className }: { size?: number; className?: string }) {
+  return (
+    <span className={className} style={{ fontSize: size, lineHeight: 1, fontWeight: 800, display: "inline-block", width: size, textAlign: "center" }}>
+      !
+    </span>
+  );
+}
+
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
   { id:"campaigns",        label:"Campaigns",  Icon:Camera,        badge:3 },
-  { id:"urgent",           label:"Urgent/Overdue", Icon:AlertCircle        },
+  { id:"urgent",           label:"Urgent/Overdue", Icon:ExclamationIcon    },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
   { id:"messaging",        label:"Messaging",  Icon:MessageSquare          },
@@ -1241,7 +1252,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
       <div className="flex-1 overflow-auto p-6 space-y-3 max-w-2xl">
         {OVERDUE_ACTIONS.map(a=>(
           <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
-            <AlertCircle size={15} className="text-foreground mt-0.5 shrink-0"/>
+            <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Badge label={a.type} variant="draft"/>
