@@ -32,7 +32,7 @@ export default function App() {
 // way to preview all three workflows without logging out and back in.
 // Mounted at the App root, so it floats above every screen including login.
 function DevRoleSwitcher({ role, onSelect }: { role: Role | null; onSelect: (r: Role) => void }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
