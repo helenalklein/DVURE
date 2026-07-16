@@ -69,12 +69,16 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
   { id:"directory",        label:"Directory",  Icon:User                   },
 ];
 
-function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
-  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void;
-}) {
+// Org identity (top) and the signed-in user's identity (directly below,
+// same header block, right-aligned) — kept together so "who am I logged
+// into" and "who am I logged in as" read as one cohesive unit instead of
+// being split across opposite ends of the sidebar. Shared by BrandSidebar
+// and CampaignSidebar so the header doesn't change shape when you open a
+// campaign.
+function SidebarHeader({ onHome, onSettings }: { onHome: () => void; onSettings?: () => void }) {
   return (
-    <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
+    <div className="border-b border-border shrink-0">
+      <div className="px-4 h-14 flex items-center gap-2.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">A</span>
         </div>
@@ -82,11 +86,34 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
           <div className="text-sm font-semibold truncate">Acne Studios</div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <button onClick={()=>onNav("campaigns")} title="Campaigns"
+        <button onClick={onHome} title="Campaigns"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={15}/>
         </button>
       </div>
+      <div className="px-3 pb-3">
+        <div onClick={onSettings} title="Settings"
+          className={cx("flex items-center justify-end gap-2 px-2 py-1.5 rounded-md transition-colors",
+            onSettings && "cursor-pointer hover:bg-secondary"
+          )}>
+          <div className="text-right min-w-0">
+            <div className="text-xs font-medium truncate">Marcus Webb</div>
+            <div className="text-[10px] text-muted-foreground truncate">Brand Director</div>
+          </div>
+          <XBox className="w-6 h-6 rounded-full shrink-0"/>
+          {onSettings && <Settings size={13} className="text-muted-foreground shrink-0"/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
+  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void;
+}) {
+  return (
+    <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
+      <SidebarHeader onHome={()=>onNav("campaigns")} onSettings={()=>onNav("settings")}/>
       <nav className="flex-1 px-2 py-3 space-y-0.5">
         {GLOBAL_NAV.map(item => {
           const NavIcon = item.Icon;
@@ -110,15 +137,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
           </button>
         ))}
       </div>
-      <div className="px-3 pb-3 border-t border-border pt-3 space-y-0.5">
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-secondary cursor-pointer" onClick={() => onNav("settings")}>
-          <XBox className="w-6 h-6 rounded-full"/>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium truncate">Marcus Webb</div>
-            <div className="text-xs text-muted-foreground">Brand Director</div>
-          </div>
-          <Settings size={13} className="text-muted-foreground"/>
-        </div>
+      <div className="px-3 pb-3 border-t border-border pt-3">
         <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary">
           <LogOut size={13}/> Sign out
         </button>
@@ -148,26 +167,14 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
     .flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, counts }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, onOpenSettings, counts }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
-  onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; counts: Record<string,number>;
+  onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; onOpenSettings: () => void; counts: Record<string,number>;
 }) {
   const nav = campaignNavFor(campaign.type);
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
-        <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
-          <span className="text-primary-foreground text-xs font-bold">A</span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate">Acne Studios</div>
-          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
-        </div>
-        <button onClick={onHome} title="Campaigns"
-          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
-          <Home size={15}/>
-        </button>
-      </div>
+      <SidebarHeader onHome={onHome} onSettings={onOpenSettings}/>
       <div className="px-3 pt-3 pb-2">
         <button onClick={onBack} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md transition-colors text-left">
           <ChevronLeft size={13}/> All Campaigns
@@ -764,8 +771,8 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
 
 // ─── CAMPAIGN WORKSPACE ─────────────────────────────────────────────────────
 
-function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
-  campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
+function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, onOpenSettings }: {
+  campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; onOpenSettings: () => void;
 }) {
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [contractModal, setContractModal] = useState<Talent|null>(null);
@@ -783,7 +790,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} onOpenRelay={onOpenRelay} counts={counts}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} onOpenRelay={onOpenRelay} onOpenSettings={onOpenSettings} counts={counts}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <TopBar title={sectionLabel} sub={campaign.name}/>
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -1764,6 +1771,25 @@ function Network() {
 const NOTIFICATION_CHANNELS = ["Text","Email"];
 const NOTIFICATION_TIMING = ["1 week before","3 days before","1 day before","Day of"];
 
+// Checkbox row — reads more explicitly as "pick any number of these" than
+// the Chip pill pattern used elsewhere, which is what this multi-select
+// specifically needs to communicate.
+function CheckRow({ checked, onClick, children }: { checked: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={cx("w-full flex items-center gap-3 px-3 py-2.5 rounded-md border text-left cursor-pointer transition-colors",
+        checked ? "border-foreground/40 bg-secondary" : "border-border hover:border-foreground/30"
+      )}>
+      <span className={cx("w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 transition-colors",
+        checked ? "bg-foreground border-foreground" : "border-border bg-input-background"
+      )}>
+        {checked && <Check size={11} strokeWidth={3} className="text-primary-foreground"/>}
+      </span>
+      <span className="text-sm">{children}</span>
+    </button>
+  );
+}
+
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<"subscription"|"billing"|"security"|"org"|"notifications">("subscription");
   const [channels, setChannels] = useState<string[]>(["Email"]);
@@ -1833,25 +1859,23 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
               </div>
             )}
             {tab === "notifications" && (
-              <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Notifications</h2><p className="text-sm text-muted-foreground">Choose how and when you're notified about upcoming payment due dates.</p></div>
+              <div className="space-y-6">
+                <div><h2 className="text-base font-semibold mb-0.5">Notifications</h2><p className="text-sm text-muted-foreground">Choose how and when you're notified about upcoming payment due dates. Check as many as you'd like.</p></div>
                 <div className="space-y-2">
                   <FieldLabel>Delivery method</FieldLabel>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-1.5">
                     {NOTIFICATION_CHANNELS.map(c=>(
-                      <Chip key={c} active={channels.includes(c)} onClick={()=>toggle(channels,c,setChannels)}>{c}</Chip>
+                      <CheckRow key={c} checked={channels.includes(c)} onClick={()=>toggle(channels,c,setChannels)}>{c}</CheckRow>
                     ))}
                   </div>
-                  <div className="text-[10px] text-muted-foreground font-mono">Select both to receive text and email</div>
                 </div>
                 <div className="space-y-2">
                   <FieldLabel>Remind me</FieldLabel>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-1.5">
                     {NOTIFICATION_TIMING.map(t=>(
-                      <Chip key={t} active={timing.includes(t)} onClick={()=>toggle(timing,t,setTiming)}>{t}</Chip>
+                      <CheckRow key={t} checked={timing.includes(t)} onClick={()=>toggle(timing,t,setTiming)}>{t}</CheckRow>
                     ))}
                   </div>
-                  <div className="text-[10px] text-muted-foreground font-mono">Select any combination</div>
                 </div>
                 <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>
               </div>
@@ -1891,7 +1915,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="h-screen flex bg-background overflow-hidden">
       {inCampaign ? (
-        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")}/>
+        <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")} onOpenSettings={()=>handleGlobalNav("settings")}/>
       ) : (
         <>
           <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>

@@ -346,13 +346,24 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="h-screen flex bg-background overflow-hidden">
       <aside className="w-52 shrink-0 glass border-r flex flex-col">
-        <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
-          <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center">
-            <span className="text-primary-foreground text-xs font-bold">E</span>
+        <div className="border-b border-border">
+          <div className="px-4 h-14 flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
+              <span className="text-primary-foreground text-xs font-bold">E</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold truncate">{AGENCY_NAME}</div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Agency</div>
+            </div>
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold truncate">{AGENCY_NAME}</div>
-            <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Agency</div>
+          <div className="px-3 pb-3">
+            <div className="flex items-center justify-end gap-2 px-2 py-1.5">
+              <div className="text-right min-w-0">
+                <div className="text-xs font-medium truncate">Sophie Chen</div>
+                <div className="text-[10px] text-muted-foreground truncate">Senior Agent</div>
+              </div>
+              <XBox className="w-6 h-6 rounded-full shrink-0"/>
+            </div>
           </div>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
