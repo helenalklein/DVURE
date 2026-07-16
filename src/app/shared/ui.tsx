@@ -15,6 +15,17 @@ export function XBox({ className = "" }: { className?: string }) {
   );
 }
 
+// Staff/org user profiles use initials, not photos — distinct from talent
+// cards (XBox), which stand in for real casting/portfolio images.
+export function UserAvatar({ name, className = "" }: { name: string; className?: string }) {
+  const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2);
+  return (
+    <div className={cx("bg-secondary border border-border rounded-full flex items-center justify-center font-semibold shrink-0", className)}>
+      {initials}
+    </div>
+  );
+}
+
 export function PolaroidIcon({ size = 15, className = "" }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>

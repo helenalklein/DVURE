@@ -10,7 +10,7 @@ import {
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
-import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
@@ -975,7 +975,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Brand</div>
                   {ORG_USERS.filter(u=>u.org==="Acne Studios").slice(0,4).map(u=>(
                     <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
-                      <XBox className="w-7 h-7 rounded-full shrink-0"/>
+                      <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title}</div></div>
                       <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
                     </div>
@@ -985,7 +985,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency</div>
                   {ORG_USERS.filter(u=>u.org!=="Acne Studios").map(u=>(
                     <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
-                      <XBox className="w-7 h-7 rounded-full shrink-0"/>
+                      <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
                       <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
                     </div>
@@ -1131,7 +1131,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
             <div className="flex items-center gap-1 mb-4 border-b border-border">
               {["active","drafts","archived"].map(t=>(
                 <button key={t} onClick={()=>setTab(t)}
-                  className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors",
+                  className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
                     tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
                   )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
               ))}
@@ -1582,47 +1582,110 @@ const INBOX_MSGS = [
   { id:3, urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",   org:"IMG Models",        title:"Agent",           campaign:"SS25 Fragrance",  read:true,  body:"Following up on rates for Mila's booking. Please advise." },
 ];
 
+// Split view — an inbox list on the left, a persistent compose/detail pane
+// on the right. Defaults straight into a blank New Message so there's zero
+// clicks between landing on Messaging and starting to type, per the ask.
+// Send/Reply are mocked (no recipients, no delivery) until there's a real
+// backend to send through — that's expected at this stage.
+type MessagingMode = "compose" | "view";
+
 function MessagingScreen() {
-  const [openMsg, setOpenMsg] = useState<typeof INBOX_MSGS[number]|null>(null);
+  const [mode, setMode] = useState<MessagingMode>("compose");
+  const [selectedMsg, setSelectedMsg] = useState<typeof INBOX_MSGS[number]|null>(null);
+
+  function openMessage(m: typeof INBOX_MSGS[number]) {
+    setSelectedMsg(m);
+    setMode("view");
+  }
+  function startNewMessage() {
+    setSelectedMsg(null);
+    setMode("compose");
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Messaging" sub="Organization and agency communications"/>
-      <div className="bg-muted/30 border-b border-border px-4 py-2 flex items-center shrink-0 gap-2">
-        <div className="w-16 shrink-0 text-[9px] font-mono text-muted-foreground uppercase tracking-wider">Urgent</div>
-        <div className="w-36 shrink-0 text-[9px] font-mono text-muted-foreground uppercase tracking-wider">Date / Time</div>
-        <div className="flex-1 min-w-0 text-[9px] font-mono text-muted-foreground uppercase tracking-wider">Subject</div>
-        <div className="w-28 shrink-0 text-[9px] font-mono text-muted-foreground uppercase tracking-wider">Sender</div>
-        <div className="w-36 shrink-0 text-[9px] font-mono text-muted-foreground uppercase tracking-wider">Organization</div>
-      </div>
-      <div className="flex-1 overflow-auto divide-y divide-border">
-        {INBOX_MSGS.map(m=>(
-          <div key={m.id} onClick={()=>setOpenMsg(m)} className={cx("flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-secondary transition-colors", !m.read&&"bg-muted/20")}>
-            <div className="w-16 shrink-0">{m.urgent&&<span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1.5 py-0.5 rounded-sm tracking-wider">URGENT</span>}</div>
-            <div className="w-36 shrink-0 text-[10px] font-mono text-muted-foreground leading-tight">{m.date}</div>
-            <div className={cx("flex-1 min-w-0 text-sm truncate", !m.read&&"font-semibold")}>{m.subject}</div>
-            <div className="w-28 shrink-0 text-xs truncate">{m.sender}</div>
-            <div className="w-36 shrink-0 text-xs text-muted-foreground truncate">{m.org}</div>
+      <TopBar title="Messaging" sub="Organization and agency communications"
+        actions={<Btn variant="primary" size="sm" icon={<Edit3 size={13}/>} onClick={startNewMessage}>New Message</Btn>}/>
+      <div className="flex-1 flex min-h-0">
+        <div className="w-80 shrink-0 border-r border-border flex flex-col min-h-0">
+          <div className="px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+            <div className="text-xs font-semibold">Inbox</div>
+            <span className="text-[10px] font-mono text-muted-foreground">{INBOX_MSGS.length}</span>
           </div>
-        ))}
-      </div>
-      {openMsg && (
-        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-strong border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="px-6 py-4 border-b border-border flex items-start justify-between gap-4 shrink-0">
-              <div>
-                <div className="text-sm font-semibold mt-1">{openMsg.subject}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{openMsg.sender} · {openMsg.org} · {openMsg.title}</div>
+          <div className="flex-1 overflow-auto divide-y divide-border">
+            {INBOX_MSGS.map(m=>(
+              <div key={m.id} onClick={()=>openMessage(m)}
+                className={cx("px-4 py-3 cursor-pointer hover:bg-secondary transition-colors",
+                  mode==="view" && selectedMsg?.id===m.id ? "bg-secondary" : !m.read && "bg-muted/20"
+                )}>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className={cx("text-xs truncate", !m.read&&"font-semibold")}>{m.sender}</span>
+                  <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
+                </div>
+                <div className={cx("text-sm truncate mb-1", !m.read&&"font-semibold")}>{m.subject}</div>
+                <div className="flex items-center gap-1.5">
+                  {m.urgent && <span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
+                  <span className="text-[10px] text-muted-foreground truncate">{m.org}</span>
+                </div>
               </div>
-              <button onClick={()=>setOpenMsg(null)} className="text-muted-foreground hover:text-foreground cursor-pointer shrink-0"><X size={16}/></button>
-            </div>
-            <div className="px-6 py-5 flex-1 overflow-auto"><p className="text-sm leading-relaxed">{openMsg.body}</p></div>
-            <div className="border-t border-border px-6 py-3 flex items-center gap-2 shrink-0">
-              <Btn variant="primary" size="sm">Reply</Btn>
-              <Btn variant="ghost" size="sm" onClick={()=>setOpenMsg(null)}>Close</Btn>
-            </div>
+            ))}
           </div>
         </div>
-      )}
+        <div className="flex-1 flex flex-col min-h-0">
+          {mode==="compose"
+            ? <ComposePane replyTo={selectedMsg}/>
+            : selectedMsg && <MessageDetailPane msg={selectedMsg} onReply={()=>setMode("compose")}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
+  const [formKey, setFormKey] = useState(0);
+  const [sent, setSent] = useState(false);
+
+  function handleSend() {
+    setSent(true);
+    setFormKey(k=>k+1);
+    setTimeout(()=>setSent(false), 2500);
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="px-6 py-4 border-b border-border flex items-center gap-2 shrink-0">
+        <Edit3 size={14} className="text-muted-foreground"/>
+        <div className="text-sm font-semibold">New Message</div>
+      </div>
+      <div key={`${formKey}-${replyTo?.id ?? "new"}`} className="flex-1 overflow-auto p-6 space-y-4 max-w-xl">
+        <TextInput label="To" placeholder="Search agencies or team members…" defaultValue={replyTo ? `${replyTo.sender} (${replyTo.org})` : undefined}/>
+        <TextInput label="Subject" placeholder="Subject" defaultValue={replyTo ? `Re: ${replyTo.subject}` : undefined}/>
+        <Textarea label="Message" placeholder="Write your message…" rows={12}/>
+      </div>
+      <div className="border-t border-border px-6 py-3 flex items-center gap-3 shrink-0">
+        <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={handleSend}>Send</Btn>
+        {sent && <span className="text-xs text-muted-foreground">Message sent</span>}
+      </div>
+    </div>
+  );
+}
+
+function MessageDetailPane({ msg, onReply }: { msg: typeof INBOX_MSGS[number]; onReply: () => void }) {
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="px-6 py-4 border-b border-border shrink-0">
+        <div className="flex items-center gap-2 mb-1">
+          {msg.urgent && <span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1.5 py-0.5 rounded-sm tracking-wider">URGENT</span>}
+          <div className="text-sm font-semibold">{msg.subject}</div>
+        </div>
+        <div className="text-xs text-muted-foreground">{msg.sender} · {msg.org} · {msg.title} · {msg.date}</div>
+      </div>
+      <div className="flex-1 overflow-auto p-6 max-w-xl">
+        <p className="text-sm leading-relaxed">{msg.body}</p>
+      </div>
+      <div className="border-t border-border px-6 py-3 flex items-center gap-2 shrink-0">
+        <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={onReply}>Reply</Btn>
+      </div>
     </div>
   );
 }
@@ -1631,38 +1694,51 @@ function MessagingScreen() {
 
 function DirectoryScreen() {
   const [filterAccess, setFilterAccess] = useState("all");
-  const filtered = filterAccess==="all" ? ORG_USERS : ORG_USERS.filter(u=>u.access===filterAccess);
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const filtered = ORG_USERS
+    .filter(u=>filterAccess==="all" || u.access===filterAccess)
+    .filter(u=> !q || [u.name,u.title,u.org,u.email].some(f=>f.toLowerCase().includes(q)));
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Directory" sub="Organization members and agency contacts"/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold">Members</h2>
-          <div className="flex items-center gap-1">
-            {["all","administrator","enhanced","basic"].map(a=>(
-              <button key={a} onClick={()=>setFilterAccess(a)}
-                className={cx("text-[9px] font-mono px-2 py-1 rounded-sm border cursor-pointer capitalize transition-colors",
-                  filterAccess===a?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
-                )}>{a}</button>
-            ))}
+        <div className="flex items-center justify-between mb-3 gap-3">
+          <h2 className="text-sm font-semibold shrink-0">Members</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden w-56">
+              <Search size={13} className="text-muted-foreground ml-2.5 shrink-0"/>
+              <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search members…"
+                className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
+            </div>
+            <div className="flex items-center gap-1">
+              {["all","administrator","enhanced","basic"].map(a=>(
+                <button key={a} onClick={()=>setFilterAccess(a)}
+                  className={cx("text-[9px] font-mono px-2 py-1 rounded-sm border cursor-pointer capitalize transition-colors",
+                    filterAccess===a?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
+                  )}>{a}</button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {filtered.map(u=>(
-            <div key={u.id} className="glass-subtle border rounded-md p-3">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-secondary border border-border rounded-full flex items-center justify-center text-xs font-semibold shrink-0">
-                    {u.name.split(" ").map((n:string)=>n[0]).join("").slice(0,2)}
+        {filtered.length===0 ? (
+          <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No members match "{search}"</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {filtered.map(u=>(
+              <div key={u.id} className="glass-subtle border rounded-md p-3">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex items-center gap-3">
+                    <UserAvatar name={u.name} className="w-9 h-9 text-xs"/>
+                    <div><div className="text-sm font-semibold">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
                   </div>
-                  <div><div className="text-sm font-semibold">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
+                  <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
                 </div>
-                <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
+                <div className="text-xs text-muted-foreground">{u.email} · {u.phone}</div>
               </div>
-              <div className="text-xs text-muted-foreground">{u.email} · {u.phone}</div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
