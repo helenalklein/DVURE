@@ -1,3 +1,7 @@
 /* Editorial serif for wordmark/display moments — falls back cleanly to
    system serif if offline, so nothing breaks without network access. */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
+
+/* Warm humanist sans for body copy and free-text fields — replaces the
+   default system-ui stack, which read as cold/clinical next to Fraunces. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');

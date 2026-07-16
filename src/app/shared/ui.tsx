@@ -53,10 +53,10 @@ export function Btn({ children, variant="primary", size="md", onClick, disabled,
 
 export function Stat({ label, value, sub, accent }: { label: string; value: string|number; sub?: string; accent?: boolean }) {
   return (
-    <div className={cx("border rounded-md p-4", accent ? "bg-foreground border-foreground" : "glass-subtle")}>
-      <div className={cx("text-xs font-mono mb-1", accent ? "text-primary-foreground/70" : "text-muted-foreground")}>{label}</div>
-      <div className={cx("text-2xl font-semibold tabular-nums", accent ? "text-primary-foreground" : "")}>{value}</div>
-      {sub && <div className={cx("text-xs mt-0.5", accent ? "text-primary-foreground/60" : "text-muted-foreground")}>{sub}</div>}
+    <div className={cx("border rounded-md p-4", accent ? "bg-sand border-sand" : "glass-subtle")}>
+      <div className={cx("text-xs font-mono mb-1", accent ? "text-sand-foreground/70" : "text-muted-foreground")}>{label}</div>
+      <div className={cx("text-2xl font-semibold tabular-nums", accent ? "text-sand-foreground" : "")}>{value}</div>
+      {sub && <div className={cx("text-xs mt-0.5", accent ? "text-sand-foreground/60" : "text-muted-foreground")}>{sub}</div>}
     </div>
   );
 }

@@ -40,6 +40,13 @@
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
   --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  /* Soft sandy beige — a warm secondary accent reserved for numbers/features
+     that deserve a bit more presence than plain gray but shouldn't compete
+     with true "needs your attention now" black (e.g. the Overdue metric).
+     Apply deliberately, not as a blanket replacement for the black accent. */
+  --sand: #E4D6B8;
+  --sand-foreground: #4A3D26;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -117,6 +124,8 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-sand: var(--sand);
+  --color-sand-foreground: var(--sand-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -138,6 +147,7 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
     background-image:
       radial-gradient(ellipse 80% 60% at 15% -10%, rgba(0,0,0,0.05), transparent),
       radial-gradient(ellipse 70% 50% at 100% 0%, rgba(0,0,0,0.035), transparent);

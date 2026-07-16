@@ -7,7 +7,7 @@ import {
   Settings, Building2,
   Calendar, FileText, Activity, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio, AlertTriangle
+  User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
 import { cx, XBox, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider } from "../shared/ui";
@@ -60,7 +60,7 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
   { id:"campaigns",        label:"Campaigns",  Icon:Camera,        badge:3 },
-  { id:"urgent",           label:"Urgent/Overdue", Icon:AlertTriangle      },
+  { id:"urgent",           label:"Urgent/Overdue", Icon:AlertCircle        },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
   { id:"messaging",        label:"Messaging",  Icon:MessageSquare          },
@@ -1143,9 +1143,9 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
                     </div>
                     <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
                       {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
-                        <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-foreground":"")}>
-                          <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-primary-foreground":"")}>{v}</div>
-                          <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-primary-foreground/70":"text-muted-foreground")}>{l}</div>
+                        <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-sand":"")}>
+                          <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-sand-foreground":"")}>{v}</div>
+                          <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-sand-foreground/70":"text-muted-foreground")}>{l}</div>
                         </div>
                       ))}
                     </div>
@@ -1241,7 +1241,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
       <div className="flex-1 overflow-auto p-6 space-y-3 max-w-2xl">
         {OVERDUE_ACTIONS.map(a=>(
           <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
-            <AlertTriangle size={15} className="text-foreground mt-0.5 shrink-0"/>
+            <AlertCircle size={15} className="text-foreground mt-0.5 shrink-0"/>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <Badge label={a.type} variant="draft"/>
