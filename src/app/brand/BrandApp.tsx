@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
   X, Check, Star, Search, Briefcase,
@@ -1120,8 +1120,22 @@ const OVERDUE_ACTIONS = [
 function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: number) => void; onOpenUrgent: () => void }) {
   const [tab, setTab] = useState("active");
   const [attentionOpen, setAttentionOpen] = useState(false);
+  const attentionRef = useRef<HTMLDivElement>(null);
   const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
   const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length;
+
+  // Document listener, not a fixed-position click-catcher — a fixed overlay
+  // gets clipped to the nearest backdrop-filter ancestor's box (TopBar's
+  // .glass) instead of covering the viewport, which is what silently broke
+  // the bell popover's outside-click before it was fixed the same way.
+  useEffect(() => {
+    if (!attentionOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (attentionRef.current && !attentionRef.current.contains(e.target as Node)) setAttentionOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [attentionOpen]);
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="Acne Studios · Brand"/>
@@ -1199,7 +1213,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
       {/* Needs Attention — moved off the page as a side pop-up rather than
           a permanent banner eating vertical space; mirrors the Activity
           widget's expand-in-place pattern, opposite corner. */}
-      <div className="fixed bottom-6 left-6 z-40">
+      <div ref={attentionRef} className="fixed bottom-6 left-6 z-40">
         {attentionOpen ? (
           <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
             <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">

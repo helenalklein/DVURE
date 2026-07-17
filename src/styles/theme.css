@@ -40,7 +40,7 @@
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
   --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Outfit", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
   /* Soft sandy beige — a warm secondary accent reserved for numbers/features
      that deserve a bit more presence than plain gray but shouldn't compete
      with true "needs your attention now" black (e.g. the Overdue metric).

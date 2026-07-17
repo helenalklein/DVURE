@@ -2,6 +2,10 @@
    system serif if offline, so nothing breaks without network access. */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
 
-/* Warm humanist sans for body copy and free-text fields — replaces the
-   default system-ui stack, which read as cold/clinical next to Fraunces. */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+/* Warm geometric sans for body copy and free-text fields — replaces the
+   default system-ui stack, which read as cold/clinical next to Fraunces.
+   Outfit's rounded, geometric letterforms are visually distinct enough
+   from system-ui/Segoe/San Francisco to read as an obvious change rather
+   than a near-identical swap (Plus Jakarta Sans, tried first, was too
+   close to the system default to register as different at a glance). */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
