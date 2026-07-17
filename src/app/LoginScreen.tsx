@@ -36,7 +36,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
           <div className="w-14 h-14 bg-foreground rounded-full flex items-center justify-center mx-auto mb-5 shadow-md">
             <span className="font-display text-primary-foreground text-2xl">D</span>
           </div>
-          <div className="font-display text-4xl tracking-tight">DVURE</div>
+          <div className="font-wordmark text-4xl tracking-tight">DVURE</div>
         </div>
 
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">

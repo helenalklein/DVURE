@@ -249,4 +249,17 @@
   .font-display {
     font-family: var(--font-display);
   }
+  /* Fraunces is a variable font — its optical-size axis leans more
+     "display"/expressive (asymmetric terminals, swashier curves) the
+     larger it renders. The small circular "D" mark reads calm because
+     it's small enough to sit near the restrained end of that axis by
+     default; the full DVURE wordmark at 4xl was rendering near the
+     opposite, flourished end. Pinning opsz low + a heavier weight keeps
+     it the same typeface but pulls the wordmark toward the same
+     even-handed, serious register as the D, regardless of size. */
+  .font-wordmark {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 9;
+    font-weight: 600;
+  }
 }
