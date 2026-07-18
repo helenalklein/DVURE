@@ -1,5 +1,5 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings, RefreshCw } from "lucide-react";
+import { Bell, X, ChevronDown, Settings } from "lucide-react";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
@@ -236,15 +236,15 @@ function UserMenuButton() {
 // real one would, and it's mounted once in TopBar so every screen
 // (campaigns, payments, messaging, everything) gets it for free.
 function RefreshButton() {
-  const [spinning, setSpinning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   function handleRefresh() {
-    setSpinning(true);
-    setTimeout(() => setSpinning(false), 700);
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 700);
   }
   return (
-    <button onClick={handleRefresh} title="Refresh"
-      className="p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-      <RefreshCw size={15} className={cx(spinning && "animate-spin")}/>
+    <button onClick={handleRefresh}
+      className="px-2.5 py-1.5 rounded-md hover:bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+      {refreshing ? "Refreshing…" : "Refresh"}
     </button>
   );
 }
