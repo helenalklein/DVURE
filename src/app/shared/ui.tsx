@@ -1,5 +1,5 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings } from "lucide-react";
+import { Bell, X, ChevronDown, Settings, RefreshCw } from "lucide-react";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
@@ -231,6 +231,24 @@ function UserMenuButton() {
   );
 }
 
+// No real backend to refetch from yet, so this is a UI affordance, not a
+// data sync — a brief spin gives the same "just refreshed" confirmation a
+// real one would, and it's mounted once in TopBar so every screen
+// (campaigns, payments, messaging, everything) gets it for free.
+function RefreshButton() {
+  const [spinning, setSpinning] = useState(false);
+  function handleRefresh() {
+    setSpinning(true);
+    setTimeout(() => setSpinning(false), 700);
+  }
+  return (
+    <button onClick={handleRefresh} title="Refresh"
+      className="p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+      <RefreshCw size={15} className={cx(spinning && "animate-spin")}/>
+    </button>
+  );
+}
+
 export function TopBar({ title, sub, actions }: { title: string; sub?: string; actions?: JSX.Element }) {
   return (
     <div className="h-14 border-b glass flex items-center px-6 gap-4 shrink-0 z-20 relative">
@@ -238,7 +256,7 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
         <div className="text-sm font-semibold truncate tracking-tight">{title}</div>
         {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
       </div>
-      <div className="flex items-center gap-2 shrink-0">{actions}<UserMenuButton/><BellButton/></div>
+      <div className="flex items-center gap-2 shrink-0">{actions}<RefreshButton/><UserMenuButton/><BellButton/></div>
     </div>
   );
 }

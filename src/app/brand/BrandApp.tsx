@@ -1592,9 +1592,18 @@ function GlobalPayments() {
 // ─── MESSAGING ─────────────────────────────────────────────────────────────
 
 const INBOX_MSGS = [
-  { id:1, urgent:true,  date:"Jun 19, 2:14 PM", subject:"Payout requested — Booking #0841",              sender:"Sophie Chen",  org:"Elite Model Mgmt.", title:"Senior Agent",    campaign:"AW25 Womenswear", read:false, body:"Please review and authorize payment for the AW25 Womenswear booking. Let us know if you have any questions." },
-  { id:2, urgent:false, date:"Jun 18, 10:30 AM",subject:"Talent availability confirmed — Amara Diallo",  sender:"James Kirk",   org:"Elite Model Mgmt.", title:"Booking Agent",   campaign:"AW25 Womenswear", read:false, body:"Amara has confirmed availability for the full window, 07/14–07/15. Please proceed with the contract." },
-  { id:3, urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",   org:"IMG Models",        title:"Agent",           campaign:"SS25 Fragrance",  read:true,  body:"Following up on rates for Mila's booking. Please advise." },
+  { id:1,  urgent:true,  date:"Jun 19, 2:14 PM", subject:"Payout requested — Booking #0841",              sender:"Sophie Chen",   org:"Elite Model Mgmt.", title:"Senior Agent",      campaign:"AW25 Womenswear",     read:false, body:"Please review and authorize payment for the AW25 Womenswear booking. Let us know if you have any questions." },
+  { id:2,  urgent:false, date:"Jun 18, 10:30 AM",subject:"Talent availability confirmed — Amara Diallo",  sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:false, body:"Amara has confirmed availability for the full window, 07/14–07/15. Please proceed with the contract." },
+  { id:3,  urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Following up on rates for Mila's booking. Please advise." },
+  { id:4,  urgent:true,  date:"Jun 17, 11:52 AM",subject:"Fitting rescheduled — need sign-off today",      sender:"Priya Anand",   org:"Wilhelmina",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:false, body:"The 2pm fitting slot moved to 4pm due to a venue conflict. Need your sign-off on the new call sheet before we notify talent." },
+  { id:5,  urgent:false, date:"Jun 16, 5:40 PM", subject:"Usage terms question — Resort Lookbook",         sender:"Marcus Reyes",  org:"DNA Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Client is asking whether the lookbook usage extends to paid social. Can you confirm before we sign?" },
+  { id:6,  urgent:false, date:"Jun 16, 9:15 AM", subject:"Comp cards attached — 3 new submissions",        sender:"Sophie Chen",   org:"Elite Model Mgmt.", title:"Senior Agent",      campaign:"SS25 Fragrance",      read:true,  body:"Sending over three additional comp cards for consideration ahead of Friday's deadline." },
+  { id:7,  urgent:false, date:"Jun 15, 3:22 PM", subject:"Contract executed — Ines Ferreira",              sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW26 Runway Presentation", read:true,  body:"Signed contract attached. Let us know if wardrobe needs measurements ahead of the fitting." },
+  { id:8,  urgent:true,  date:"Jun 15, 8:03 AM", subject:"Overdue invoice — please advise",                sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:false, body:"Invoice #4471 is now five days past due. Can you let us know the status on your end?" },
+  { id:9,  urgent:false, date:"Jun 14, 6:48 PM", subject:"Travel confirmation needed",                     sender:"Marcus Reyes",  org:"DNA Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Can you confirm flight details for the location shoot are finalized on your side?" },
+  { id:10, urgent:false, date:"Jun 14, 1:10 PM", subject:"New talent for consideration — Runway",          sender:"Priya Anand",   org:"Wilhelmina",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:true,  body:"Adding two new faces to the roster ahead of casting. Comp cards to follow shortly." },
+  { id:11, urgent:false, date:"Jun 13, 4:30 PM", subject:"Re: Rate question — SS25 Fragrance",             sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Thanks for confirming — we'll move forward at the quoted rate." },
+  { id:12, urgent:false, date:"Jun 12, 9:55 AM", subject:"Deliverables received — Womenswear",             sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:true,  body:"All deliverables for the shoot have been received and logged on our end. Thank you." },
 ];
 
 // Split view — an inbox list on the left, a persistent compose/detail pane
@@ -1689,6 +1698,23 @@ function MessagingScreen() {
   );
 }
 
+function UrgentToggle({ defaultUrgent }: { defaultUrgent: boolean }) {
+  const [urgent, setUrgent] = useState(defaultUrgent);
+  return (
+    <button type="button" onClick={()=>setUrgent(u=>!u)}
+      className={cx("flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors cursor-pointer",
+        urgent ? "border-[#C0392B] text-[#C0392B] bg-[#C0392B]/5" : "border-border text-muted-foreground hover:border-foreground/40"
+      )}>
+      <span className={cx("w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0",
+        urgent ? "bg-[#C0392B] border-[#C0392B]" : "border-border"
+      )}>
+        {urgent && <Check size={9} strokeWidth={3} className="text-white"/>}
+      </span>
+      Mark as urgent
+    </button>
+  );
+}
+
 function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
   const [formKey, setFormKey] = useState(0);
   const [sent, setSent] = useState(false);
@@ -1709,6 +1735,7 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
         <TextInput label="To" placeholder="Search agencies or team members…" defaultValue={replyTo ? `${replyTo.sender} (${replyTo.org})` : undefined}/>
         <TextInput label="Subject" placeholder="Subject" defaultValue={replyTo ? `Re: ${replyTo.subject}` : undefined}/>
         <Textarea label="Message" placeholder="Write your message…" rows={12}/>
+        <UrgentToggle defaultUrgent={replyTo?.urgent ?? false}/>
       </div>
       <div className="border-t border-border px-6 py-3 flex items-center gap-3 shrink-0">
         <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={handleSend}>Send</Btn>
