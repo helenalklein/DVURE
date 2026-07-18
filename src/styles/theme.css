@@ -47,8 +47,8 @@
      Tuned to sit close to the app's neutral grays — perceptible on a
      second look, not a loud color statement. Apply deliberately, not as
      a blanket replacement for the black accent. */
-  --sand: #F5EEDD;
-  --sand-foreground: #6B5D43;
+  --sand: #F9F5EA;
+  --sand-foreground: #7A6B4E;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -249,17 +249,15 @@
   .font-display {
     font-family: var(--font-display);
   }
-  /* Fraunces is a variable font — its optical-size axis leans more
-     "display"/expressive (asymmetric terminals, swashier curves) the
-     larger it renders. The small circular "D" mark reads calm because
-     it's small enough to sit near the restrained end of that axis by
-     default; the full DVURE wordmark at 4xl was rendering near the
-     opposite, flourished end. Pinning opsz low + a heavier weight keeps
-     it the same typeface but pulls the wordmark toward the same
-     even-handed, serious register as the D, regardless of size. */
+  /* DVURE wordmark — a distinct typeface from the D mark (Fraunces) on
+     purpose: Bodoni Moda's extreme thick/thin contrast and razor hairline
+     serifs read as sharp, cold, European fashion-editorial rather than
+     Fraunces' warm roundness. Optical size pinned high (toward its 96
+     max) leans into that dramatic contrast instead of away from it —
+     the opposite move from the D, which wants restraint, not drama. */
   .font-wordmark {
-    font-family: var(--font-display);
-    font-variation-settings: "opsz" 9;
+    font-family: "Bodoni Moda", "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+    font-variation-settings: "opsz" 90;
     font-weight: 600;
   }
 }

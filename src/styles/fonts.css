@@ -1,6 +1,12 @@
-/* Editorial serif for wordmark/display moments — falls back cleanly to
+/* Editorial serif for the small circular "D" mark — falls back cleanly to
    system serif if offline, so nothing breaks without network access. */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
+
+/* High-contrast didone serif for the DVURE wordmark specifically — sharp
+   hairline serifs and dramatic thick/thin stroke contrast read as
+   European fashion-editorial (think magazine mastheads), the opposite of
+   Fraunces' warm, rounded, slightly playful default character. */
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap');
 
 /* Warm geometric sans for body copy and free-text fields — replaces the
    default system-ui stack, which read as cold/clinical next to Fraunces.

@@ -5,7 +5,7 @@ import {
   AlertCircle, Camera,
   MessageSquare, Download, CreditCard, MapPin,
   Settings, Building2,
-  Calendar, FileText, Activity, BookOpen,
+  Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
@@ -1210,10 +1210,9 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
         </div>
       </div>
 
-      {/* Needs Attention — moved off the page as a side pop-up rather than
-          a permanent banner eating vertical space; mirrors the Activity
-          widget's expand-in-place pattern, opposite corner. */}
-      <div ref={attentionRef} className="fixed bottom-6 left-6 z-40">
+      {/* Needs Attention — stacked directly above the Activity widget in
+          the same bottom-right corner rather than the opposite corner. */}
+      <div ref={attentionRef} className="fixed bottom-20 right-6 z-40">
         {attentionOpen ? (
           <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
             <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
@@ -1222,7 +1221,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
                 <span className="text-xs font-semibold">Needs Attention</span>
                 <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
               </div>
-              <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+              <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
                 <span className="text-sm font-bold leading-none">−</span>
               </button>
             </div>
@@ -1232,7 +1231,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
                   <span className="text-sm shrink-0">{a.icon}</span>
                   <span className="flex-1 text-sm">{a.msg}</span>
                   <button onClick={()=>{ openCampaign(a.campaignId); setAttentionOpen(false); }}
-                    className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors",
+                    className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors cursor-pointer",
                       a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
                     )}>{a.action}</button>
                 </div>
@@ -1241,7 +1240,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
           </div>
         ) : (
           <button onClick={()=>setAttentionOpen(true)}
-            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors">
+            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors cursor-pointer">
             <AlertCircle size={16}/>
             {urgentCount>0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-foreground border border-foreground text-[9px] font-bold rounded-full flex items-center justify-center">{urgentCount}</span>
@@ -1981,6 +1980,16 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [activeCampaignId, setActiveCampaignId] = useState<number>(1);
   const [campaignSection, setCampaignSection] = useState<CampaignSection>("moodboard");
   const [activityOpen, setActivityOpen] = useState(false);
+  const activityRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!activityOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (activityRef.current && !activityRef.current.contains(e.target as Node)) setActivityOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [activityOpen]);
 
   function openCampaign(id: number) {
     const campaign = CAMPAIGNS.find(c=>c.id===id);
@@ -2021,20 +2030,20 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           </>
         )}
 
-        <div className="fixed bottom-6 right-6 z-40 group">
+        <div ref={activityRef} className="fixed bottom-6 right-6 z-40 group">
           {activityOpen ? (
             <div className="w-72 glass-subtle border rounded-md shadow-xl overflow-hidden">
               <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
                 <div className="text-xs font-semibold">Activity</div>
-                <button onClick={()=>setActivityOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors">
+                <button onClick={()=>setActivityOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
                   <span className="text-sm font-bold leading-none">−</span>
                 </button>
               </div>
               <ActivityFeedPanel permanent/>
             </div>
           ) : (
-            <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors">
-              <Activity size={16}/>
+            <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors cursor-pointer">
+              <List size={16}/>
             </button>
           )}
         </div>
