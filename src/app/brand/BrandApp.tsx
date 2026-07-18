@@ -1616,16 +1616,21 @@ type MessagingMode = "compose" | "view";
 function MessagingScreen() {
   const [messages, setMessages] = useState(INBOX_MSGS);
   const [mode, setMode] = useState<MessagingMode>("compose");
-  const [selectedMsg, setSelectedMsg] = useState<typeof INBOX_MSGS[number]|null>(null);
+  const [selectedId, setSelectedId] = useState<number|null>(null);
   const [checked, setChecked] = useState<number[]>([]);
   const allChecked = messages.length>0 && checked.length===messages.length;
+  // Derived from messages rather than its own snapshot, so the detail pane
+  // always reflects the latest read state instead of going stale the
+  // moment openMessage flips it.
+  const selectedMsg = messages.find(m=>m.id===selectedId) ?? null;
 
   function openMessage(m: typeof INBOX_MSGS[number]) {
-    setSelectedMsg(m);
+    setSelectedId(m.id);
     setMode("view");
+    setMessages(prev => prev.map(x => x.id===m.id ? { ...x, read:true } : x));
   }
   function startNewMessage() {
-    setSelectedMsg(null);
+    setSelectedId(null);
     setMode("compose");
   }
   function toggleChecked(id: number) {
@@ -1634,9 +1639,16 @@ function MessagingScreen() {
   function toggleCheckAll() {
     setChecked(allChecked ? [] : messages.map(m=>m.id));
   }
+  function toggleRead(id: number) {
+    setMessages(prev => prev.map(x => x.id===id ? { ...x, read:!x.read } : x));
+  }
+  function markChecked(read: boolean) {
+    setMessages(prev => prev.map(m => checked.includes(m.id) ? { ...m, read } : m));
+    setChecked([]);
+  }
   function archiveChecked() {
     setMessages(prev => prev.filter(m=>!checked.includes(m.id)));
-    if (selectedMsg && checked.includes(selectedMsg.id)) { setSelectedMsg(null); setMode("compose"); }
+    if (selectedId!==null && checked.includes(selectedId)) { setSelectedId(null); setMode("compose"); }
     setChecked([]);
   }
 
@@ -1658,14 +1670,18 @@ function MessagingScreen() {
           {checked.length>0 && (
             <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0 bg-muted/30">
               <span className="text-[10px] font-mono text-muted-foreground">{checked.length} selected</span>
-              <button onClick={archiveChecked} className="text-[10px] font-mono text-foreground hover:underline cursor-pointer">Archive</button>
+              <div className="flex items-center gap-3">
+                <button onClick={()=>markChecked(true)} className="text-[10px] font-mono text-foreground hover:underline cursor-pointer">Mark read</button>
+                <button onClick={()=>markChecked(false)} className="text-[10px] font-mono text-foreground hover:underline cursor-pointer">Mark unread</button>
+                <button onClick={archiveChecked} className="text-[10px] font-mono text-foreground hover:underline cursor-pointer">Archive</button>
+              </div>
             </div>
           )}
           <div className="flex-1 overflow-auto divide-y divide-border">
             {messages.map(m=>(
               <div key={m.id} onClick={()=>openMessage(m)}
                 className={cx("px-4 py-3 cursor-pointer hover:bg-secondary transition-colors flex items-start gap-2.5",
-                  mode==="view" && selectedMsg?.id===m.id ? "bg-secondary" : !m.read && "bg-muted/20"
+                  mode==="view" && selectedId===m.id ? "bg-secondary" : !m.read && "bg-muted/20"
                 )}>
                 <button onClick={(e)=>{ e.stopPropagation(); toggleChecked(m.id); }}
                   className={cx("w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer transition-colors",
@@ -1691,7 +1707,7 @@ function MessagingScreen() {
         <div className="flex-1 flex flex-col min-h-0">
           {mode==="compose"
             ? <ComposePane replyTo={selectedMsg}/>
-            : selectedMsg && <MessageDetailPane msg={selectedMsg} onReply={()=>setMode("compose")}/>}
+            : selectedMsg && <MessageDetailPane msg={selectedMsg} onReply={()=>setMode("compose")} onToggleRead={()=>toggleRead(selectedMsg.id)}/>}
         </div>
       </div>
     </div>
@@ -1745,7 +1761,7 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
   );
 }
 
-function MessageDetailPane({ msg, onReply }: { msg: typeof INBOX_MSGS[number]; onReply: () => void }) {
+function MessageDetailPane({ msg, onReply, onToggleRead }: { msg: typeof INBOX_MSGS[number]; onReply: () => void; onToggleRead: () => void }) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-6 py-4 border-b border-border shrink-0">
@@ -1760,6 +1776,7 @@ function MessageDetailPane({ msg, onReply }: { msg: typeof INBOX_MSGS[number]; o
       </div>
       <div className="border-t border-border px-6 py-3 flex items-center gap-2 shrink-0">
         <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={onReply}>Reply</Btn>
+        <Btn variant="ghost" size="sm" onClick={onToggleRead}>{msg.read ? "Mark as unread" : "Mark as read"}</Btn>
       </div>
     </div>
   );
