@@ -1101,10 +1101,12 @@ function CollaborationTab() {
 
 // ─── CAMPAIGNS LIST (the landing screen — Dashboard was retired) ───────────────
 
+// Icon components, not emoji — every icon in the app is a black silhouette
+// outline (lucide or the hand-built ExclamationIcon), no emoji anywhere.
 const CAMPAIGNS_ATTENTION = [
-  { icon:"⚡", msg:"AW25 Womenswear — due tomorrow. 14 submissions need review.", action:"Review now", urgent:true,  campaignId:1 },
-  { icon:"✉",  msg:"1 unsent contract for Zara Okafor pending signature.",        action:"Send",       urgent:true,  campaignId:1 },
-  { icon:"👤", msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false, campaignId:2 },
+  { Icon:ExclamationIcon, msg:"AW25 Womenswear — due tomorrow. 14 submissions need review.", action:"Review now", urgent:true,  campaignId:1 },
+  { Icon:Send,            msg:"1 unsent contract for Zara Okafor pending signature.",        action:"Send",       urgent:true,  campaignId:1 },
+  { Icon:User,            msg:"SS25 Fragrance — 9 submissions awaiting first review.",       action:"Review",     urgent:false, campaignId:2 },
 ];
 
 // Overdue actions — payment due dates and other time-sensitive items past
@@ -1168,9 +1170,9 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
                     </div>
                     <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
                       {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
-                        <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-sand":"")}>
-                          <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-sand-foreground":"")}>{v}</div>
-                          <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-sand-foreground/70":"text-muted-foreground")}>{l}</div>
+                        <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-offwhite":"")}>
+                          <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-offwhite-foreground":"")}>{v}</div>
+                          <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-offwhite-foreground/70":"text-muted-foreground")}>{l}</div>
                         </div>
                       ))}
                     </div>
@@ -1228,7 +1230,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
             <div className="divide-y divide-border">
               {CAMPAIGNS_ATTENTION.map((a,i)=>(
                 <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
-                  <span className="text-sm shrink-0">{a.icon}</span>
+                  <a.Icon size={14} className="text-foreground shrink-0"/>
                   <span className="flex-1 text-sm">{a.msg}</span>
                   <button onClick={()=>{ openCampaign(a.campaignId); setAttentionOpen(false); }}
                     className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors cursor-pointer",
@@ -1603,8 +1605,11 @@ const INBOX_MSGS = [
 type MessagingMode = "compose" | "view";
 
 function MessagingScreen() {
+  const [messages, setMessages] = useState(INBOX_MSGS);
   const [mode, setMode] = useState<MessagingMode>("compose");
   const [selectedMsg, setSelectedMsg] = useState<typeof INBOX_MSGS[number]|null>(null);
+  const [checked, setChecked] = useState<number[]>([]);
+  const allChecked = messages.length>0 && checked.length===messages.length;
 
   function openMessage(m: typeof INBOX_MSGS[number]) {
     setSelectedMsg(m);
@@ -1614,6 +1619,17 @@ function MessagingScreen() {
     setSelectedMsg(null);
     setMode("compose");
   }
+  function toggleChecked(id: number) {
+    setChecked(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
+  }
+  function toggleCheckAll() {
+    setChecked(allChecked ? [] : messages.map(m=>m.id));
+  }
+  function archiveChecked() {
+    setMessages(prev => prev.filter(m=>!checked.includes(m.id)));
+    if (selectedMsg && checked.includes(selectedMsg.id)) { setSelectedMsg(null); setMode("compose"); }
+    setChecked([]);
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -1622,23 +1638,42 @@ function MessagingScreen() {
       <div className="flex-1 flex min-h-0">
         <div className="w-80 shrink-0 border-r border-border flex flex-col min-h-0">
           <div className="px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
-            <div className="text-xs font-semibold">Inbox</div>
-            <span className="text-[10px] font-mono text-muted-foreground">{INBOX_MSGS.length}</span>
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-semibold">Inbox</div>
+              <span className="text-[10px] font-mono text-muted-foreground">{messages.length}</span>
+            </div>
+            <button onClick={toggleCheckAll} className="text-[10px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer">
+              {allChecked ? "Clear all" : "Select all"}
+            </button>
           </div>
+          {checked.length>0 && (
+            <div className="px-4 py-2 border-b border-border flex items-center justify-between shrink-0 bg-muted/30">
+              <span className="text-[10px] font-mono text-muted-foreground">{checked.length} selected</span>
+              <button onClick={archiveChecked} className="text-[10px] font-mono text-foreground hover:underline cursor-pointer">Archive</button>
+            </div>
+          )}
           <div className="flex-1 overflow-auto divide-y divide-border">
-            {INBOX_MSGS.map(m=>(
+            {messages.map(m=>(
               <div key={m.id} onClick={()=>openMessage(m)}
-                className={cx("px-4 py-3 cursor-pointer hover:bg-secondary transition-colors",
+                className={cx("px-4 py-3 cursor-pointer hover:bg-secondary transition-colors flex items-start gap-2.5",
                   mode==="view" && selectedMsg?.id===m.id ? "bg-secondary" : !m.read && "bg-muted/20"
                 )}>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className={cx("text-xs truncate", !m.read&&"font-semibold")}>{m.sender}</span>
-                  <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
-                </div>
-                <div className={cx("text-sm truncate mb-1", !m.read&&"font-semibold")}>{m.subject}</div>
-                <div className="flex items-center gap-1.5">
-                  {m.urgent && <span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
-                  <span className="text-[10px] text-muted-foreground truncate">{m.org}</span>
+                <button onClick={(e)=>{ e.stopPropagation(); toggleChecked(m.id); }}
+                  className={cx("w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer transition-colors",
+                    checked.includes(m.id) ? "bg-foreground border-foreground" : "border-border hover:border-foreground/40"
+                  )}>
+                  {checked.includes(m.id) && <Check size={10} strokeWidth={3} className="text-primary-foreground"/>}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className={cx("text-xs truncate", !m.read&&"font-semibold")}>{m.sender}</span>
+                    <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
+                  </div>
+                  <div className={cx("text-sm truncate mb-1", !m.read&&"font-semibold")}>{m.subject}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-muted-foreground truncate">{m.org}</span>
+                    {m.urgent && <span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
+                  </div>
                 </div>
               </div>
             ))}
@@ -2032,15 +2067,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
 
         <div ref={activityRef} className="fixed bottom-6 right-6 z-40 group">
           {activityOpen ? (
-            <div className="w-72 glass-subtle border rounded-md shadow-xl overflow-hidden">
-              <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
-                <div className="text-xs font-semibold">Activity</div>
-                <button onClick={()=>setActivityOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
-                  <span className="text-sm font-bold leading-none">−</span>
-                </button>
-              </div>
-              <ActivityFeedPanel permanent/>
-            </div>
+            <ActivityFeedPanel onClose={()=>setActivityOpen(false)}/>
           ) : (
             <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors cursor-pointer">
               <List size={16}/>

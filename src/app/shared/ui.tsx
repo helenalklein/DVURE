@@ -64,10 +64,10 @@ export function Btn({ children, variant="primary", size="md", onClick, disabled,
 
 export function Stat({ label, value, sub, accent }: { label: string; value: string|number; sub?: string; accent?: boolean }) {
   return (
-    <div className={cx("border rounded-md p-4", accent ? "bg-sand border-sand" : "glass-subtle")}>
-      <div className={cx("text-xs font-mono mb-1", accent ? "text-sand-foreground/70" : "text-muted-foreground")}>{label}</div>
-      <div className={cx("text-2xl font-semibold tabular-nums", accent ? "text-sand-foreground" : "")}>{value}</div>
-      {sub && <div className={cx("text-xs mt-0.5", accent ? "text-sand-foreground/60" : "text-muted-foreground")}>{sub}</div>}
+    <div className={cx("border rounded-md p-4", accent ? "bg-offwhite border-offwhite" : "glass-subtle")}>
+      <div className={cx("text-xs font-mono mb-1", accent ? "text-offwhite-foreground/70" : "text-muted-foreground")}>{label}</div>
+      <div className={cx("text-2xl font-semibold tabular-nums", accent ? "text-offwhite-foreground" : "")}>{value}</div>
+      {sub && <div className={cx("text-xs mt-0.5", accent ? "text-offwhite-foreground/60" : "text-muted-foreground")}>{sub}</div>}
     </div>
   );
 }
@@ -124,16 +124,20 @@ export function SidebarBadge({ count }: { count: number }) {
   return <span className="ml-auto min-w-[18px] h-[18px] bg-foreground text-primary-foreground text-[10px] font-mono font-semibold rounded-full flex items-center justify-center px-1">{count}</span>;
 }
 
-export function ActivityFeedPanel({ onClose, permanent }: { onClose?: () => void; permanent?: boolean }) {
+// Capped height + its own scroll region, not "h-full" inside an
+// unconstrained parent — that combination silently never scrolls and
+// grows to fit every event instead, which is what let this take over the
+// screen before.
+export function ActivityFeedPanel({ onClose }: { onClose?: () => void }) {
   return (
-    <div className={cx("glass-strong border rounded-md overflow-hidden flex flex-col", permanent ? "h-full" : "w-80 h-80 shadow-xl")}>
+    <div className="w-80 max-h-96 glass-strong border rounded-md overflow-hidden shadow-xl flex flex-col">
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
         <div className="text-xs font-semibold">Activity</div>
-        {!permanent && onClose && (
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={13}/></button>
+        {onClose && (
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={13}/></button>
         )}
       </div>
-      <div className="flex-1 overflow-auto divide-y divide-border">
+      <div className="flex-1 min-h-0 overflow-auto divide-y divide-border">
         {ACTIVITY_EVENTS.map(e => (
           <div key={e.id} className="px-3 py-2.5 hover:bg-secondary cursor-pointer">
             <div className="flex items-start gap-2">
