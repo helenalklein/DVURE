@@ -1191,7 +1191,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
             <button onClick={onOpenUrgent}
               className="text-left bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3 cursor-pointer hover:bg-[#2a2a2a] transition-colors">
               <div className="text-3xl font-semibold tabular-nums tracking-tight">{OVERDUE_ACTIONS.length}</div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Overdue Actions</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Urgent Tasks</div>
             </button>
             <div className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted-foreground/70">Campaign Metrics</div>
             <div className="flex-1 flex flex-col">
