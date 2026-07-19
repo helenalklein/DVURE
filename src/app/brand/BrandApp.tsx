@@ -1197,9 +1197,9 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
             <div className="flex-1 flex flex-col">
               {[
                 { label:"active campaigns", value:tab==="archived"?String(CAMPAIGNS.length):String(CAMPAIGNS.filter(c=>c.status==="active").length), sub:"" },
-                { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"Across active" },
-                { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"Pending booking" },
-                { label:"Booked",      value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.booked,0)),    sub:"This quarter" },
+                { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"" },
+                { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"" },
+                { label:"Booked",      value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.booked,0)),    sub:"" },
               ].map((s,i)=>(
                 <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
                   <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
