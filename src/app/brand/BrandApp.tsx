@@ -1196,7 +1196,7 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
             <div className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted-foreground/70">Campaign Metrics</div>
             <div className="flex-1 flex flex-col">
               {[
-                { label:"Total",       value:String(CAMPAIGNS.length), sub:`${CAMPAIGNS.filter(c=>c.status==="active").length} active` },
+                { label:"Total",       value:tab==="archived"?String(CAMPAIGNS.length):String(CAMPAIGNS.filter(c=>c.status==="active").length), sub:tab==="archived"?"All campaigns":`of ${CAMPAIGNS.length} total` },
                 { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"Across active" },
                 { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"Pending booking" },
                 { label:"Booked",      value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.booked,0)),    sub:"This quarter" },
