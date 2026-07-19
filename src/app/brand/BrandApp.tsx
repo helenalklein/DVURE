@@ -1155,7 +1155,7 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
             <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             {filtered.map(c=>(
               <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={()=>openCampaign(c.id)}>
                 <div className="flex-1 min-w-0 flex flex-col justify-between">
