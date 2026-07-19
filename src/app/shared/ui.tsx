@@ -207,10 +207,16 @@ function BellButton() {
 // and read here via context rather than threaded through every TopBar
 // call site — TopBar is invoked from dozens of screens, so this keeps the
 // signed-in identity in one place instead of a prop drilled everywhere.
-export interface CurrentUser { name: string; title: string; onSettings?: () => void }
+export interface CurrentUser {
+  name: string; title: string; org: string; email: string; phone: string;
+  access: "administrator" | "enhanced" | "basic"; onSettings?: () => void;
+}
 const CurrentUserContext = createContext<CurrentUser | null>(null);
 export function CurrentUserProvider({ user, children }: { user: CurrentUser; children: React.ReactNode }) {
   return <CurrentUserContext.Provider value={user}>{children}</CurrentUserContext.Provider>;
+}
+export function useCurrentUser() {
+  return useContext(CurrentUserContext);
 }
 
 function UserMenuButton() {

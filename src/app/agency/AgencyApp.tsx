@@ -344,7 +344,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <CurrentUserProvider user={{ name:"Sophie Chen", title:"Senior Agent" }}>
+    <CurrentUserProvider user={{ name:"Sophie Chen", title:"Senior Agent", org:AGENCY_NAME, email:"sophie@elite.com", phone:"+1 212 555 0200", access:"enhanced" }}>
       <div className="h-screen flex bg-background overflow-hidden">
         <aside className="w-52 shrink-0 glass border-r flex flex-col">
           <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">

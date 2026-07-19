@@ -10,7 +10,7 @@ import {
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
@@ -1948,17 +1948,28 @@ function CheckRow({ checked, onClick, children }: { checked: boolean; onClick: (
 }
 
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<"subscription"|"billing"|"security"|"org"|"notifications">("subscription");
+  const user = useCurrentUser();
+  const isAdmin = user?.access === "administrator";
+  const [tab, setTab] = useState<"profile"|"subscription"|"billing"|"security"|"org"|"notifications">("profile");
   const [channels, setChannels] = useState<string[]>(["Email"]);
   const [timing, setTiming] = useState<string[]>(["1 day before","Day of"]);
   const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
     set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
+  // Subscription is a platform-billing surface — only administrators see it.
+  const TABS: [string,string][] = [
+    ["profile","Profile"],
+    ...(isAdmin ? [["subscription","Subscription"] as [string,string]] : []),
+    ["billing","Billing"],
+    ["security","Security"],
+    ["org","Organization"],
+    ["notifications","Notifications"],
+  ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Settings" sub="Acne Studios · Account and billing"/>
+      <TopBar title="Settings" sub="Acne Studios · Account settings"/>
       <div className="flex-1 flex min-h-0">
         <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
-          {[["subscription","Subscription"],["billing","Billing"],["security","Security"],["org","Organization"],["notifications","Notifications"]].map(([id,label])=>(
+          {TABS.map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id as typeof tab)}
               className={cx("w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
                 tab===id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -1972,6 +1983,37 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
         </div>
         <div className="flex-1 overflow-auto p-8">
           <div className="max-w-xl">
+            {tab === "profile" && (
+              <div className="space-y-5">
+                <div><h2 className="text-base font-semibold mb-0.5">Profile</h2><p className="text-sm text-muted-foreground">Your personal account details.</p></div>
+                {!isAdmin && (
+                  <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
+                    Your title and organization are set by your organization's administrator and can't be changed here.
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <div>
+                    <FieldLabel>Name</FieldLabel>
+                    <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm">{user?.name}</div>
+                  </div>
+                  <div>
+                    <FieldLabel>Title</FieldLabel>
+                    {isAdmin
+                      ? <TextInput placeholder="Title" defaultValue={user?.title}/>
+                      : <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.title}</div>}
+                  </div>
+                  <div>
+                    <FieldLabel>Organization</FieldLabel>
+                    {isAdmin
+                      ? <TextInput placeholder="Organization" defaultValue={user?.org}/>
+                      : <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>}
+                  </div>
+                  <TextInput label="Email" type="email" placeholder="you@company.com" defaultValue={user?.email}/>
+                  <TextInput label="Phone" type="tel" placeholder="+1 000 000 0000" defaultValue={user?.phone}/>
+                  <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>
+                </div>
+              </div>
+            )}
             {tab === "subscription" && (
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your DVURE Brand subscription.</p></div>
@@ -2008,10 +2050,14 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             {tab === "org" && (
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Organization</h2><p className="text-sm text-muted-foreground">Manage your brand profile.</p></div>
+                {!isAdmin && (
+                  <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">Only administrators can rename the organization.</div>
+                )}
                 <div className="space-y-3">
-                  <TextInput label="Organization Name" placeholder="e.g. Acne Studios" defaultValue="Acne Studios"/>
-                  <FSelect label="Industry" options={["Fashion & Luxury","Beauty","Sportswear","Commercial"]}/>
-                  <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>
+                  {isAdmin
+                    ? <TextInput label="Organization Name" placeholder="e.g. Acne Studios" defaultValue={user?.org}/>
+                    : (<div><FieldLabel>Organization Name</FieldLabel><div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div></div>)}
+                  {isAdmin && <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>}
                 </div>
               </div>
             )}
@@ -2080,7 +2126,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   if (view === "relay") return <RelayConsole onExit={()=>setView("campaign")}/>;
 
   return (
-    <CurrentUserProvider user={{ name:"Marcus Webb", title:"Brand Director", onSettings:()=>handleGlobalNav("settings") }}>
+    <CurrentUserProvider user={{ name:ORG_USERS[0].name, title:ORG_USERS[0].title, org:ORG_USERS[0].org, email:ORG_USERS[0].email, phone:ORG_USERS[0].phone, access:ORG_USERS[0].access as "administrator"|"enhanced"|"basic", onSettings:()=>handleGlobalNav("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
         {inCampaign ? (
           <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")}/>
