@@ -70,7 +70,7 @@ function ExclamationIcon({ size = 15, className }: { size?: number; className?: 
 }
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
-  { id:"campaigns",        label:"Campaigns",  Icon:Camera,        badge:3 },
+  { id:"campaigns",        label:"Campaigns",  Icon:Camera                },
   { id:"urgent",           label:"Urgent/Overdue", Icon:ExclamationIcon    },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
@@ -1119,7 +1119,7 @@ const OVERDUE_ACTIONS = [
   { id:4, type:"Payment",  msg:"Payment due for Ines Ferreira booking — 1 day overdue.",              campaignId:2, due:"Jul 14, 2026" },
 ];
 
-function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: number) => void; onOpenUrgent: () => void }) {
+function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
   const [tab, setTab] = useState("active");
   const [attentionOpen, setAttentionOpen] = useState(false);
   const attentionRef = useRef<HTMLDivElement>(null);
@@ -1142,73 +1142,42 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub="Acne Studios · Brand"/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
-        <div className="flex gap-10">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1 mb-4 border-b border-border">
-              {["active","drafts","archived"].map(t=>(
-                <button key={t} onClick={()=>setTab(t)}
-                  className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
-                    tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
-                  )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
-              ))}
-            </div>
-            {filtered.length===0 ? (
-              <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
-                <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {filtered.map(c=>(
-                  <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={()=>openCampaign(c.id)}>
-                    <div className="flex-1 min-w-0 flex flex-col justify-between">
-                      <div>
-                        <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
-                        <div className="text-sm font-semibold leading-snug mt-2">{c.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
-                    </div>
-                    <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
-                      {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
-                        <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-offwhite":"")}>
-                          <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-offwhite-foreground":"")}>{v}</div>
-                          <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-offwhite-foreground/70":"text-muted-foreground")}>{l}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* Standing summary column — flat and architectural rather than
-              boxed: a single hairline rule, no fill, no rounded corners.
-              Large light-weight serif numerals do the work instead of
-              chrome. Rows stretch to fill the full column height so the
-              column commands real presence instead of trailing into
-              empty page beneath a short stack. */}
-          <div className="w-48 shrink-0 min-h-[34rem] border-l border-border pl-6 flex flex-col">
-            <button onClick={onOpenUrgent}
-              className="text-left bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3 cursor-pointer hover:bg-[#2a2a2a] transition-colors">
-              <div className="text-3xl font-semibold tabular-nums tracking-tight">{OVERDUE_ACTIONS.length}</div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Urgent Tasks</div>
-            </button>
-            <div className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted-foreground/70">Campaign Metrics</div>
-            <div className="flex-1 flex flex-col">
-              {[
-                { label:"active campaigns", value:tab==="archived"?String(CAMPAIGNS.length):String(CAMPAIGNS.filter(c=>c.status==="active").length), sub:"" },
-                { label:"Submissions", value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.submitted,0)), sub:"" },
-                { label:"Approved",    value:String(CAMPAIGNS.filter(c=>c.status==="active").reduce((s,c)=>s+c.approved,0)),  sub:"" },
-              ].map((s,i)=>(
-                <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
-                  <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
-                  {s.label && <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>}
-                  {s.sub && <div className="text-xs text-muted-foreground/70 mt-1">{s.sub}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="flex items-center gap-1 mb-4 border-b border-border">
+          {["active","drafts","archived"].map(t=>(
+            <button key={t} onClick={()=>setTab(t)}
+              className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
+                tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
+              )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+          ))}
         </div>
+        {filtered.length===0 ? (
+          <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
+            <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {filtered.map(c=>(
+              <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={()=>openCampaign(c.id)}>
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                  <div>
+                    <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
+                    <div className="text-sm font-semibold leading-snug mt-2">{c.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
+                </div>
+                <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
+                  {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
+                    <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-offwhite":"")}>
+                      <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-offwhite-foreground":"")}>{v}</div>
+                      <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-offwhite-foreground/70":"text-muted-foreground")}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Needs Attention — stacked directly above the Activity widget in
@@ -1260,23 +1229,48 @@ function CampaignsList({ openCampaign, onOpenUrgent }: { openCampaign: (id: numb
 // the same items the metric is counting.
 
 function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => void }) {
+  const byType = (t: string) => OVERDUE_ACTIONS.filter(a=>a.type===t).length;
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Urgent/Overdue" sub={`Acne Studios · ${OVERDUE_ACTIONS.length} actions past due`}/>
-      <div className="flex-1 overflow-auto p-6 space-y-3 max-w-2xl">
-        {OVERDUE_ACTIONS.map(a=>(
-          <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
-            <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Badge label={a.type} variant="draft"/>
-                <span className="text-[10px] font-mono text-muted-foreground">Due {a.due}</span>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="flex gap-10">
+          <div className="flex-1 min-w-0 max-w-2xl space-y-3">
+            {OVERDUE_ACTIONS.map(a=>(
+              <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
+                <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge label={a.type} variant="draft"/>
+                    <span className="text-[10px] font-mono text-muted-foreground">Due {a.due}</span>
+                  </div>
+                  <div className="text-sm">{a.msg}</div>
+                </div>
+                <Btn variant="primary" size="sm" onClick={()=>openCampaign(a.campaignId)}>Review</Btn>
               </div>
-              <div className="text-sm">{a.msg}</div>
-            </div>
-            <Btn variant="primary" size="sm" onClick={()=>openCampaign(a.campaignId)}>Review</Btn>
+            ))}
           </div>
-        ))}
+          {/* The only place an overdue/urgent count lives now — Campaigns
+              dropped its own copy of this metric entirely. */}
+          <div className="w-48 shrink-0 min-h-[24rem] border-l border-border pl-6 flex flex-col">
+            <div className="bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3">
+              <div className="text-3xl font-semibold tabular-nums tracking-tight">{OVERDUE_ACTIONS.length}</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Urgent Tasks</div>
+            </div>
+            <div className="flex-1 flex flex-col">
+              {[
+                { label:"Payments",  value:byType("Payment") },
+                { label:"Contracts", value:byType("Contract") },
+                { label:"Reviews",   value:byType("Review") },
+              ].map((s,i)=>(
+                <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
+                  <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2094,7 +2088,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
             <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {view==="campaigns"        && <CampaignsList openCampaign={openCampaign} onOpenUrgent={()=>handleGlobalNav("urgent")}/>}
+              {view==="campaigns"        && <CampaignsList openCampaign={openCampaign}/>}
               {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")}/>}
               {view==="contracts-global" && <GlobalContracts/>}
