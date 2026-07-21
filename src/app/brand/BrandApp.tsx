@@ -2049,7 +2049,9 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Organization</h2><p className="text-sm text-muted-foreground">Manage your brand profile.</p></div>
                 <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
-                  Organization names can't be changed here once set — contact customer service for a rename.
+                  Organization names can't be changed here once set — contact{" "}
+                  <a href="mailto:support@dvure.com" className="text-foreground underline underline-offset-2 hover:text-foreground/80">support@dvure.com</a>{" "}
+                  for a rename.
                 </div>
                 <div className="space-y-3">
                   <div>
