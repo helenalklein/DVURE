@@ -21,7 +21,7 @@ export default function App() {
       {role === "agency" && <AgencyApp onLogout={onLogout}/>}
       {role === "model" && <ModelApp onLogout={onLogout}/>}
       {role === "brand" && <BrandApp onLogout={onLogout}/>}
-      <DevRoleSwitcher role={role} onSelect={setRole}/>
+      {import.meta.env.DEV && <DevRoleSwitcher role={role} onSelect={setRole}/>}
     </>
   );
 }
