@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
@@ -181,6 +181,12 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         <div className="flex items-center gap-2 mb-1"><Badge label={campaign.status==="archived"?"Archived":"Active"} variant={campaign.status==="archived"?"draft":"active"}/></div>
         <div className="text-xs font-semibold leading-snug">{campaign.name}</div>
         <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{campaign.type} · Due {campaign.due}</div>
+        <div className="text-[10px] text-muted-foreground font-mono mt-1.5 flex items-center gap-1.5">
+          <span>Submissions {campaign.submissionOpen} – {campaign.submissionClose}</span>
+          {MOCK_NOW > new Date(campaign.submissionClose)
+            ? <span className="text-urgent font-semibold">Closed</span>
+            : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
+        </div>
       </div>
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         {nav.map(item => {
@@ -1331,6 +1337,14 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
               <TextInput label="Shoot End" placeholder="MM/DD/YYYY" type="date"/>
             </div>
             <TextInput label="Location" placeholder="City, state, or studio address"/>
+            <div>
+              <FieldLabel>Talent Submission Window</FieldLabel>
+              <p className="text-xs text-muted-foreground mb-2">Agencies can only submit talent between these dates.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <TextInput label="Opens" placeholder="MM/DD/YYYY" type="date"/>
+                <TextInput label="Closes" placeholder="MM/DD/YYYY" type="date"/>
+              </div>
+            </div>
           </>)}
           {step===2&&(<><div><h2 className="text-base font-semibold mb-0.5">Talent Requirements</h2><p className="text-sm text-muted-foreground">Agencies match their roster to these requirements.</p></div>
             <div className="border-t border-border"/>

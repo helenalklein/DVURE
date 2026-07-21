@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
 import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider } from "../shared/ui";
-import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT } from "../shared/mockData";
+import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT, MOCK_NOW } from "../shared/mockData";
 import type { RosterModel } from "../shared/types";
 
 const AGENCY_NAME = "Elite Model Mgmt.";
@@ -23,32 +23,47 @@ const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
 ];
 
 const INVITATIONS = [
-  { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Editorial", due:"06/20/2025", budget:"$800–$1,200/day", models:3 },
-  { brand:"Nike",         campaign:"Run Global SS25",          type:"Fitness",   due:"07/01/2025", budget:"$600–$900/day",   models:5 },
-  { brand:"Chanel",       campaign:"Beauty Editorial AW25",    type:"Beauty",    due:"06/28/2025", budget:"$1,200–$2,000/day", models:2 },
+  { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Editorial", due:"06/20/2025", budget:"$800–$1,200/day", models:3, submissionOpen:"May 1, 2026", submissionClose:"Jun 15, 2026" },
+  { brand:"Nike",         campaign:"Run Global SS25",          type:"Fitness",   due:"07/01/2025", budget:"$600–$900/day",   models:5, submissionOpen:"Jul 1, 2026", submissionClose:"Aug 5, 2026"  },
+  { brand:"Chanel",       campaign:"Beauty Editorial AW25",    type:"Beauty",    due:"06/28/2025", budget:"$1,200–$2,000/day", models:2, submissionOpen:"Jul 10, 2026", submissionClose:"Jul 24, 2026" },
 ];
 
-function InvitationsView({ onSubmitTalent }: { onSubmitTalent: () => void }) {
+function submissionIsClosed(inv: { submissionClose: string }) {
+  return MOCK_NOW > new Date(inv.submissionClose);
+}
+
+function InvitationsView({ onSubmitTalent }: { onSubmitTalent: (campaign: string) => void }) {
   return (
     <div className="max-w-2xl space-y-3">
       <p className="text-sm text-muted-foreground mb-4">Brand campaign invitations requiring talent submissions.</p>
-      {INVITATIONS.map(inv=>(
-        <div key={inv.campaign} className="glass-subtle border rounded-md p-4">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div>
-              <div className="text-sm font-semibold">{inv.campaign}</div>
-              <div className="text-xs text-muted-foreground">{inv.brand} · {inv.type} · Due {inv.due}</div>
+      {INVITATIONS.map(inv=>{
+        const closed = submissionIsClosed(inv);
+        return (
+          <div key={inv.campaign} className="glass-subtle border rounded-md p-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <div className="text-sm font-semibold">{inv.campaign}</div>
+                <div className="text-xs text-muted-foreground">{inv.brand} · {inv.type} · Due {inv.due}</div>
+              </div>
+              <Badge label={`${inv.models} needed`} variant="info"/>
             </div>
-            <Badge label={`${inv.models} needed`} variant="info"/>
+            <div className="text-xs text-muted-foreground mb-1">Budget: {inv.budget}</div>
+            <div className="text-[10px] font-mono text-muted-foreground mb-3 flex items-center gap-1.5">
+              <span>Submissions {inv.submissionOpen} – {inv.submissionClose}</span>
+              {closed
+                ? <span className="text-urgent font-semibold">Closed</span>
+                : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
+            </div>
+            <div className="flex gap-2">
+              <Btn variant="primary" size="sm" disabled={closed} onClick={()=>onSubmitTalent(inv.campaign)}>
+                {closed ? "Submission Closed" : "Submit Talent"}
+              </Btn>
+              <Btn variant="outline" size="sm">View Brief</Btn>
+              <Btn variant="ghost" size="sm">Decline</Btn>
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground mb-3">Budget: {inv.budget}/day</div>
-          <div className="flex gap-2">
-            <Btn variant="primary" size="sm" onClick={onSubmitTalent}>Submit Talent</Btn>
-            <Btn variant="outline" size="sm">View Brief</Btn>
-            <Btn variant="ghost" size="sm">Decline</Btn>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -120,19 +135,21 @@ function RosterPickerModal({ roster, onPick, onClose }: { roster: RosterModel[];
   );
 }
 
-function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onGoToRoster: () => void }) {
+function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: RosterModel[]; onGoToRoster: () => void; initialCampaign?: string }) {
   const [submitted, setSubmitted] = useState<{ modelId: number; campaign: string }[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [pickedCampaign, setPickedCampaign] = useState(INVITATIONS[0]?.campaign ?? "");
+  const [pickedCampaign, setPickedCampaign] = useState(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
   const [pickedModelId, setPickedModelId] = useState<number | "">("");
 
   const submittedIds = new Set(submitted.map(s=>s.modelId));
   const pickedModel = roster.find(m=>m.id===pickedModelId);
+  const pickedInvitation = INVITATIONS.find(i=>i.campaign===pickedCampaign);
+  const submissionClosed = pickedInvitation ? submissionIsClosed(pickedInvitation) : false;
 
   function selectModel(id: number) {
     setPickedModelId(id);
-    setPickedCampaign(INVITATIONS[0]?.campaign ?? "");
+    setPickedCampaign(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
     setShowPicker(false);
     setShowForm(true);
   }
@@ -201,11 +218,24 @@ function SubmitTalentView({ roster, onGoToRoster }: { roster: RosterModel[]; onG
               </button>
               <div className="text-[10px] text-muted-foreground font-mono mt-1">Pulled from their DVURE profile.</div>
             </div>
-            <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)}/>
+            <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)} value={pickedCampaign} onChange={setPickedCampaign}/>
+            {pickedInvitation && (
+              <div className={cx("text-[10px] font-mono flex items-center gap-1.5", submissionClosed ? "text-urgent" : "text-muted-foreground")}>
+                <span>Submissions {pickedInvitation.submissionOpen} – {pickedInvitation.submissionClose}</span>
+                {submissionClosed
+                  ? <span className="font-semibold">Closed</span>
+                  : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
+              </div>
+            )}
+            {submissionClosed && (
+              <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">
+                This campaign's submission window closed {pickedInvitation!.submissionClose}. Talent can no longer be submitted.
+              </div>
+            )}
             <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
           </div>
           <div className="px-5 pb-5 flex gap-2">
-            <Btn variant="primary" onClick={()=>{
+            <Btn variant="primary" disabled={submissionClosed} onClick={()=>{
               setSubmitted(p=>[...p,{ modelId:pickedModel.id, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"" }]);
               setShowForm(false);
             }}>Submit</Btn>
@@ -338,6 +368,7 @@ function PaymentsView() {
 export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   const [view, setView] = useState<View>("invitations");
   const [roster, setRoster] = useState<RosterModel[]>(INITIAL_ROSTER);
+  const [submitCampaign, setSubmitCampaign] = useState<string | undefined>(undefined);
 
   function addModel(m: Omit<RosterModel,"id"|"agency">) {
     setRoster(prev => [...prev, { ...m, id: Date.now(), agency: AGENCY_NAME }]);
@@ -379,8 +410,8 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
         <main className="flex-1 flex flex-col min-h-0">
           <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${AGENCY_NAME} · Agency`}/>
           <div className="flex-1 overflow-auto p-6">
-            {view === "invitations" && <InvitationsView onSubmitTalent={()=>setView("submit")}/>}
-            {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")}/>}
+            {view === "invitations" && <InvitationsView onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
+            {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
             {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
             {view === "payments" && <PaymentsView/>}
             {view === "messaging" && (

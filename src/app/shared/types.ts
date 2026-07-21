@@ -65,6 +65,12 @@ export interface Campaign {
   due: string;
   dueLabel: string;
   dueUrgency: "high" | "medium" | "low";
+  // Window during which agencies can submit talent — separate from `due`
+  // (the shoot/deliverable date). Parsed with `new Date(...)` for the
+  // open/closed comparison against MOCK_NOW, so keep these in a
+  // Date-parseable format like "Jun 1, 2026".
+  submissionOpen: string;
+  submissionClose: string;
   submitted: number;
   approved: number;
   booked: number;

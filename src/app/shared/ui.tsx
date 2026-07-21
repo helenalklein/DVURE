@@ -89,12 +89,13 @@ export function TextInput({ label, placeholder, type="text", defaultValue, value
   );
 }
 
-export function FSelect({ label, options }: { label?: string; options: string[] }) {
+export function FSelect({ label, options, value, onChange }: { label?: string; options: string[]; value?: string; onChange?: (v: string) => void }) {
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
       <div className="relative">
-        <select className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+        <select value={value} onChange={onChange ? e=>onChange(e.target.value) : undefined}
+          className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
           {options.map(o => <option key={o}>{o}</option>)}
         </select>
         <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
