@@ -22,7 +22,7 @@ type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "require
 
 function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: () => void; onLater: () => void }) {
   return (
-    <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="glass-strong border rounded-md w-full max-w-md mx-4 overflow-hidden shadow-xl">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="text-sm font-semibold">Contract Generated</div>
@@ -197,7 +197,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
       {campaign.type==="Runway" && (
         <div className="px-3 pt-3 border-t border-border">
           <button onClick={onOpenRelay}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-[#2a2a2a] transition-colors cursor-pointer">
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer">
             <Radio size={13}/> Open Relay
           </button>
           <div className="text-[9px] text-muted-foreground text-center mt-1.5">Live show-day operations</div>
@@ -214,7 +214,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
       </div>
       <div className="px-3 pb-3 border-t border-border pt-3">
         <button onClick={onNewCampaign}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-[#2a2a2a] transition-colors">
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors">
           <Plus size={13}/> New Campaign
         </button>
       </div>
@@ -330,7 +330,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                   <div className={cx("px-4 py-3 border-b border-border flex items-center justify-between shrink-0", stage.id==="booked"?"bg-foreground":"glass")}>
                     <div className="flex items-center gap-2">
                       <span className={cx("text-sm font-semibold",stage.id==="booked"?"text-primary-foreground":"")}>{stage.label}</span>
-                      <span className={cx("text-xs font-mono px-1.5 py-0.5 rounded-sm font-semibold",stage.id==="booked"?"bg-white/20 text-primary-foreground":"bg-secondary text-foreground")}>{cards.length}</span>
+                      <span className={cx("text-xs font-mono px-1.5 py-0.5 rounded-sm font-semibold",stage.id==="booked"?"bg-primary-foreground/15 text-primary-foreground":"bg-secondary text-foreground")}>{cards.length}</span>
                     </div>
                     {cards.length>0&&(
                       <button onClick={()=>setSelected(p=>{const ids=cards.map(c=>c.id);const all=ids.every(id=>p.includes(id));return all?p.filter(id=>!ids.includes(id)):[...new Set([...p,...ids])];})}
@@ -388,7 +388,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                                 <button key={a.label} onClick={()=>moveWithUndo(t.id,a.stage,a.label)}
                                   className={cx("flex-1 py-1.5 text-[10px] font-medium transition-colors",
                                     a.label==="Reject"?"text-muted-foreground hover:bg-muted"
-                                      :a.label==="Book"||a.label==="Approve"?"bg-foreground text-primary-foreground hover:bg-[#2a2a2a]"
+                                      :a.label==="Book"||a.label==="Approve"?"bg-foreground text-primary-foreground hover:bg-foreground/90"
                                       :"text-muted-foreground hover:bg-secondary hover:text-foreground"
                                   )}>{a.label}</button>
                               ))}
@@ -467,7 +467,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                     placeholder="Leave a comment for your team…" rows={2}
                     className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
                   <button onClick={()=>postComment(drawer.id)} disabled={!commentDraft.trim()}
-                    className="shrink-0 px-3 rounded-md bg-foreground text-primary-foreground text-xs font-medium hover:bg-[#2a2a2a] transition-colors disabled:opacity-30 disabled:pointer-events-none">
+                    className="shrink-0 px-3 rounded-md bg-foreground text-primary-foreground text-xs font-medium hover:bg-foreground/90 transition-colors disabled:opacity-30 disabled:pointer-events-none">
                     Post
                   </button>
                 </div>
@@ -480,7 +480,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
             </div>
             <div className="border-t border-border p-3 space-y-2 shrink-0">
               <button onClick={()=>{moveWithUndo(drawer.id,"approved","Approved");setDrawer(null);}}
-                className="w-full py-2 text-xs font-medium bg-foreground text-primary-foreground rounded-md hover:bg-[#2a2a2a] transition-colors">
+                className="w-full py-2 text-xs font-medium bg-foreground text-primary-foreground rounded-md hover:bg-foreground/90 transition-colors">
                 Approve
               </button>
               <button onClick={()=>{setDeclineModal(drawer);setDrawer(null);}}
@@ -513,10 +513,10 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
           <div className="flex items-center gap-2">
             {["Approve","Book"].map(label=>{
               const m: Record<string,SubmissionStage>={Approve:"approved",Book:"booked"};
-              return <button key={label} onClick={()=>bulkMove(selected,m[label],label)} className="text-xs font-medium bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-md">{label}</button>;
+              return <button key={label} onClick={()=>bulkMove(selected,m[label],label)} className="text-xs font-medium bg-primary-foreground/15 hover:bg-primary-foreground/25 px-3 py-1.5 rounded-md">{label}</button>;
             })}
-            <button onClick={()=>bulkMove(selected,"rejected","Rejected")} className="text-xs text-white/60 hover:text-white hover:bg-white/10 px-2 py-1.5 rounded-md">Reject</button>
-            <button onClick={()=>setSelected([])} className="ml-1 text-white/60 hover:text-white"><X size={15}/></button>
+            <button onClick={()=>bulkMove(selected,"rejected","Rejected")} className="text-xs text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10 px-2 py-1.5 rounded-md">Reject</button>
+            <button onClick={()=>setSelected([])} className="ml-1 text-primary-foreground/60 hover:text-primary-foreground"><X size={15}/></button>
           </div>
         </div>
       )}
@@ -530,7 +530,7 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
       )}
 
       {declineModal && (
-        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="glass-strong border rounded-md w-80 overflow-hidden shadow-xl">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div className="text-sm font-semibold">Reject — {declineModal.name}</div>
@@ -691,7 +691,7 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
       </div>
 
       {drawer && (
-        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="glass-strong border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
               <div className="text-sm font-semibold">Look {drawer.number}</div>
@@ -1090,7 +1090,7 @@ function CollaborationTab() {
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
             placeholder={isInternal ? "Message your team…" : "Message the campaign group…"} rows={2}
             className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
-          <button onClick={send} className="p-2.5 bg-foreground hover:bg-[#2a2a2a] text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
+          <button onClick={send} className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
             <Send size={15}/>
           </button>
         </div>
@@ -1202,7 +1202,7 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
                   <span className="flex-1 text-sm">{a.msg}</span>
                   <button onClick={()=>{ openCampaign(a.campaignId); setAttentionOpen(false); }}
                     className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors cursor-pointer",
-                      a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-[#2a2a2a]":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                      a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-foreground/90":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
                     )}>{a.action}</button>
                 </div>
               ))}
@@ -1210,10 +1210,10 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
           </div>
         ) : (
           <button onClick={()=>setAttentionOpen(true)}
-            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors cursor-pointer">
+            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
             <AlertCircle size={16}/>
             {urgentCount>0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-foreground border border-foreground text-[9px] font-bold rounded-full flex items-center justify-center">{urgentCount}</span>
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-urgent text-urgent-foreground border-2 border-background text-[9px] font-bold rounded-full flex items-center justify-center">{urgentCount}</span>
             )}
           </button>
         )}
@@ -1538,7 +1538,7 @@ function GlobalPayments() {
       </div>
 
       {showPayModal && selected && bd && (
-        <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="glass-strong border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden relative">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
@@ -1570,7 +1570,7 @@ function GlobalPayments() {
             </div>
             <div className="px-6 pb-6">
               <button onClick={()=>{ setPayState("processing"); setTimeout(()=>setShowPayModal(false), 3200); }}
-                className="w-full py-3.5 rounded-md text-sm font-semibold tracking-widest uppercase bg-foreground hover:bg-[#2a2a2a] text-primary-foreground transition-all cursor-pointer">
+                className="w-full py-3.5 rounded-md text-sm font-semibold tracking-widest uppercase bg-foreground hover:bg-foreground/90 text-primary-foreground transition-all cursor-pointer">
                 Authorize Payment
               </button>
             </div>
@@ -1690,7 +1690,7 @@ function MessagingScreen() {
                   <div className={cx("text-sm truncate mb-1", !m.read&&"font-semibold")}>{m.subject}</div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] text-muted-foreground truncate">{m.org}</span>
-                    {m.urgent && <span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
+                    {m.urgent && <span className="text-[8px] font-mono border border-urgent text-urgent px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
                   </div>
                 </div>
               </div>
@@ -1712,12 +1712,12 @@ function UrgentToggle({ defaultUrgent }: { defaultUrgent: boolean }) {
   return (
     <button type="button" onClick={()=>setUrgent(u=>!u)}
       className={cx("flex items-center gap-2 px-3 py-2 rounded-md border text-sm transition-colors cursor-pointer",
-        urgent ? "border-[#C0392B] text-[#C0392B] bg-[#C0392B]/5" : "border-border text-muted-foreground hover:border-foreground/40"
+        urgent ? "border-urgent text-urgent bg-urgent/5" : "border-border text-muted-foreground hover:border-foreground/40"
       )}>
       <span className={cx("w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0",
-        urgent ? "bg-[#C0392B] border-[#C0392B]" : "border-border"
+        urgent ? "bg-urgent border-urgent" : "border-border"
       )}>
-        {urgent && <Check size={9} strokeWidth={3} className="text-white"/>}
+        {urgent && <Check size={9} strokeWidth={3} className="text-urgent-foreground"/>}
       </span>
       Mark as urgent
     </button>
@@ -1759,7 +1759,7 @@ function MessageDetailPane({ msg, onReply, onToggleRead }: { msg: typeof INBOX_M
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-6 py-4 border-b border-border shrink-0">
         <div className="flex items-center gap-2 mb-1">
-          {msg.urgent && <span className="text-[8px] font-mono border border-[#C0392B] text-[#C0392B] px-1.5 py-0.5 rounded-sm tracking-wider">URGENT</span>}
+          {msg.urgent && <span className="text-[8px] font-mono border border-urgent text-urgent px-1.5 py-0.5 rounded-sm tracking-wider">URGENT</span>}
           <div className="text-sm font-semibold">{msg.subject}</div>
         </div>
         <div className="text-xs text-muted-foreground">{msg.sender} · {msg.org} · {msg.title} · {msg.date}</div>
@@ -2153,7 +2153,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           {activityOpen ? (
             <ActivityFeedPanel onClose={()=>setActivityOpen(false)}/>
           ) : (
-            <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-[#2a2a2a] transition-colors cursor-pointer">
+            <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
               <List size={16}/>
             </button>
           )}

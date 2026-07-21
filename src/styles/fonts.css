@@ -2,16 +2,6 @@
    system serif if offline, so nothing breaks without network access. */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
 
-/* High-contrast didone serif for the DVURE wordmark specifically — sharp
-   hairline serifs and dramatic thick/thin stroke contrast read as
-   European fashion-editorial (think magazine mastheads), the opposite of
-   Fraunces' warm, rounded, slightly playful default character. */
-@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap');
-
-/* Warm geometric sans for body copy and free-text fields — replaces the
-   default system-ui stack, which read as cold/clinical next to Fraunces.
-   Outfit's rounded, geometric letterforms are visually distinct enough
-   from system-ui/Segoe/San Francisco to read as an obvious change rather
-   than a near-identical swap (Plus Jakarta Sans, tried first, was too
-   close to the system default to register as different at a glance). */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+/* Inter for body copy and free-text fields — DVURE's brand-specified
+   secondary typeface. Replaces Outfit. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

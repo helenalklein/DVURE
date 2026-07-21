@@ -54,7 +54,7 @@ export function Btn({ children, variant="primary", size="md", onClick, disabled,
   const base = "inline-flex items-center justify-center gap-1.5 font-medium rounded-md transition-colors cursor-pointer select-none";
   const sizes = { sm:"px-3 py-1.5 text-xs", md:"px-4 py-2 text-sm", lg:"px-5 py-2.5 text-sm" };
   const variants = {
-    primary:"bg-foreground text-primary-foreground hover:bg-[#242424] shadow-sm",
+    primary:"bg-gold text-gold-foreground hover:bg-gold/90 shadow-sm",
     secondary:"bg-secondary text-secondary-foreground border border-border hover:bg-accent",
     ghost:"text-muted-foreground hover:text-foreground hover:bg-accent",
     outline:"bg-card text-foreground border border-border hover:bg-secondary",
@@ -271,7 +271,7 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
 // surfaces; existing bespoke modals keep their own markup for now.
 export function Modal({ onClose, maxWidth = "max-w-md", children }: { onClose: () => void; maxWidth?: string; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 bg-foreground/25 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className={cx("glass-strong border rounded-xl w-full shadow-2xl overflow-hidden", maxWidth)} onClick={e=>e.stopPropagation()}>
         {children}
       </div>

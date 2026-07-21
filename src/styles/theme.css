@@ -2,25 +2,25 @@
 
 :root {
   --font-size: 14px;
-  --background: #F7F7F5;
-  --foreground: #0A0A0A;
+  --background: #F7F5F1;
+  --foreground: #0B0B0C;
   --card: #FFFFFF;
-  --card-foreground: #0A0A0A;
+  --card-foreground: #0B0B0C;
   --popover: #FFFFFF;
-  --popover-foreground: #0A0A0A;
-  --primary: #0A0A0A;
+  --popover-foreground: #0B0B0C;
+  --primary: #0B0B0C;
   --primary-foreground: #FFFFFF;
-  --secondary: #ECECE9;
-  --secondary-foreground: #171717;
-  --muted: #F0F0EE;
-  --muted-foreground: #86847E;
-  --accent: #E6E5E1;
-  --accent-foreground: #0A0A0A;
-  --destructive: #3A3A3A;
+  --secondary: #ECE9E3;
+  --secondary-foreground: #1C1C1E;
+  --muted: #F0EEE8;
+  --muted-foreground: #6E675D;
+  --accent: #E6E2D9;
+  --accent-foreground: #0B0B0C;
+  --destructive: #C0392B;
   --destructive-foreground: #FFFFFF;
-  --border: #E3E2DD;
+  --border: #E3DFD5;
   --input: transparent;
-  --input-background: #FBFBFA;
+  --input-background: #FBFAF7;
   --switch-background: #CCCCCC;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
@@ -40,15 +40,26 @@
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
   --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans: "Outfit", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  /* Off-white secondary accent — replaces an earlier sandy-beige motif
-     entirely (not just lightened) after feedback that the warmth itself
-     was the problem. Reserved for numbers/features that deserve a bit
-     more presence than plain gray but shouldn't compete with true
-     "needs your attention now" black (e.g. the Overdue metric). Apply
-     deliberately, not as a blanket replacement for the black accent. */
-  --offwhite: #F3F2EE;
-  --offwhite-foreground: #3F3E3A;
+  --font-sans: "Inter", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  /* Soft gold accent — DVURE's signature brand color, reserved for the
+     wordmark's "D" and primary CTAs (Btn variant="primary"). Kept rare
+     deliberately: the brand reference itself uses gold sparingly, not as
+     a blanket UI color, so it should read as premium, not decorative. */
+  --gold: #B8A36A;
+  --gold-foreground: #0B0B0C;
+  /* Urgent/overdue accent — the raw DVURE red, unmodified. (A brightened
+     variant lives in .dark, where it's needed for legibility against
+     much darker backgrounds — not needed here.) */
+  --urgent: #C0392B;
+  --urgent-foreground: #FFFFFF;
+  /* Off-white secondary accent — now literally Stone, one of the five
+     DVURE brand colors, rather than a separately-invented near-white.
+     Reserved for numbers/features that deserve a bit more presence than
+     plain gray but shouldn't compete with true "needs your attention
+     now" black (e.g. the Overdue metric). Apply deliberately, not as a
+     blanket replacement for the black accent. */
+  --offwhite: #DAD7CF;
+  --offwhite-foreground: #0B0B0C;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -60,28 +71,30 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --background: #0B0B0C;
+  --foreground: #DAD7CF;
   /* Cards sit a notch above the page background rather than matching it
      exactly — the layered-panel look ops consoles (Linear/Stripe/Vercel)
      rely on for hierarchy in a black/white/gray-only palette. */
-  --card: oklch(0.195 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.195 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
+  --card: #1C1C1E;
+  --card-foreground: #DAD7CF;
+  --popover: #1C1C1E;
+  --popover-foreground: #DAD7CF;
+  --primary: #DAD7CF;
+  --primary-foreground: #0B0B0C;
+  --secondary: #393634;
+  --secondary-foreground: #DAD7CF;
+  --muted: #393634;
+  --muted-foreground: #A9A59C;
+  --accent: #393634;
+  --accent-foreground: #DAD7CF;
+  --destructive: #C0392B;
+  --destructive-foreground: #FFFFFF;
+  --border: #302F2E;
+  --input: #393634;
+  --input-background: #1C1C1E;
+  --switch-background: #393634;
+  --ring: #DAD7CF;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --chart-1: oklch(0.488 0.243 264.376);
@@ -89,6 +102,16 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  --glass-bg: rgba(28, 28, 30, 0.62);
+  --glass-bg-strong: rgba(28, 28, 30, 0.82);
+  --glass-bg-subtle: rgba(28, 28, 30, 0.92);
+  --glass-border: rgba(218, 215, 207, 0.08);
+  --gold: #B8A36A;
+  --gold-foreground: #0B0B0C;
+  --urgent: #D9483A;
+  --urgent-foreground: #FFFFFF;
+  --offwhite: #DAD7CF;
+  --offwhite-foreground: #0B0B0C;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
@@ -128,6 +151,10 @@
   --color-chart-5: var(--chart-5);
   --color-offwhite: var(--offwhite);
   --color-offwhite-foreground: var(--offwhite-foreground);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-urgent: var(--urgent);
+  --color-urgent-foreground: var(--urgent-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -154,6 +181,13 @@
       radial-gradient(ellipse 80% 60% at 15% -10%, rgba(0,0,0,0.05), transparent),
       radial-gradient(ellipse 70% 50% at 100% 0%, rgba(0,0,0,0.035), transparent);
     background-attachment: fixed;
+  }
+
+  /* The light-mode glows above are invisible on a black page — rather than
+     inventing a dark-appropriate glow (even a faint gold one risks
+     diluting gold's rarity as an accent), just drop it in dark mode. */
+  .dark body {
+    background-image: none;
   }
 
   /**
@@ -249,15 +283,14 @@
   .font-display {
     font-family: var(--font-display);
   }
-  /* DVURE wordmark AND the circular "D" mark both use this now — Bodoni
-     Moda's extreme thick/thin stroke contrast and razor hairline serifs
-     read as sharp, cold, European fashion-editorial. Pushed further than
-     the first pass: opsz maxed out and weight up near black for maximum
-     stroke-contrast drama — exclusive/domineering rather than merely
-     "serious." */
+  /* DVURE wordmark AND the circular "D" mark both use this — tuned to
+     approximate Canela (the brand's actual, non-free typeface) using
+     Fraunces, already loaded for this purpose. Moderate opsz/weight:
+     warm and humanist, not Bodoni's razor-hairline high-contrast drama
+     from the previous pass. */
   .font-wordmark {
-    font-family: "Bodoni Moda", ui-serif, Georgia, "Times New Roman", serif;
-    font-variation-settings: "opsz" 96;
-    font-weight: 800;
+    font-family: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+    font-variation-settings: "opsz" 28;
+    font-weight: 600;
   }
 }

@@ -87,8 +87,8 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
     <div className="h-screen flex bg-background overflow-hidden">
       <aside className="w-52 shrink-0 glass border-r flex flex-col">
         <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
-          <div className="w-9 h-9 bg-gradient-to-br from-[#C9961A] to-[#9A7015] rounded-full flex items-center justify-center shrink-0">
-            <span className="text-white text-xs font-bold">JW</span>
+          <div className="w-9 h-9 bg-gold rounded-full flex items-center justify-center shrink-0">
+            <span className="text-gold-foreground text-xs font-bold">JW</span>
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold truncate">{DEMO_MODEL_NAME}</div>
