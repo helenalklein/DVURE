@@ -1979,6 +1979,9 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             <button onClick={onLogout} className="w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-2">
               <LogOut size={13}/> Sign out
             </button>
+            <div className="px-3 pt-3 text-[10px] text-muted-foreground leading-relaxed">
+              Need help? <span className="text-foreground font-medium">support@dvure.com</span>
+            </div>
           </div>
         </div>
         <div className="flex-1 overflow-auto p-8">
@@ -2049,9 +2052,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Organization</h2><p className="text-sm text-muted-foreground">Manage your brand profile.</p></div>
                 <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
-                  Organization names can't be changed here once set — contact{" "}
-                  <a href="mailto:support@dvure.com" className="text-foreground underline underline-offset-2 hover:text-foreground/80">support@dvure.com</a>{" "}
-                  for a rename.
+                  Organization names can't be changed here once set — contact <span className="text-foreground font-medium">support@dvure.com</span> for a rename.
                 </div>
                 <div className="space-y-3">
                   <div>
