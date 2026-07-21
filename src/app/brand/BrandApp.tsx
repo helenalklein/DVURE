@@ -71,7 +71,7 @@ function ExclamationIcon({ size = 15, className }: { size?: number; className?: 
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
   { id:"campaigns",        label:"Campaigns",  Icon:Camera                },
-  { id:"urgent",           label:"Urgent/Overdue", Icon:ExclamationIcon    },
+  { id:"urgent",           label:"Tasks",      Icon:ExclamationIcon        },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
   { id:"messaging",        label:"Messaging",  Icon:MessageSquare          },
@@ -1229,7 +1229,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
   const byType = (t: string) => OVERDUE_ACTIONS.filter(a=>a.type===t).length;
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Urgent/Overdue" sub={`Acne Studios · ${OVERDUE_ACTIONS.length} actions past due`}/>
+      <TopBar title="Tasks" sub={`Acne Studios · ${OVERDUE_ACTIONS.length} actions past due`}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="flex gap-10">
           <div className="flex-1 min-w-0 max-w-2xl space-y-3">
@@ -1258,7 +1258,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
               {[
                 { label:"Payments",  value:byType("Payment") },
                 { label:"Contracts", value:byType("Contract") },
-                { label:"Reviews",   value:byType("Review") },
+                { label:"Talent Review", value:byType("Review") },
               ].map((s,i)=>(
                 <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
                   <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
