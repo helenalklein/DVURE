@@ -10,13 +10,15 @@ import {
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign" | "relay";
 type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
+
+const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
 
 // ─── CONTRACT MODAL ────────────────────────────────────────────────────────
 
@@ -152,11 +154,12 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
     .flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, counts }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, counts, fullExtensionUntil }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
-  onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; counts: Record<string,number>;
+  onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
 }) {
   const nav = campaignNavFor(campaign.type);
+  const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
@@ -182,8 +185,8 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         <div className="text-xs font-semibold leading-snug">{campaign.name}</div>
         <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{campaign.type} · Due {campaign.due}</div>
         <div className="text-[10px] text-muted-foreground font-mono mt-1.5 flex items-center gap-1.5">
-          <span>Submissions {campaign.submissionOpen} – {campaign.submissionClose}</span>
-          {MOCK_NOW > new Date(campaign.submissionClose)
+          <span>Submissions {campaign.submissionOpen} – {effectiveClose}</span>
+          {MOCK_NOW > new Date(effectiveClose)
             ? <span className="text-urgent font-semibold">Closed</span>
             : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
         </div>
@@ -774,13 +777,86 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
 
 // ─── CAMPAIGN WORKSPACE ─────────────────────────────────────────────────────
 
+type SubmissionExtension = { agencies: string[]; until: string };
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+}
+
+// Brands can grant agencies extra time past a campaign's original
+// submission close date — e.g. a few strong late portfolios trickling in.
+// Defaults to the shortest useful bump (1 day) and to everyone the brand
+// already works with, since narrowing to specific agencies is the less
+// common case.
+function ExtendSubmissionModal({ campaign, onClose, onGrant }: {
+  campaign: Campaign; onClose: () => void; onGrant: (ext: SubmissionExtension) => void;
+}) {
+  const [days, setDays] = useState(1);
+  const [selectedAgencies, setSelectedAgencies] = useState<string[]>(PARTNERED_AGENCIES);
+  const allSelected = selectedAgencies.length === PARTNERED_AGENCIES.length;
+  const toggleAgency = (name: string) =>
+    setSelectedAgencies(prev => prev.includes(name) ? prev.filter(a=>a!==name) : [...prev, name]);
+
+  const until = addDays(campaign.submissionClose, days);
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-sm">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-sm font-semibold">Extend Submission Window</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-4">
+        <div>
+          <FieldLabel>Extend by</FieldLabel>
+          <div className="flex items-center gap-2">
+            <input type="number" min={1} value={days} onChange={e=>setDays(Math.max(1, Number(e.target.value)||1))}
+              className="w-20 border border-border rounded-md bg-input-background px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+            <span className="text-sm text-muted-foreground">day{days===1?"":"s"} — new close date {until}</span>
+          </div>
+        </div>
+        <div>
+          <FieldLabel>Agencies</FieldLabel>
+          <div className="border border-border rounded-md divide-y divide-border">
+            <label className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-secondary">
+              <input type="checkbox" checked={allSelected}
+                onChange={()=>setSelectedAgencies(allSelected ? [] : PARTNERED_AGENCIES)}
+                className="accent-foreground"/>
+              <span className="text-sm font-medium">Select All</span>
+            </label>
+            {PARTNERED_AGENCIES.map(name=>(
+              <label key={name} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-secondary">
+                <input type="checkbox" checked={selectedAgencies.includes(name)} onChange={()=>toggleAgency(name)} className="accent-foreground"/>
+                <span className="text-sm">{name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <Btn variant="primary" disabled={selectedAgencies.length===0} onClick={()=>onGrant({ agencies:selectedAgencies, until })}>Grant Extension</Btn>
+        <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
   campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
 }) {
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [contractModal, setContractModal] = useState<Talent|null>(null);
+  const [extensions, setExtensions] = useState<SubmissionExtension[]>([]);
+  const [showExtendModal, setShowExtendModal] = useState(false);
 
   const campaign = CAMPAIGNS.find(c=>c.id===campaignId) ?? CAMPAIGNS[0];
+  // Only an extension covering every partnered agency moves the
+  // campaign-wide Open/Closed indicator — partial extensions stay listed
+  // per-agency instead of overstating what's actually open to everyone.
+  const fullExtensionUntil = extensions
+    .filter(e=>e.agencies.length===PARTNERED_AGENCIES.length)
+    .reduce((latest,e)=> !latest || new Date(e.until)>new Date(latest) ? e.until : latest, "" as string);
 
   const counts: Record<string,number> = {
     submitted: talent.filter(t=>t.stage==="submitted").length,
@@ -793,7 +869,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} onOpenRelay={onOpenRelay} counts={counts}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} onOpenRelay={onOpenRelay} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <TopBar title={sectionLabel} sub={campaign.name}/>
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -826,6 +902,26 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                       </div>
                     ))}
                   </div>
+                </div>
+                <div className="glass-subtle border rounded-md p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Talent Submission Window</div>
+                    <Btn variant="outline" size="sm" onClick={()=>setShowExtendModal(true)}>Extend Submission Window</Btn>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-border text-xs">
+                    <span className="text-muted-foreground">Window</span>
+                    <span className="font-medium">{campaign.submissionOpen} – {campaign.submissionClose}</span>
+                  </div>
+                  {extensions.length===0 ? (
+                    <div className="text-xs text-muted-foreground pt-2">No extensions granted yet.</div>
+                  ) : extensions.map((ext,i)=>(
+                    <div key={i} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
+                      <span className="text-muted-foreground">
+                        {ext.agencies.length===PARTNERED_AGENCIES.length ? "All agencies" : ext.agencies.join(", ")}
+                      </span>
+                      <span className="font-medium">Extended to {ext.until}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1005,6 +1101,10 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
       </div>
 
       {contractModal && <ContractModal talent={contractModal} onSend={()=>setContractModal(null)} onLater={()=>setContractModal(null)}/>}
+      {showExtendModal && (
+        <ExtendSubmissionModal campaign={campaign} onClose={()=>setShowExtendModal(false)}
+          onGrant={ext=>{ setExtensions(prev=>[...prev, ext]); setShowExtendModal(false); }}/>
+      )}
     </>
   );
 }
@@ -1281,7 +1381,6 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
 
 // ─── CREATE CAMPAIGN ──────────────────────────────────────────────────────────
 
-const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
 const CAMPAIGN_TYPES = ["Runway","Editorial","Advertising","E-commerce","TV Commercial","Beauty","Other"];
 
 function CreateCampaign({ onBack }: { onBack: () => void }) {
