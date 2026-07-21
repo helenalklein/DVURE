@@ -83,6 +83,7 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
 function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
   active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void;
 }) {
+  const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
@@ -107,7 +108,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
                 active===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}>
               <NavIcon size={15}/>{item.label}
-              {item.badge && <SidebarBadge count={item.badge}/>}
+              {item.id==="urgent" && urgentCount>0 && <SidebarBadge count={urgentCount}/>}
             </button>
           );
         })}
@@ -1124,7 +1125,6 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
   const [attentionOpen, setAttentionOpen] = useState(false);
   const attentionRef = useRef<HTMLDivElement>(null);
   const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
-  const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length;
 
   // Document listener, not a fixed-position click-catcher — a fixed overlay
   // gets clipped to the nearest backdrop-filter ancestor's box (TopBar's
@@ -1212,9 +1212,6 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
           <button onClick={()=>setAttentionOpen(true)}
             className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
             <AlertCircle size={16}/>
-            {urgentCount>0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-urgent text-urgent-foreground border-2 border-background text-[9px] font-bold rounded-full flex items-center justify-center">{urgentCount}</span>
-            )}
           </button>
         )}
       </div>

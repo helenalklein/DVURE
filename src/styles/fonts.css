@@ -1,6 +1,8 @@
 /* Editorial serif for the small circular "D" mark — falls back cleanly to
-   system serif if offline, so nothing breaks without network access. */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&display=swap');
+   system serif if offline, so nothing breaks without network access.
+   Requesting the true variable-weight range (rather than fixed 300/500/600
+   instances) so the wordmark can tune the SOFT/WONK/opsz axes at runtime. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap');
 
 /* Inter for body copy and free-text fields — DVURE's brand-specified
    secondary typeface. Replaces Outfit. */
