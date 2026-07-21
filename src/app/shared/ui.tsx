@@ -26,55 +26,6 @@ export function UserAvatar({ name, className = "" }: { name: string; className?:
   );
 }
 
-// Hand-drawn vector recreation of the DVURE brand mark and wordmark —
-// traced from the brand reference (not a font substitution, since the
-// reference's actual typeface, Canela, is commercial and unavailable to
-// load here). Single "D" glyph and the full 5-letter lockup, both scale
-// via width/height on the wrapping <svg> and take color from `className`
-// (fill="currentColor").
-const DVURE_D_PATH = `M 8,150 L 8,141 L 24,141 L 24,19 L 8,19 L 8,10 L 46,10
-  C 70,10 88,14 99,30 C 107,42 110,60 110,80 C 110,100 107,118 99,130
-  C 88,146 70,150 46,150 Z
-  M 40,25 L 40,135 L 46,135 C 62,135 74,131 82,118 C 89,107 91,94 91,80
-  C 91,66 89,53 82,42 C 74,29 62,25 46,25 Z`;
-
-export function DvureMark({ className = "" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 120 160" className={className} fill="currentColor">
-      <path fillRule="evenodd" d={DVURE_D_PATH}/>
-    </svg>
-  );
-}
-
-const DVURE_WORDMARK_LETTERS: { d: string; width: number }[] = [
-  { d: DVURE_D_PATH, width: 120 },
-  { d: `M 8,10 L 34,10 L 34,19 L 22,19 L 60,150 L 52,150 Z
-        M 98,10 L 124,10 L 124,19 L 108,19 L 68,150 L 60,150 Z`, width: 132 },
-  { d: `M 0,10 L 34,10 L 34,19 L 26,19 L 26,100 C 26,135 42,155 60,157
-        C 78,155 94,135 94,100 L 94,19 L 86,19 L 86,10 L 120,10 L 120,19 L 106,19
-        L 106,102 C 106,142 84,166 60,168 C 36,166 14,142 14,102 L 14,19 L 0,19 Z`, width: 130 },
-  { d: `M 8,150 L 8,10 L 50,10 C 74,10 92,18 92,45 C 92,68 78,80 58,84
-        L 100,150 L 78,150 L 40,88 L 26,88 L 26,150 Z
-        M 26,25 L 26,72 L 46,72 C 62,72 72,64 72,46 C 72,30 62,25 46,25 Z`, width: 108 },
-  { d: `M 8,10 L 100,10 L 100,28 L 26,28 L 26,72 L 80,72 L 80,88 L 26,88
-        L 26,132 L 100,132 L 100,150 L 8,150 Z`, width: 108 },
-];
-
-export function DvureWordmark({ className = "" }: { className?: string }) {
-  const gap = 22;
-  let x = 0;
-  const glyphs = DVURE_WORDMARK_LETTERS.map(({ d, width }) => {
-    const g = <g key={x} transform={`translate(${x},0)`}><path fillRule="evenodd" d={d}/></g>;
-    x += width + gap;
-    return g;
-  });
-  const totalWidth = x - gap;
-  return (
-    <svg viewBox={`0 0 ${totalWidth} 180`} className={className} fill="currentColor">
-      {glyphs}
-    </svg>
-  );
-}
 
 export function PolaroidIcon({ size = 15, className = "" }: { size?: number; className?: string }) {
   return (
