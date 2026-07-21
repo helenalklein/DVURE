@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles } from "lucide-react";
 import type { Role } from "./shared/types";
-import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
+import { FieldLabel, Modal, Btn, TextInput, DvureMark, DvureWordmark } from "./shared/ui";
 
 type SignupStep = "role" | "form" | "success";
 type SignupRole = "brand" | "agency";
@@ -34,9 +34,9 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-14 h-14 bg-foreground rounded-full flex items-center justify-center mx-auto mb-5 shadow-md">
-            <span className="font-wordmark text-gold text-2xl">D</span>
+            <DvureMark className="w-6 h-6 text-gold"/>
           </div>
-          <div className="font-wordmark text-4xl tracking-wide">DVURE</div>
+          <DvureWordmark className="h-9 mx-auto"/>
           <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-2">
             Events. People. Performance.
           </div>

@@ -283,14 +283,4 @@
   .font-display {
     font-family: var(--font-display);
   }
-  /* DVURE wordmark AND the circular "D" mark both use this — tuned to
-     approximate Canela (the brand's actual, non-free typeface) using
-     Fraunces, already loaded for this purpose. Moderate opsz/weight:
-     warm and humanist, not Bodoni's razor-hairline high-contrast drama
-     from the previous pass. */
-  .font-wordmark {
-    font-family: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
-    font-variation-settings: "opsz" 100, "SOFT" 15, "WONK" 0;
-    font-weight: 550;
-  }
 }
