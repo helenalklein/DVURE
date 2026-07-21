@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles } from "lucide-react";
 import type { Role } from "./shared/types";
 import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
-import dvureLogo from "../assets/dvure-logo.png";
+import dvureLogo from "../assets/dvure-logo-dark.png";
 
 type SignupStep = "role" | "form" | "success";
 type SignupRole = "brand" | "agency";
@@ -34,7 +34,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
     <div className="h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src={dvureLogo} alt="DVURE" className="w-56 mx-auto rounded-lg shadow-xl"/>
+          <img src={dvureLogo} alt="DVURE" className="w-56 mx-auto"/>
         </div>
 
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">
