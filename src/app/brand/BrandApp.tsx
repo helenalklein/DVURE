@@ -1244,10 +1244,10 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
                 <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge label={a.type} variant="draft"/>
-                    <span className="text-[10px] font-mono text-muted-foreground">Due {a.due}</span>
+                    <Badge label={a.type} variant="info"/>
+                    <span className="text-[11px] font-mono font-semibold text-foreground">Due {a.due}</span>
                   </div>
-                  <div className="text-sm">{a.msg}</div>
+                  <div className="text-sm text-muted-foreground">{a.msg}</div>
                 </div>
                 <Btn variant="primary" size="sm" onClick={()=>openCampaign(a.campaignId)}>Review</Btn>
               </div>
@@ -1258,7 +1258,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
           <div className="w-48 shrink-0 min-h-[24rem] border-l border-border pl-6 flex flex-col">
             <div className="bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3">
               <div className="text-3xl font-semibold tabular-nums tracking-tight">{OVERDUE_ACTIONS.length}</div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Urgent Tasks</div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Tasks</div>
             </div>
             <div className="flex-1 flex flex-col">
               {[
