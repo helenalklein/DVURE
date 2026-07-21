@@ -1988,7 +1988,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                 <div><h2 className="text-base font-semibold mb-0.5">Profile</h2><p className="text-sm text-muted-foreground">Your personal account details.</p></div>
                 {!isAdmin && (
                   <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
-                    Your title and organization are set by your organization's administrator and can't be changed here.
+                    Your title is set by your organization's administrator and can't be changed here.
                   </div>
                 )}
                 <div className="space-y-3">
@@ -2004,9 +2004,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                   </div>
                   <div>
                     <FieldLabel>Organization</FieldLabel>
-                    {isAdmin
-                      ? <TextInput placeholder="Organization" defaultValue={user?.org}/>
-                      : <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>}
+                    <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>
                   </div>
                   <TextInput label="Email" type="email" placeholder="you@company.com" defaultValue={user?.email}/>
                   <TextInput label="Phone" type="tel" placeholder="+1 000 000 0000" defaultValue={user?.phone}/>
@@ -2050,14 +2048,14 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             {tab === "org" && (
               <div className="space-y-5">
                 <div><h2 className="text-base font-semibold mb-0.5">Organization</h2><p className="text-sm text-muted-foreground">Manage your brand profile.</p></div>
-                {!isAdmin && (
-                  <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">Only administrators can rename the organization.</div>
-                )}
+                <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
+                  Organization names can't be changed here once set — contact customer service for a rename.
+                </div>
                 <div className="space-y-3">
-                  {isAdmin
-                    ? <TextInput label="Organization Name" placeholder="e.g. Acne Studios" defaultValue={user?.org}/>
-                    : (<div><FieldLabel>Organization Name</FieldLabel><div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div></div>)}
-                  {isAdmin && <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>}
+                  <div>
+                    <FieldLabel>Organization Name</FieldLabel>
+                    <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>
+                  </div>
                 </div>
               </div>
             )}
