@@ -10,8 +10,8 @@ import {
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag } from "../shared/ui";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
@@ -93,7 +93,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
           <span className="text-primary-foreground text-xs font-bold">A</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate">Acne Studios</div>
+          <div className="text-sm font-semibold truncate flex items-center gap-1.5">Acne Studios <CountryFlag country={ORG_COUNTRY["Acne Studios"]} className="text-xs"/></div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
         <button onClick={()=>onNav("campaigns")} title="Campaigns"
@@ -167,7 +167,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           <span className="text-primary-foreground text-xs font-bold">A</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate">Acne Studios</div>
+          <div className="text-sm font-semibold truncate flex items-center gap-1.5">Acne Studios <CountryFlag country={ORG_COUNTRY["Acne Studios"]} className="text-xs"/></div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
         <button onClick={onHome} title="Campaigns"
@@ -375,7 +375,9 @@ function Moodboard({ talent, setTalent, onContractPrompt, onViewAgency }: {
                             </div>
                           </div>
                           <div className="p-2.5 space-y-0.5">
-                            <div className="text-xs font-semibold leading-tight truncate">{t.name}</div>
+                            <div className="text-xs font-semibold leading-tight truncate flex items-center gap-1">
+                              {t.name} <CountryFlag location={t.location} className="text-[11px] shrink-0"/>
+                            </div>
                             <div className="text-[10px] text-muted-foreground truncate">
                               <span className="text-muted-foreground/70">Mother:</span>{" "}
                               <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
@@ -428,7 +430,7 @@ function Moodboard({ talent, setTalent, onContractPrompt, onViewAgency }: {
         {drawer && (
           <div className="w-72 shrink-0 border-l glass-strong flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
-              <div className="text-sm font-semibold truncate">{drawer.name}</div>
+              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{drawer.name} <CountryFlag location={drawer.location} className="text-xs"/></div>
               <button onClick={()=>{setDrawer(null);setSelected(p=>p.filter(x=>x!==drawer.id));}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-4">
@@ -885,7 +887,7 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
             <span className="text-sm font-bold">{agencyName.split(" ").map(w=>w[0]).slice(0,2).join("")}</span>
           </div>
           <div>
-            <div className="text-lg font-semibold leading-tight">{agencyName}</div>
+            <div className="text-lg font-semibold leading-tight flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-base"/></div>
             <Badge label={isDistributed ? "Distributed on this campaign" : "Not distributed on this campaign"} variant={isDistributed ? "active" : "draft"}/>
           </div>
         </div>
@@ -1264,7 +1266,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
             className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
               !isInternal && selectedAgency===a?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
             )}>
-            <Globe size={11} className="shrink-0"/> <span className="truncate">{a}</span>
+            <Globe size={11} className="shrink-0"/> <span className="truncate">{a}</span> <CountryFlag country={ORG_COUNTRY[a]} className="text-[11px] shrink-0"/>
           </button>
         ))}
       </div>

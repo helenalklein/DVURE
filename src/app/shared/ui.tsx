@@ -4,6 +4,46 @@ import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
 
+// City/state/country-code fragment -> {flag, full country name}. Covers
+// the fragments actually used in this app's location strings (US state
+// codes fold to a single US entry). Extend as new countries come up
+// rather than trying to cover every ISO code up front.
+const COUNTRY_LOOKUP: Record<string, { flag: string; name: string }> = {
+  US: { flag:"🇺🇸", name:"United States" },
+  CA: { flag:"🇨🇦", name:"Canada" },
+  UK: { flag:"🇬🇧", name:"United Kingdom" },
+  GB: { flag:"🇬🇧", name:"United Kingdom" },
+  FR: { flag:"🇫🇷", name:"France" },
+  IT: { flag:"🇮🇹", name:"Italy" },
+  DE: { flag:"🇩🇪", name:"Germany" },
+  SE: { flag:"🇸🇪", name:"Sweden" },
+};
+const US_STATE_CODES = new Set(["NY","CA","IL","FL","TX","WA","MA","GA","PA","NJ","CT","AZ","NV","OR","CO"]);
+
+// Derives a country from a "City, XX" location string — reuses the
+// location data already on Talent/RosterModel rather than duplicating a
+// separate country field that could drift out of sync with it.
+export function countryFromLocation(location: string): { flag: string; name: string } | null {
+  const code = location.split(",").pop()?.trim().toUpperCase();
+  if (!code) return null;
+  if (US_STATE_CODES.has(code)) return COUNTRY_LOOKUP.US;
+  return COUNTRY_LOOKUP[code] ?? null;
+}
+
+export function CountryFlag({ location, country, className = "" }: { location?: string; country?: string; className?: string }) {
+  const c = country ? COUNTRY_LOOKUP[country.toUpperCase()] : location ? countryFromLocation(location) : null;
+  if (!c) return null;
+  return (
+    <span className={cx("relative inline-flex group/flag cursor-default", className)}>
+      <span aria-hidden="true">{c.flag}</span>
+      <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap
+        bg-foreground text-primary-foreground text-[10px] font-medium px-2 py-1 rounded-sm opacity-0 group-hover/flag:opacity-100 transition-opacity z-50">
+        {c.name}
+      </span>
+    </span>
+  );
+}
+
 export function XBox({ className = "" }: { className?: string }) {
   return (
     <div className={cx("bg-muted relative overflow-hidden flex items-center justify-center", className)}>

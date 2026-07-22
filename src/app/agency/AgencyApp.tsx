@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider } from "../shared/ui";
-import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, CountryFlag } from "../shared/ui";
+import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage } from "../shared/types";
 
 const AGENCY_NAME = "Elite Model Mgmt.";
@@ -136,7 +136,7 @@ function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
                       </div>
                     )}
                     <div className="p-2.5 space-y-0.5">
-                      <div className="text-xs font-semibold truncate">{m.name}</div>
+                      <div className="text-xs font-semibold truncate flex items-center gap-1">{m.name} <CountryFlag location={m.location} className="text-[11px] shrink-0"/></div>
                       <div className="text-[10px] text-muted-foreground truncate">{m.location}</div>
                       <div className="text-[10px] font-mono font-medium mt-1">{m.rate}</div>
                       {status && (
@@ -340,7 +340,7 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
           <div key={m.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
             <XBox className="w-12 h-12 rounded-md shrink-0"/>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold">{m.name}</div>
+              <div className="text-sm font-semibold flex items-center gap-1.5">{m.name} <CountryFlag location={m.location} className="text-xs"/></div>
               <div className="text-xs text-muted-foreground">{m.location} · {m.email}</div>
             </div>
             <div className="text-xs font-mono">{m.rate}</div>
@@ -520,7 +520,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
               <span className="text-primary-foreground text-xs font-bold">E</span>
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold truncate">{AGENCY_NAME}</div>
+              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{AGENCY_NAME} <CountryFlag country={ORG_COUNTRY[AGENCY_NAME]} className="text-xs"/></div>
               <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Agency</div>
             </div>
           </div>

@@ -126,6 +126,20 @@ export const CAMPAIGNS: Campaign[] = [
   { id:5, name:"AW26 Runway Presentation", type:"Runway",       status:"active",   due:"02/14", dueLabel:"5 weeks out",      dueUrgency:"medium", submitted:12, approved:8,  booked:6, talentNeeded:6, budget:42000, committed:26000, remaining:16000, submissionOpen:"Jun 1, 2026",  submissionClose:"Sep 30, 2026", runwayShowId:1 },
 ];
 
+// One organization = one team = one home country, per the "Prada Berlin
+// and Prada Portugal are separate logins" rule — an org never carries
+// multiple flags; a brand/agency that operates in several countries is
+// modeled as separate organizations, not one org with a country list.
+export const ORG_COUNTRY: Record<string, string> = {
+  "Acne Studios": "SE",
+  "Elite Model Mgmt.": "US",
+  "IMG Models": "US",
+  "Storm Models": "UK",
+  "Wilhelmina": "US",
+  "DNA Models": "US",
+  "Next Models": "US",
+};
+
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
 // Which agencies are distributed on (invited to) a given campaign — the
 // actual access gate for who can message the brand about it. Keyed by
