@@ -71,7 +71,10 @@ function InvitationsView({ onSubmitTalent }: { onSubmitTalent: (campaign: string
 // Visual, alphabetically-indexed model picker — a card board, not a
 // dropdown. This industry casts off photos and physical presence, not
 // text lists, so selection should feel like flipping through a board.
-function RosterPickerModal({ roster, onPick, onClose }: { roster: RosterModel[]; onPick: (id: number) => void; onClose: () => void }) {
+function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
+  roster: RosterModel[]; campaign: string; statusFor: (modelId: number, campaign: string) => CampaignSubmissionStatus | undefined;
+  onPick: (id: number) => void; onClose: () => void;
+}) {
   const [search, setSearch] = useState("");
 
   const groups = useMemo(() => {
@@ -116,17 +119,35 @@ function RosterPickerModal({ roster, onPick, onClose }: { roster: RosterModel[];
           <div key={letter}>
             <div className="text-xs font-display italic text-muted-foreground mb-2 sticky -top-4 bg-transparent">{letter}</div>
             <div className="grid grid-cols-3 gap-3">
-              {models.map(m=>(
-                <button key={m.id} onClick={()=>onPick(m.id)}
-                  className="text-left glass-subtle border rounded-md overflow-hidden hover:border-foreground hover:shadow-md transition-all group">
-                  <XBox className="w-full h-24"/>
-                  <div className="p-2.5 space-y-0.5">
-                    <div className="text-xs font-semibold truncate">{m.name}</div>
-                    <div className="text-[10px] text-muted-foreground truncate">{m.location}</div>
-                    <div className="text-[10px] font-mono font-medium mt-1">{m.rate}</div>
-                  </div>
-                </button>
-              ))}
+              {models.map(m=>{
+                const status = statusFor(m.id, campaign);
+                const blocked = !!status;
+                return (
+                  <button key={m.id} onClick={()=>{ if (!blocked) onPick(m.id); }} disabled={blocked}
+                    className={cx("text-left glass-subtle border rounded-md overflow-hidden transition-all group relative",
+                      blocked ? "opacity-50 cursor-not-allowed" : "hover:border-foreground hover:shadow-md"
+                    )}>
+                    <XBox className="w-full h-24"/>
+                    {status && (
+                      <div className={cx("absolute top-1.5 right-1.5 text-[8px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded-sm font-semibold",
+                        status.status==="declined" ? "bg-urgent text-urgent-foreground" : "bg-offwhite text-offwhite-foreground"
+                      )}>
+                        {status.status==="declined" ? "Declined" : "Submitted"}
+                      </div>
+                    )}
+                    <div className="p-2.5 space-y-0.5">
+                      <div className="text-xs font-semibold truncate">{m.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{m.location}</div>
+                      <div className="text-[10px] font-mono font-medium mt-1">{m.rate}</div>
+                      {status && (
+                        <div className="text-[9px] text-muted-foreground pt-0.5">
+                          {status.status==="declined" ? "Already declined for this campaign" : "Already submitted, awaiting review"}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -135,17 +156,37 @@ function RosterPickerModal({ roster, onPick, onClose }: { roster: RosterModel[];
   );
 }
 
+// A model already submitted (pending or declined) for a given campaign
+// can't be submitted again for that same campaign — regardless of which
+// agency does the resubmitting, a decline is final. modelId/campaign
+// pairs are unique to a specific campaign, so the same model can still
+// be freely submitted to a *different* open campaign.
+type CampaignSubmissionStatus = { modelId: number; campaign: string; status: "pending" | "declined" };
+
 function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: RosterModel[]; onGoToRoster: () => void; initialCampaign?: string }) {
-  const [submitted, setSubmitted] = useState<{ modelId: number; campaign: string }[]>([]);
+  const [submitted, setSubmitted] = useState<CampaignSubmissionStatus[]>([
+    // Pre-seeded to demo the feature: Maya Chen was already declined for
+    // AW25 Womenswear (by whichever agency submitted her first) — she
+    // should read as blocked here regardless of who's looking. Zara
+    // Okafor has a pending submission on a different campaign, which
+    // shouldn't affect submitting her to Run Global SS25.
+    { modelId: 13, campaign: "AW25 Womenswear Campaign", status: "declined" },
+    { modelId: 1,  campaign: "Run Global SS25",          status: "pending"  },
+  ]);
   const [showPicker, setShowPicker] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [pickedCampaign, setPickedCampaign] = useState(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
   const [pickedModelId, setPickedModelId] = useState<number | "">("");
 
-  const submittedIds = new Set(submitted.map(s=>s.modelId));
+  function statusFor(modelId: number, campaign: string) {
+    return submitted.find(s => s.modelId === modelId && s.campaign === campaign);
+  }
+
+  const submittedIds = new Set(submitted.filter(s=>s.status==="pending").map(s=>s.modelId));
   const pickedModel = roster.find(m=>m.id===pickedModelId);
   const pickedInvitation = INVITATIONS.find(i=>i.campaign===pickedCampaign);
   const submissionClosed = pickedInvitation ? submissionIsClosed(pickedInvitation) : false;
+  const pickedStatus = pickedModel ? statusFor(pickedModel.id, pickedCampaign) : undefined;
 
   function selectModel(id: number) {
     setPickedModelId(id);
@@ -195,7 +236,7 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
       </div>
 
       {showPicker && (
-        <RosterPickerModal roster={roster.filter(m=>!submittedIds.has(m.id))} onPick={selectModel} onClose={()=>setShowPicker(false)}/>
+        <RosterPickerModal roster={roster} campaign={pickedCampaign} statusFor={statusFor} onPick={selectModel} onClose={()=>setShowPicker(false)}/>
       )}
 
       {showForm && pickedModel && (
@@ -232,11 +273,18 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
                 This campaign's submission window closed {pickedInvitation!.submissionClose}. Talent can no longer be submitted.
               </div>
             )}
+            {pickedStatus && (
+              <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">
+                {pickedStatus.status==="declined"
+                  ? `${pickedModel.name} was already declined for this campaign and can't be resubmitted.`
+                  : `${pickedModel.name} is already submitted to this campaign, awaiting brand review.`}
+              </div>
+            )}
             <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
           </div>
           <div className="px-5 pb-5 flex gap-2">
-            <Btn variant="primary" disabled={submissionClosed} onClick={()=>{
-              setSubmitted(p=>[...p,{ modelId:pickedModel.id, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"" }]);
+            <Btn variant="primary" disabled={submissionClosed || !!pickedStatus} onClick={()=>{
+              setSubmitted(p=>[...p,{ modelId:pickedModel.id, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"", status:"pending" }]);
               setShowForm(false);
             }}>Submit</Btn>
             <Btn variant="outline" onClick={()=>setShowForm(false)}>Cancel</Btn>

@@ -9,7 +9,13 @@ export type PaymentStatus = "pending" | "processing" | "paid";
 export interface Talent {
   id: number;
   name: string;
+  // agency = who actually submitted this candidate (mother or boutique —
+  // whichever agency clicked submit). motherAgency/boutiqueAgency show on
+  // the card regardless of who submitted, so the brand always knows the
+  // full representation picture, not just the submitter.
   agency: string;
+  motherAgency: string;
+  boutiqueAgency?: string;
   location: string;
   rate: string;
   stage: SubmissionStage;

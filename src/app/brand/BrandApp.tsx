@@ -376,7 +376,12 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                           </div>
                           <div className="p-2.5 space-y-0.5">
                             <div className="text-xs font-semibold leading-tight truncate">{t.name}</div>
-                            <div className="text-[10px] text-muted-foreground truncate">{t.agency}</div>
+                            <div className="text-[10px] text-muted-foreground truncate">
+                              <span className="text-muted-foreground/70">Mother:</span> {t.motherAgency}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground truncate">
+                              <span className="text-muted-foreground/70">Boutique:</span> {t.boutiqueAgency || "None"}
+                            </div>
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
                               <span>{t.height}</span><span>·</span><span className="truncate">{t.location.split(",")[0]}</span>
                             </div>
@@ -438,10 +443,19 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency</div>
-                <div className="bg-secondary rounded-md p-3 space-y-1">
-                  <div className="text-xs font-semibold">{drawer.agency}</div>
-                  <div className="text-[10px] text-muted-foreground">Sophie Chen · sophie@elitemodels.com</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency Representation</div>
+                <div className="bg-secondary rounded-md p-3 space-y-2">
+                  <div>
+                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Mother Agency</div>
+                    <div className="text-xs font-semibold">{drawer.motherAgency}</div>
+                  </div>
+                  <div className="pt-2 border-t border-border">
+                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agency</div>
+                    <div className="text-xs font-semibold">{drawer.boutiqueAgency || "None"}</div>
+                  </div>
+                  <div className="pt-2 border-t border-border text-[10px] text-muted-foreground">
+                    Submitted via {drawer.agency} · Sophie Chen · sophie@elitemodels.com
+                  </div>
                 </div>
               </div>
               <div>
