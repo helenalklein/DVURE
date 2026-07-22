@@ -104,11 +104,14 @@ export function FSelect({ label, options, value, onChange }: { label?: string; o
   );
 }
 
-export function Textarea({ label, placeholder, rows=3, defaultValue }: { label?: string; placeholder: string; rows?: number; defaultValue?: string }) {
+export function Textarea({ label, placeholder, rows=3, defaultValue, value, onChange }: {
+  label?: string; placeholder: string; rows?: number; defaultValue?: string;
+  value?: string; onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+}) {
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <textarea placeholder={placeholder} rows={rows} defaultValue={defaultValue}
+      <textarea placeholder={placeholder} rows={rows} defaultValue={value===undefined ? defaultValue : undefined} value={value} onChange={onChange}
         className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
     </div>
   );

@@ -1,4 +1,4 @@
-import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CastingStageId, CastingEntry, Look, CrewMember } from "./types";
+import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CastingStageId, CastingEntry, Look, CrewMember, CampaignThreadMessage } from "./types";
 
 // ─── TALENT / SUBMISSIONS ──────────────────────────────────────────────────
 // Simplified pipeline vs. the original prototype: Submitted -> Approved/Rejected -> Booked.
@@ -125,6 +125,40 @@ export const CAMPAIGNS: Campaign[] = [
   { id:4, name:"FW24 Campaign",            type:"Editorial",    status:"archived", due:"01/15", dueLabel:"Archived",         dueUrgency:"low",    submitted:41, approved:11, booked:3, talentNeeded:4, budget:15000, committed:15000, remaining:0,     submissionOpen:"Nov 1, 2025",  submissionClose:"Dec 15, 2025" },
   { id:5, name:"AW26 Runway Presentation", type:"Runway",       status:"active",   due:"02/14", dueLabel:"5 weeks out",      dueUrgency:"medium", submitted:12, approved:8,  booked:6, talentNeeded:6, budget:42000, committed:26000, remaining:16000, submissionOpen:"Jun 1, 2026",  submissionClose:"Sep 30, 2026", runwayShowId:1 },
 ];
+
+// ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
+// Which agencies are distributed on (invited to) a given campaign — the
+// actual access gate for who can message the brand about it. Keyed by
+// campaign id.
+export const CAMPAIGN_AGENCIES: Record<number, string[]> = {
+  1: ["Elite Model Mgmt.", "IMG Models", "Storm Models", "Wilhelmina", "DNA Models", "Next Models"],
+  2: ["Elite Model Mgmt.", "IMG Models"],
+  3: ["Elite Model Mgmt.", "DNA Models", "Next Models"],
+  5: ["Elite Model Mgmt.", "IMG Models", "Storm Models"],
+};
+
+// campaignId -> agency name -> that agency's private thread with the
+// brand. Two agencies on the same campaign never share a thread. A
+// message with broadcast:true was sent once by the brand to every
+// agency's thread on that campaign at once (see sendCampaignBroadcast
+// pattern used in BrandApp's Collaboration tab) — the one deliberate
+// exception to threads being fully separate, for "call time changed"
+// style logistics that need to reach everyone.
+export const CAMPAIGN_AGENCY_THREADS: Record<number, Record<string, CampaignThreadMessage[]>> = {
+  1: {
+    "Elite Model Mgmt.": [
+      { id:1, from:"Sophie Chen", fromOrg:"Elite Model Mgmt.", text:"Hi team — confirming Amara is available the full shoot window.", ts:"Jun 19, 10:05 AM" },
+      { id:2, from:"Marcus Webb", fromOrg:"Acne Studios", text:"Perfect, thank you. We'll have contracts out today.", ts:"Jun 19, 10:40 AM" },
+    ],
+    "IMG Models": [
+      { id:1, from:"Diana Park", fromOrg:"IMG Models", text:"Following up on rates for Mila and Petra's bookings.", ts:"Jun 17, 4:05 PM" },
+    ],
+    "Storm Models": [],
+    "Wilhelmina": [],
+    "DNA Models": [],
+    "Next Models": [],
+  },
+};
 
 // Fixed "today" for demo purposes — drives talent-submission-window open/
 // closed state (see Campaign.submissionOpen/submissionClose) without the

@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
 import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider } from "../shared/ui";
-import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT, MOCK_NOW } from "../shared/mockData";
-import type { RosterModel } from "../shared/types";
+import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
+import type { RosterModel, CampaignThreadMessage } from "../shared/types";
 
 const AGENCY_NAME = "Elite Model Mgmt.";
 
@@ -355,6 +355,95 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
   );
 }
 
+const ME_NAME = "Sophie Chen";
+
+// The same private, per-campaign, per-agency thread the brand sees on
+// their side (Collaboration tab) — Elite only ever sees its OWN thread
+// with a brand, never another agency's. There is no way to message a
+// model directly from here; models only get read-only access to this
+// same thread elsewhere.
+function AgencyMessagingView() {
+  const campaignsWithThreads = INVITATIONS
+    .map(inv => ({ inv, campaign: CAMPAIGNS.find(c=>c.name===inv.campaign) }))
+    .filter(x => x.campaign);
+
+  const [selected, setSelected] = useState(campaignsWithThreads[0]?.campaign?.id ?? null);
+  const [threads, setThreads] = useState<Record<number, CampaignThreadMessage[]>>(() => {
+    const init: Record<number, CampaignThreadMessage[]> = {};
+    for (const { campaign } of campaignsWithThreads) {
+      if (campaign) init[campaign.id] = CAMPAIGN_AGENCY_THREADS[campaign.id]?.[AGENCY_NAME] ?? [];
+    }
+    return init;
+  });
+  const [input, setInput] = useState("");
+
+  const selectedCampaign = campaignsWithThreads.find(x=>x.campaign?.id===selected)?.campaign;
+  const msgs = selected!=null ? (threads[selected] ?? []) : [];
+
+  function send() {
+    if (!input.trim() || selected==null) return;
+    setThreads(p=>({ ...p, [selected]: [...(p[selected]??[]), { id:Date.now(), from:ME_NAME, fromOrg:AGENCY_NAME, text:input, ts:"Now" }] }));
+    setInput("");
+  }
+
+  if (campaignsWithThreads.length===0) {
+    return <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md text-sm text-muted-foreground">No campaign threads yet.</div>;
+  }
+
+  return (
+    <div className="flex-1 flex min-h-0 -m-6">
+      <div className="w-56 shrink-0 border-r border-border overflow-y-auto">
+        <div className="px-4 py-2 text-[9px] font-mono text-muted-foreground uppercase tracking-wider border-b border-border">Your Campaign Threads</div>
+        {campaignsWithThreads.map(({ inv, campaign }) => (
+          <button key={campaign!.id} onClick={()=>setSelected(campaign!.id)}
+            className={cx("w-full text-left px-4 py-3 text-xs border-b border-border transition-colors",
+              selected===campaign!.id ? "bg-secondary text-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+            )}>
+            <div className="truncate">{inv.campaign}</div>
+            <div className="text-[10px] text-muted-foreground truncate">{inv.brand}</div>
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="px-6 py-2.5 border-b border-border">
+          <div className="text-xs font-semibold">{selectedCampaign?.name} — {AGENCY_NAME}</div>
+          <div className="text-[10px] text-muted-foreground">Private to {AGENCY_NAME} + the brand — no other agency can see this</div>
+        </div>
+        <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+          {msgs.length===0 && <div className="text-xs text-muted-foreground italic">No messages yet.</div>}
+          {msgs.map(m=>{
+            const isMe = m.from===ME_NAME;
+            return (
+              <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
+                {m.broadcast && <div className="text-[9px] font-mono uppercase tracking-wide text-urgent mb-0.5">Update from brand</div>}
+                <div className={cx("rounded-xl px-4 py-2.5 text-sm max-w-md leading-relaxed",
+                  m.broadcast ? "bg-urgent/10 border border-urgent text-foreground" : isMe ? "bg-foreground text-primary-foreground" : "bg-secondary text-foreground"
+                )}>{m.text}</div>
+                <div className={cx("flex items-center gap-2 text-[10px] text-muted-foreground", isMe && "flex-row-reverse")}>
+                  <span className="font-medium">{isMe ? "Me" : m.from}</span>
+                  {!isMe && <span>· {m.fromOrg}</span>}
+                  <span className="font-mono">{m.ts}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="px-6 py-4 border-t glass shrink-0">
+          <div className="flex gap-3 items-end">
+            <textarea value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
+              placeholder="Message the brand…" rows={2}
+              className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
+            <button onClick={send} className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
+              <Send size={15}/>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PaymentsView() {
   const [tab, setTab] = useState<"receivable"|"invoices">("receivable");
   const myBookings = BOOKINGS.filter(b=>b.agency===AGENCY_NAME);
@@ -462,11 +551,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
             {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
             {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
             {view === "payments" && <PaymentsView/>}
-            {view === "messaging" && (
-              <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
-                <div className="text-sm text-muted-foreground">Messaging · shares the same thread data as Brand once Supabase lands</div>
-              </div>
-            )}
+            {view === "messaging" && <AgencyMessagingView/>}
           </div>
         </main>
       </div>

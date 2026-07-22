@@ -58,6 +58,22 @@ export interface RosterModel {
   exp: string;
 }
 
+// ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
+// Brand<->agency messaging is scoped per campaign AND per agency — two
+// agencies on the same campaign never share a thread or see each other's
+// messages. Models get read-only access to their own agency's thread
+// (no compose, no reply). `broadcast` marks a message sent once by the
+// brand to every agency's thread on a campaign at once (e.g. "call time
+// moved to 8am") — the one exception to threads being fully separate.
+export interface CampaignThreadMessage {
+  id: number;
+  from: string;
+  fromOrg: string;
+  text: string;
+  ts: string;
+  broadcast?: boolean;
+}
+
 // ─── CAMPAIGNS (shared record, individually addressable) ──────────────────
 
 export type CampaignType = "Runway" | "Editorial" | "Advertising" | "E-commerce" | "TV Commercial" | "Beauty" | "Other";

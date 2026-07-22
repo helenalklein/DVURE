@@ -9,9 +9,9 @@ import {
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
-import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look } from "../shared/types";
+import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import RelayConsole from "./relay/RelayConsole";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
@@ -234,8 +234,8 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
 
-function Moodboard({ talent, setTalent, onContractPrompt }: {
-  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; onContractPrompt: (t: Talent) => void;
+function Moodboard({ talent, setTalent, onContractPrompt, onViewAgency }: {
+  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [dragging, setDragging] = useState<number|null>(null);
@@ -377,10 +377,16 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                           <div className="p-2.5 space-y-0.5">
                             <div className="text-xs font-semibold leading-tight truncate">{t.name}</div>
                             <div className="text-[10px] text-muted-foreground truncate">
-                              <span className="text-muted-foreground/70">Mother:</span> {t.motherAgency}
+                              <span className="text-muted-foreground/70">Mother:</span>{" "}
+                              <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
+                                className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
                             </div>
                             <div className="text-[10px] text-muted-foreground truncate">
-                              <span className="text-muted-foreground/70">Boutique:</span> {t.boutiqueAgency || "None"}
+                              <span className="text-muted-foreground/70">Boutique:</span>{" "}
+                              {t.boutiqueAgency ? (
+                                <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.boutiqueAgency!); }}
+                                  className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.boutiqueAgency}</button>
+                              ) : "None"}
                             </div>
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
                               <span>{t.height}</span><span>·</span><span className="truncate">{t.location.split(",")[0]}</span>
@@ -447,11 +453,13 @@ function Moodboard({ talent, setTalent, onContractPrompt }: {
                 <div className="bg-secondary rounded-md p-3 space-y-2">
                   <div>
                     <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Mother Agency</div>
-                    <div className="text-xs font-semibold">{drawer.motherAgency}</div>
+                    <button onClick={()=>onViewAgency(drawer.motherAgency)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.motherAgency}</button>
                   </div>
                   <div className="pt-2 border-t border-border">
                     <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agency</div>
-                    <div className="text-xs font-semibold">{drawer.boutiqueAgency || "None"}</div>
+                    {drawer.boutiqueAgency ? (
+                      <button onClick={()=>onViewAgency(drawer.boutiqueAgency!)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.boutiqueAgency}</button>
+                    ) : <div className="text-xs font-semibold">None</div>}
                   </div>
                   <div className="pt-2 border-t border-border text-[10px] text-muted-foreground">
                     Submitted via {drawer.agency} · Sophie Chen · sophie@elitemodels.com
@@ -856,6 +864,49 @@ function ExtendSubmissionModal({ campaign, onClose, onGrant }: {
   );
 }
 
+// Reached by clicking a mother/boutique agency name from a candidate
+// card. Deliberately minimal — real agency profiles (roster size,
+// standing partnership history, etc.) are follow-up work; this just
+// needs to exist as a real destination with a way to message them.
+function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
+  agencyName: string; campaign: Campaign; talent: Talent[]; onBack: () => void;
+}) {
+  const submittedHere = talent.filter(t => t.agency===agencyName || t.motherAgency===agencyName || t.boutiqueAgency===agencyName);
+  const isDistributed = (CAMPAIGN_AGENCIES[campaign.id] ?? []).includes(agencyName);
+
+  return (
+    <div className="h-full overflow-auto p-6">
+      <div className="max-w-xl space-y-5">
+        <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer">
+          <ChevronLeft size={12}/> Back to Submissions
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-secondary border border-border rounded-md flex items-center justify-center shrink-0">
+            <span className="text-sm font-bold">{agencyName.split(" ").map(w=>w[0]).slice(0,2).join("")}</span>
+          </div>
+          <div>
+            <div className="text-lg font-semibold leading-tight">{agencyName}</div>
+            <Badge label={isDistributed ? "Distributed on this campaign" : "Not distributed on this campaign"} variant={isDistributed ? "active" : "draft"}/>
+          </div>
+        </div>
+        <div className="glass-subtle border rounded-md p-4">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Basic Info</div>
+          {[["Primary Contact","Sophie Chen"],["Email","sophie@elitemodels.com"],["Phone","+1 212 555 0200"]].map(([k,v])=>(
+            <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
+              <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
+            </div>
+          ))}
+        </div>
+        <div className="glass-subtle border rounded-md p-4">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">On {campaign.name}</div>
+          <div className="text-2xl font-semibold tabular-nums">{submittedHere.length}</div>
+          <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">model{submittedHere.length!==1?"s":""} submitted (as mother or boutique agency)</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
   campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
 }) {
@@ -863,6 +914,8 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
   const [contractModal, setContractModal] = useState<Talent|null>(null);
   const [extensions, setExtensions] = useState<SubmissionExtension[]>([]);
   const [showExtendModal, setShowExtendModal] = useState(false);
+  const [viewingAgency, setViewingAgency] = useState<string|null>(null);
+  const [focusAgency, setFocusAgency] = useState<string|null>(null);
 
   const campaign = CAMPAIGNS.find(c=>c.id===campaignId) ?? CAMPAIGNS[0];
   // Only an extension covering every partnered agency moves the
@@ -885,8 +938,13 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
     <>
       <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} onOpenRelay={onOpenRelay} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <TopBar title={sectionLabel} sub={campaign.name}/>
+        <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name}
+          actions={viewingAgency ? <Btn variant="primary" size="sm" icon={<Send size={13}/>}
+            onClick={()=>{ setViewingAgency(null); setFocusAgency(viewingAgency); onSection("collaboration"); }}>Message Agency</Btn> : undefined}/>
         <div className="flex-1 min-h-0 overflow-hidden">
+          {viewingAgency ? (
+            <AgencyProfileScreen agencyName={viewingAgency} campaign={campaign} talent={talent} onBack={()=>setViewingAgency(null)}/>
+          ) : (<>
 
           {section==="overview" && (
             <div className="h-full overflow-auto p-6">
@@ -941,7 +999,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={setTalent} onContractPrompt={t=>setContractModal(t)}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={setTalent} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency}/>}
 
           {section==="casting" && <CastingBoard campaign={campaign}/>}
 
@@ -1079,7 +1137,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
             </div>
           )}
 
-          {section==="collaboration" && <CollaborationTab/>}
+          {section==="collaboration" && <CollaborationTab campaign={campaign} focusAgency={focusAgency} onFocusAgencyHandled={()=>setFocusAgency(null)}/>}
 
           {section==="users" && (
             <div className="flex-1 overflow-auto p-6">
@@ -1111,6 +1169,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
               </div>
             </div>
           )}
+          </>)}
         </div>
       </div>
 
@@ -1125,97 +1184,157 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
 
 // ─── COLLABORATION ───────────────────────────────────────────────────────────
 
-type CollabScope = "internal" | "crossorg";
+type CollabScope = "internal" | "agency";
+const ME_NAME = "Marcus Webb";
+const ME_ORG = "Acne Studios";
 
-function CollaborationTab() {
-  const brandUsers = ORG_USERS.filter(u=>u.org==="Acne Studios");
-  const crossOrgUsers = ORG_USERS; // brand + agency, everyone on the campaign
-  const ME = 1;
-
-  const [scope, setScope] = useState<CollabScope>("crossorg");
+// Every agency distributed on a campaign gets its own private thread with
+// the brand — two agencies never see each other's messages. Models get
+// read-only access to their own agency's thread elsewhere in the app.
+// The one exception: a "Send Update to All Agencies" broadcast, which
+// posts the same message into every agency's thread at once, for
+// logistics changes (call time, location) that need to reach everyone
+// without opening up cross-agency visibility for normal conversation.
+function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
+  campaign: Campaign; focusAgency: string | null; onFocusAgencyHandled: () => void;
+}) {
+  const agencies = CAMPAIGN_AGENCIES[campaign.id] ?? [];
+  const [scope, setScope] = useState<CollabScope>("internal");
+  const [selectedAgency, setSelectedAgency] = useState(agencies[0] ?? "");
+  const [threads, setThreads] = useState<Record<string, CampaignThreadMessage[]>>(
+    () => CAMPAIGN_AGENCY_THREADS[campaign.id] ?? {}
+  );
   const [internalMsgs, setInternalMsgs] = useState([
-    { id:1, from:3, text:"Mood board direction is locked — sharing the deck before we brief the agencies.", ts:"Jun 18, 4:10 PM" },
-    { id:2, from:1, text:"Nice. Let's hold final budget sign-off until Priya confirms the number.", ts:"Jun 18, 4:22 PM" },
-    { id:3, from:4, text:"Confirmed — $18,000 total, $5,150 committed so far.", ts:"Jun 18, 4:30 PM" },
-  ]);
-  const [crossOrgMsgs, setCrossOrgMsgs] = useState([
-    { id:1, from:2, text:"Just finished reviewing the submissions. Zara and Amara are strong leads.", ts:"Jun 19, 9:14 AM"  },
-    { id:2, from:1, text:"Agreed. I'd like to schedule a quick call to align before EOD.", ts:"Jun 19, 9:32 AM" },
-    { id:3, from:7, text:"Hi team — we can confirm Amara is available the full window.", ts:"Jun 19, 10:05 AM" },
+    { id:1, from:"Priya Anand", text:"Mood board direction is locked — sharing the deck before we brief the agencies.", ts:"Jun 18, 4:10 PM" },
+    { id:2, from:"Marcus Webb", text:"Nice. Let's hold final budget sign-off until Priya confirms the number.", ts:"Jun 18, 4:22 PM" },
+    { id:3, from:"Priya Anand", text:"Confirmed — $18,000 total, $5,150 committed so far.", ts:"Jun 18, 4:30 PM" },
   ]);
   const [input, setInput] = useState("");
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [broadcastText, setBroadcastText] = useState("");
+
+  useEffect(() => {
+    if (focusAgency) {
+      setScope("agency");
+      setSelectedAgency(focusAgency);
+      onFocusAgencyHandled();
+    }
+  }, [focusAgency]);
 
   const isInternal = scope === "internal";
-  const msgs = isInternal ? internalMsgs : crossOrgMsgs;
-  const setMsgs = isInternal ? setInternalMsgs : setCrossOrgMsgs;
-  const users = isInternal ? brandUsers : crossOrgUsers;
+  const agencyMsgs = threads[selectedAgency] ?? [];
 
   function send() {
     if (!input.trim()) return;
-    setMsgs(p=>[...p,{ id:Date.now(), from:ME, text:input, ts:"Now" }]);
+    if (isInternal) {
+      setInternalMsgs(p=>[...p,{ id:Date.now(), from:ME_NAME, text:input, ts:"Now" }]);
+    } else {
+      setThreads(p=>({ ...p, [selectedAgency]: [...(p[selectedAgency]??[]), { id:Date.now(), from:ME_NAME, fromOrg:ME_ORG, text:input, ts:"Now" }] }));
+    }
     setInput("");
   }
 
-  const SCOPES: { id: CollabScope; label: string; Icon: typeof Lock }[] = [
-    { id:"internal", label:"Brand Team", Icon:Lock  },
-    { id:"crossorg", label:"Cross-Org",  Icon:Globe },
-  ];
+  function sendBroadcast() {
+    if (!broadcastText.trim()) return;
+    setThreads(prev => {
+      const next = { ...prev };
+      for (const a of agencies) {
+        const msg: CampaignThreadMessage = { id:Date.now()+Math.random(), from:ME_NAME, fromOrg:ME_ORG, text:broadcastText, ts:"Now", broadcast:true };
+        next[a] = [...(next[a]??[]), msg];
+      }
+      return next;
+    });
+    setBroadcastText("");
+    setShowBroadcast(false);
+  }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      {/* Scope switcher — one big cross-org groupchat, one internal to this org */}
-      <div className="glass border-b px-6 pt-2.5 shrink-0">
-        <div className="flex items-center gap-1">
-          {SCOPES.map(s=>{
-            const SIcon = s.Icon;
+    <div className="flex-1 flex min-h-0">
+      <div className="w-48 shrink-0 border-r border-border overflow-y-auto">
+        <button onClick={()=>setScope("internal")}
+          className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
+            isInternal?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+          )}>
+          <Lock size={11}/> Brand Team
+        </button>
+        <div className="px-4 py-2 text-[9px] font-mono text-muted-foreground uppercase tracking-wider border-b border-border">Agencies</div>
+        {agencies.length===0 && <div className="px-4 py-3 text-[10px] text-muted-foreground">No agencies distributed yet</div>}
+        {agencies.map(a=>(
+          <button key={a} onClick={()=>{ setScope("agency"); setSelectedAgency(a); }}
+            className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
+              !isInternal && selectedAgency===a?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+            )}>
+            <Globe size={11} className="shrink-0"/> <span className="truncate">{a}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="px-6 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-xs font-semibold">{isInternal ? "Acne Studios — Internal" : `${campaign.name} — ${selectedAgency}`}</div>
+            <div className="text-[10px] text-muted-foreground">
+              {isInternal ? "Visible only to Acne Studios" : `Private to Acne Studios + ${selectedAgency} — no other agency can see this`}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isInternal && <Btn variant="outline" size="sm" onClick={()=>setShowBroadcast(true)}>Send Update to All Agencies</Btn>}
+            <Badge label={isInternal ? "Internal" : "Private thread"} variant={isInternal ? "draft" : "info"}/>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+          {(isInternal ? internalMsgs : agencyMsgs).length===0 && (
+            <div className="text-xs text-muted-foreground italic">No messages yet.</div>
+          )}
+          {(isInternal ? internalMsgs : agencyMsgs).map(m => {
+            const isMe = m.from === ME_NAME;
             return (
-              <button key={s.id} onClick={()=>setScope(s.id)}
-                className={cx("flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors",
-                  scope===s.id?"border-foreground text-foreground":"border-transparent text-muted-foreground hover:text-foreground"
-                )}>
-                <SIcon size={11}/>{s.label}
-              </button>
+              <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
+                {"broadcast" in m && m.broadcast && (
+                  <div className="text-[9px] font-mono uppercase tracking-wide text-urgent mb-0.5">Update sent to all agencies</div>
+                )}
+                <div className={cx("rounded-xl px-4 py-2.5 text-sm max-w-md leading-relaxed",
+                  "broadcast" in m && m.broadcast ? "bg-urgent/10 border border-urgent text-foreground" : isMe ? "bg-foreground text-primary-foreground" : "bg-secondary text-foreground"
+                )}>{m.text}</div>
+                <div className={cx("flex items-center gap-2 text-[10px] text-muted-foreground", isMe && "flex-row-reverse")}>
+                  <span className="font-medium">{isMe ? "Me" : m.from}</span>
+                  {!isMe && "fromOrg" in m && <span>· {m.fromOrg}</span>}
+                  <span className="font-mono">{m.ts}</span>
+                </div>
+              </div>
             );
           })}
         </div>
-      </div>
-      {/* Scope banner — always visible so it's unambiguous who can see this thread */}
-      <div className="px-6 py-2.5 border-b border-border flex items-center justify-between shrink-0">
-        <div>
-          <div className="text-xs font-semibold">{isInternal ? "Acne Studios — Internal" : "AW25 Womenswear — Campaign Chat"}</div>
-          <div className="text-[10px] text-muted-foreground">
-            {isInternal ? `${users.length} people · Visible only to Acne Studios` : `${users.length} participants · Acne Studios + Elite Model Mgmt.`}
+        <div className="px-6 py-4 border-t glass shrink-0">
+          <div className="flex gap-3 items-end">
+            <textarea value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
+              placeholder={isInternal ? "Message your team…" : `Message ${selectedAgency}…`} rows={2}
+              className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
+            <button onClick={send} className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
+              <Send size={15}/>
+            </button>
           </div>
         </div>
-        <Badge label={isInternal ? "Internal" : "Shared with agency"} variant={isInternal ? "draft" : "info"}/>
       </div>
-      <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
-        {msgs.map(m => {
-          const isMe = m.from === ME;
-          const user = users.find(u=>u.id===m.from);
-          return (
-            <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
-              <div className={cx("rounded-xl px-4 py-2.5 text-sm max-w-md leading-relaxed", isMe ? "bg-foreground text-primary-foreground" : "bg-secondary text-foreground")}>{m.text}</div>
-              <div className={cx("flex items-center gap-2 text-[10px] text-muted-foreground", isMe && "flex-row-reverse")}>
-                <span className="font-medium">{isMe ? "Me" : user?.name ?? "Unknown"}</span>
-                {!isMe && user && <span>· {user.org}</span>}
-                <span className="font-mono">{m.ts}</span>
-              </div>
+
+      {showBroadcast && (
+        <Modal onClose={()=>setShowBroadcast(false)} maxWidth="max-w-md">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="text-sm font-semibold">Send Update to All Agencies</div>
+            <button onClick={()=>setShowBroadcast(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="text-xs text-muted-foreground">
+              Sent once, delivered into every agency's private thread on this campaign ({agencies.length} agenc{agencies.length===1?"y":"ies"}). Their models will see it too.
             </div>
-          );
-        })}
-      </div>
-      <div className="px-6 py-4 border-t glass shrink-0">
-        <div className="flex gap-3 items-end">
-          <textarea value={input} onChange={e=>setInput(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-            placeholder={isInternal ? "Message your team…" : "Message the campaign group…"} rows={2}
-            className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
-          <button onClick={send} className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
-            <Send size={15}/>
-          </button>
-        </div>
-      </div>
+            <Textarea label="Message" placeholder="e.g. Call time moved to 8am — please notify your talent." value={broadcastText} onChange={e=>setBroadcastText(e.target.value)} rows={4}/>
+          </div>
+          <div className="px-5 pb-5 flex gap-2">
+            <Btn variant="primary" disabled={!broadcastText.trim()} onClick={sendBroadcast}>Send to All</Btn>
+            <Btn variant="outline" onClick={()=>setShowBroadcast(false)}>Cancel</Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1865,7 +1984,13 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
         <div className="text-sm font-semibold">New Message</div>
       </div>
       <div key={`${formKey}-${replyTo?.id ?? "new"}`} className="flex-1 overflow-auto p-6 space-y-4 max-w-xl">
-        <TextInput label="To" placeholder="Search agencies or team members…" defaultValue={replyTo ? `${replyTo.sender} (${replyTo.org})` : undefined}/>
+        <div>
+          <FSelect label="To" options={ORG_USERS.map(u=>`${u.name} (${u.org})`)}
+            value={replyTo ? `${replyTo.sender} (${replyTo.org})` : undefined}/>
+          <div className="text-[10px] text-muted-foreground font-mono mt-1">
+            Brand team and agency contacts only — models can't be messaged directly here; use the campaign group chat instead.
+          </div>
+        </div>
         <TextInput label="Subject" placeholder="Subject" defaultValue={replyTo ? `Re: ${replyTo.subject}` : undefined}/>
         <Textarea label="Message" placeholder="Write your message…" rows={12}/>
         <UrgentToggle defaultUrgent={replyTo?.urgent ?? false}/>
