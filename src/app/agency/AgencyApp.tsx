@@ -1,16 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, CountryFlag } from "../shared/ui";
-import { BOOKINGS, bookingBreakdown, SAMPLE_TALENT, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag } from "../shared/ui";
+import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage } from "../shared/types";
-
-const AGENCY_NAME = "Elite Model Mgmt.";
-
-// Seed roster from the existing mock talent — in Milestone B this becomes
-// a real `talent_profiles` query scoped to the agency's org.
-const INITIAL_ROSTER: RosterModel[] = SAMPLE_TALENT
-  .filter(t=>t.agency===AGENCY_NAME)
-  .map(t=>({ id:t.id, name:t.name, email:`${t.name.toLowerCase().replace(/\s+/g,".")}@models.example`, agency:AGENCY_NAME, location:t.location, rate:t.rate, height:t.height, exp:t.exp }));
+import { useAuth } from "../shared/auth";
+import { fetchAgencyRoster, insertRosterModel } from "../../lib/queries/roster";
+import { findCampaignIdByName } from "../../lib/queries/campaigns";
+import { insertSubmission } from "../../lib/queries/submissions";
 
 type View = "invitations" | "submit" | "roster" | "payments" | "messaging";
 
@@ -23,7 +19,7 @@ const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
 ];
 
 const INVITATIONS = [
-  { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Editorial", due:"06/20/2025", budget:"$800–$1,200/day", models:3, submissionOpen:"May 1, 2026", submissionClose:"Jun 15, 2026" },
+  { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Editorial", due:"06/20/2025", budget:"$800–$1,200/day", models:3, submissionOpen:"May 1, 2026", submissionClose:"Aug 15, 2026" },
   { brand:"Nike",         campaign:"Run Global SS25",          type:"Fitness",   due:"07/01/2025", budget:"$600–$900/day",   models:5, submissionOpen:"Jul 1, 2026", submissionClose:"Aug 5, 2026"  },
   { brand:"Chanel",       campaign:"Beauty Editorial AW25",    type:"Beauty",    due:"06/28/2025", budget:"$1,200–$2,000/day", models:2, submissionOpen:"Jul 10, 2026", submissionClose:"Jul 24, 2026" },
 ];
@@ -72,8 +68,8 @@ function InvitationsView({ onSubmitTalent }: { onSubmitTalent: (campaign: string
 // dropdown. This industry casts off photos and physical presence, not
 // text lists, so selection should feel like flipping through a board.
 function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
-  roster: RosterModel[]; campaign: string; statusFor: (modelId: number, campaign: string) => CampaignSubmissionStatus | undefined;
-  onPick: (id: number) => void; onClose: () => void;
+  roster: RosterModel[]; campaign: string; statusFor: (modelId: string, campaign: string) => CampaignSubmissionStatus | undefined;
+  onPick: (id: string) => void; onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -161,24 +157,27 @@ function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
 // agency does the resubmitting, a decline is final. modelId/campaign
 // pairs are unique to a specific campaign, so the same model can still
 // be freely submitted to a *different* open campaign.
-type CampaignSubmissionStatus = { modelId: number; campaign: string; status: "pending" | "declined" };
+//
+// This is only ever populated from THIS session's own successful
+// submits (see handleSubmit below) — it can't pre-block a model another
+// agency already submitted, since RLS hides that agency's submission row
+// entirely. The real "one submission wins" rule is enforced by the
+// database's unique(campaign_id, model_id) constraint: a genuinely
+// blocked submit is only discovered by attempting it and getting
+// rejected, surfaced below as submitError rather than a pre-check.
+type CampaignSubmissionStatus = { modelId: string; campaign: string; status: "pending" | "declined" };
 
 function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: RosterModel[]; onGoToRoster: () => void; initialCampaign?: string }) {
-  const [submitted, setSubmitted] = useState<CampaignSubmissionStatus[]>([
-    // Pre-seeded to demo the feature: Maya Chen was already declined for
-    // AW25 Womenswear (by whichever agency submitted her first) — she
-    // should read as blocked here regardless of who's looking. Zara
-    // Okafor has a pending submission on a different campaign, which
-    // shouldn't affect submitting her to Run Global SS25.
-    { modelId: 13, campaign: "AW25 Womenswear Campaign", status: "declined" },
-    { modelId: 1,  campaign: "Run Global SS25",          status: "pending"  },
-  ]);
+  const { profile, org } = useAuth();
+  const [submitted, setSubmitted] = useState<CampaignSubmissionStatus[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [pickedCampaign, setPickedCampaign] = useState(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
-  const [pickedModelId, setPickedModelId] = useState<number | "">("");
+  const [pickedModelId, setPickedModelId] = useState<string | "">("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function statusFor(modelId: number, campaign: string) {
+  function statusFor(modelId: string, campaign: string) {
     return submitted.find(s => s.modelId === modelId && s.campaign === campaign);
   }
 
@@ -188,11 +187,41 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
   const submissionClosed = pickedInvitation ? submissionIsClosed(pickedInvitation) : false;
   const pickedStatus = pickedModel ? statusFor(pickedModel.id, pickedCampaign) : undefined;
 
-  function selectModel(id: number) {
+  function selectModel(id: string) {
     setPickedModelId(id);
     setPickedCampaign(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
+    setSubmitError(null);
     setShowPicker(false);
     setShowForm(true);
+  }
+
+  async function handleSubmit() {
+    if (!pickedModel || !org || !profile) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    const realCampaignId = await findCampaignIdByName(pickedCampaign);
+    if (!realCampaignId) {
+      setSubmitting(false);
+      setSubmitError("This campaign isn't connected yet — check back once it's set up.");
+      return;
+    }
+    const { error } = await insertSubmission({
+      campaignId: realCampaignId,
+      modelId: pickedModel.id,
+      submittingAgencyId: org.id,
+      submittedByProfileId: profile.id,
+    });
+    setSubmitting(false);
+    if (error) {
+      setSubmitError(
+        error.code === "23505"
+          ? `${pickedModel.name} has already been submitted to this campaign.`
+          : "Couldn't submit this model — try again."
+      );
+      return;
+    }
+    setSubmitted(p => [...p, { modelId: pickedModel.id, campaign: pickedCampaign, status: "pending" }]);
+    setShowForm(false);
   }
 
   return (
@@ -280,13 +309,15 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
                   : `${pickedModel.name} is already submitted to this campaign, awaiting brand review.`}
               </div>
             )}
+            {submitError && (
+              <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">{submitError}</div>
+            )}
             <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
           </div>
           <div className="px-5 pb-5 flex gap-2">
-            <Btn variant="primary" disabled={submissionClosed || !!pickedStatus} onClick={()=>{
-              setSubmitted(p=>[...p,{ modelId:pickedModel.id, campaign:pickedCampaign||INVITATIONS[0]?.campaign||"", status:"pending" }]);
-              setShowForm(false);
-            }}>Submit</Btn>
+            <Btn variant="primary" disabled={submissionClosed || !!pickedStatus || submitting} onClick={handleSubmit}>
+              {submitting ? "Submitting…" : "Submit"}
+            </Btn>
             <Btn variant="outline" onClick={()=>setShowForm(false)}>Cancel</Btn>
           </div>
         </Modal>
@@ -355,14 +386,16 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
   );
 }
 
-const ME_NAME = "Sophie Chen";
-
 // The same private, per-campaign, per-agency thread the brand sees on
-// their side (Collaboration tab) — Elite only ever sees its OWN thread
-// with a brand, never another agency's. There is no way to message a
-// model directly from here; models only get read-only access to this
-// same thread elsewhere.
+// their side (Collaboration tab) — an agency only ever sees its OWN
+// thread with a brand, never another agency's. There is no way to
+// message a model directly from here; models only get read-only access
+// to this same thread elsewhere.
 function AgencyMessagingView() {
+  const currentUser = useCurrentUser();
+  const meName = currentUser?.name ?? "";
+  const agencyName = currentUser?.org ?? "";
+
   const campaignsWithThreads = INVITATIONS
     .map(inv => ({ inv, campaign: CAMPAIGNS.find(c=>c.name===inv.campaign) }))
     .filter(x => x.campaign);
@@ -371,7 +404,7 @@ function AgencyMessagingView() {
   const [threads, setThreads] = useState<Record<number, CampaignThreadMessage[]>>(() => {
     const init: Record<number, CampaignThreadMessage[]> = {};
     for (const { campaign } of campaignsWithThreads) {
-      if (campaign) init[campaign.id] = CAMPAIGN_AGENCY_THREADS[campaign.id]?.[AGENCY_NAME] ?? [];
+      if (campaign) init[campaign.id] = CAMPAIGN_AGENCY_THREADS[campaign.id]?.[agencyName] ?? [];
     }
     return init;
   });
@@ -382,7 +415,7 @@ function AgencyMessagingView() {
 
   function send() {
     if (!input.trim() || selected==null) return;
-    setThreads(p=>({ ...p, [selected]: [...(p[selected]??[]), { id:Date.now(), from:ME_NAME, fromOrg:AGENCY_NAME, text:input, ts:"Now" }] }));
+    setThreads(p=>({ ...p, [selected]: [...(p[selected]??[]), { id:Date.now(), from:meName, fromOrg:agencyName, text:input, ts:"Now" }] }));
     setInput("");
   }
 
@@ -406,13 +439,13 @@ function AgencyMessagingView() {
       </div>
       <div className="flex-1 flex flex-col min-h-0">
         <div className="px-6 py-2.5 border-b border-border">
-          <div className="text-xs font-semibold">{selectedCampaign?.name} — {AGENCY_NAME}</div>
-          <div className="text-[10px] text-muted-foreground">Private to {AGENCY_NAME} + the brand — no other agency can see this</div>
+          <div className="text-xs font-semibold">{selectedCampaign?.name} — {agencyName}</div>
+          <div className="text-[10px] text-muted-foreground">Private to {agencyName} + the brand — no other agency can see this</div>
         </div>
         <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
           {msgs.length===0 && <div className="text-xs text-muted-foreground italic">No messages yet.</div>}
           {msgs.map(m=>{
-            const isMe = m.from===ME_NAME;
+            const isMe = m.from===meName;
             return (
               <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
                 {m.broadcast && <div className="text-[9px] font-mono uppercase tracking-wide text-urgent mb-0.5">Update from brand</div>}
@@ -445,8 +478,9 @@ function AgencyMessagingView() {
 }
 
 function PaymentsView() {
+  const currentUser = useCurrentUser();
   const [tab, setTab] = useState<"receivable"|"invoices">("receivable");
-  const myBookings = BOOKINGS.filter(b=>b.agency===AGENCY_NAME);
+  const myBookings = BOOKINGS.filter(b=>b.agency===currentUser?.org);
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -503,24 +537,34 @@ function PaymentsView() {
 }
 
 export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
+  const { profile, org } = useAuth();
+  const agencyName = org?.name ?? "";
   const [view, setView] = useState<View>("invitations");
-  const [roster, setRoster] = useState<RosterModel[]>(INITIAL_ROSTER);
+  const [roster, setRoster] = useState<RosterModel[]>([]);
   const [submitCampaign, setSubmitCampaign] = useState<string | undefined>(undefined);
 
-  function addModel(m: Omit<RosterModel,"id"|"agency">) {
-    setRoster(prev => [...prev, { ...m, id: Date.now(), agency: AGENCY_NAME }]);
+  useEffect(() => {
+    let active = true;
+    if (org) fetchAgencyRoster(org.id, org.name).then(r => { if (active) setRoster(r); });
+    return () => { active = false; };
+  }, [org?.id, org?.name]);
+
+  async function addModel(m: Omit<RosterModel,"id"|"agency">) {
+    if (!org) return;
+    const { model } = await insertRosterModel(org.id, agencyName, m);
+    if (model) setRoster(prev => [...prev, model]);
   }
 
   return (
-    <CurrentUserProvider user={{ name:"Sophie Chen", title:"Senior Agent", org:AGENCY_NAME, email:"sophie@elite.com", phone:"+1 212 555 0200", access:"enhanced" }}>
+    <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:agencyName, email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic" }}>
       <div className="h-screen flex bg-background overflow-hidden">
         <aside className="w-52 shrink-0 glass border-r flex flex-col">
           <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
             <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center">
-              <span className="text-primary-foreground text-xs font-bold">E</span>
+              <span className="text-primary-foreground text-xs font-bold">{agencyName.trim()[0]?.toUpperCase() ?? "?"}</span>
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{AGENCY_NAME} <CountryFlag country={ORG_COUNTRY[AGENCY_NAME]} className="text-xs"/></div>
+              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></div>
               <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Agency</div>
             </div>
           </div>
@@ -545,7 +589,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
           </div>
         </aside>
         <main className="flex-1 flex flex-col min-h-0">
-          <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${AGENCY_NAME} · Agency`}/>
+          <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`}/>
           <div className="flex-1 overflow-auto p-6">
             {view === "invitations" && <InvitationsView onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
             {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}

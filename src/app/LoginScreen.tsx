@@ -1,22 +1,25 @@
-import { useState } from "react";
-import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles } from "lucide-react";
-import type { Role } from "./shared/types";
+import { useState, useEffect } from "react";
+import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles, AlertCircle } from "lucide-react";
 import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
+import { useAuth } from "./shared/auth";
 import dvureLogo from "../assets/dvure-logo-dark.png";
 
-type SignupStep = "role" | "form" | "success";
+type SignupStep = "role" | "form" | "provisioning" | "success";
 type SignupRole = "brand" | "agency";
 
-// One login form for everyone — role comes from the account itself once
-// Supabase Auth is wired in (Milestone B). Until then there's no real
-// credential check here; the picker that used to sit on this screen let
-// anyone jump into any of the three role views, which real visitors
-// shouldn't see or be able to do — that switch now lives in a dev-only
-// control mounted at the App root (App.tsx), not on the public login form.
+// One login form for everyone — role, org, and access level all come
+// from the real signed-in account (src/app/shared/auth.tsx) once the
+// session resolves, not from anything picked here. The picker that used
+// to let a visitor jump into any of the three role views now lives in a
+// dev-only control mounted at the App root (App.tsx), not on this form.
 
-export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
+export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: (open: boolean) => void }) {
+  const { signIn, signUpBrandOrAgency, completeOrgSignup } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   const [signup, setSignup] = useState<SignupStep | null>(null);
   const [signupRole, setSignupRole] = useState<SignupRole>("brand");
@@ -24,11 +27,55 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
   const [fullName, setFullName] = useState("");
   const [workEmail, setWorkEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupError, setSignupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onModalOpenChange(signup !== null);
+  }, [signup, onModalOpenChange]);
 
   function closeSignup() {
     setSignup(null);
+    setSignupError(null);
     setCompanyName(""); setFullName(""); setWorkEmail(""); setSignupPassword("");
   }
+
+  async function handleSignIn() {
+    setSignInError(null);
+    setSignInLoading(true);
+    const { error } = await signIn(email, password);
+    setSignInLoading(false);
+    if (error) setSignInError(error);
+  }
+
+  async function runProvisioning() {
+    setSignupError(null);
+    const orgType = signupRole === "brand" ? "brand" : "agency";
+    const { error: orgError } = await completeOrgSignup(companyName, orgType);
+    if (orgError) {
+      setSignupError(orgError);
+      return;
+    }
+    setSignup("success");
+  }
+
+  async function handleStartTrial() {
+    setSignupError(null);
+    setSignup("provisioning");
+    const { error } = await signUpBrandOrAgency({
+      email: workEmail,
+      password: signupPassword,
+      fullName,
+      role: signupRole === "brand" ? "brand_staff" : "agency_staff",
+    });
+    if (error) {
+      setSignupError(error);
+      setSignup("form");
+      return;
+    }
+    await runProvisioning();
+  }
+
+  const passwordTooShort = signupPassword.length > 0 && signupPassword.length < 6;
 
   return (
     <div className="h-screen flex items-center justify-center bg-background">
@@ -51,11 +98,20 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
             <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden">
               <Lock size={14} className="text-muted-foreground ml-3 shrink-0"/>
               <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"
+                onKeyDown={e=>{ if (e.key==="Enter") handleSignIn(); }}
                 className="flex-1 px-3 py-2.5 text-sm bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
             </div>
           </div>
 
-          <Btn variant="primary" fullWidth>Sign In</Btn>
+          {signInError && (
+            <div className="flex items-center gap-1.5 text-xs text-red-500">
+              <AlertCircle size={12}/> {signInError}
+            </div>
+          )}
+
+          <Btn variant="primary" fullWidth disabled={!email || !password || signInLoading} onClick={handleSignIn}>
+            {signInLoading ? "Signing in…" : "Sign In"}
+          </Btn>
 
           <div className="text-center text-xs text-muted-foreground">
             <button className="hover:text-foreground cursor-pointer underline underline-offset-2">Forgot password?</button>
@@ -114,7 +170,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
             <div className="p-6 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <button onClick={()=>setSignup("role")} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2 cursor-pointer">
+                  <button onClick={()=>{ setSignupError(null); setSignup("role"); }} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2 cursor-pointer">
                     <ChevronLeft size={12}/> Back
                   </button>
                   <div className="text-lg font-semibold">Create your {signupRole==="brand"?"brand":"agency"} account</div>
@@ -130,10 +186,37 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
                 <TextInput label="Your Name" value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="e.g. Jordan Lee"/>
                 <TextInput label="Work Email" type="email" value={workEmail} onChange={e=>setWorkEmail(e.target.value)} placeholder="you@company.com"/>
                 <TextInput label="Password" type="password" value={signupPassword} onChange={e=>setSignupPassword(e.target.value)} placeholder="••••••••"/>
+                {passwordTooShort && <div className="text-xs text-red-500">Password must be at least 6 characters.</div>}
               </div>
-              <Btn variant="primary" fullWidth disabled={!companyName || !fullName || !workEmail || !signupPassword} onClick={()=>setSignup("success")}>
+              {signupError && (
+                <div className="flex items-center gap-1.5 text-xs text-red-500">
+                  <AlertCircle size={12}/> {signupError}
+                </div>
+              )}
+              <Btn variant="primary" fullWidth
+                disabled={!companyName || !fullName || !workEmail || !signupPassword || passwordTooShort}
+                onClick={handleStartTrial}>
                 Start Free Trial
               </Btn>
+            </div>
+          )}
+
+          {signup === "provisioning" && (
+            <div className="p-6 space-y-4 text-center">
+              {signupError ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto">
+                    <AlertCircle size={20}/>
+                  </div>
+                  <div>
+                    <div className="text-lg font-semibold">Almost there</div>
+                    <div className="text-sm text-muted-foreground mt-1">Your account was created, but setting up your organization failed: {signupError}</div>
+                  </div>
+                  <Btn variant="primary" fullWidth onClick={runProvisioning}>Retry</Btn>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground py-6">Setting up your account…</div>
+              )}
             </div>
           )}
 
@@ -148,7 +231,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (role: Role) => void
                   Your 14-day trial of DVURE {signupRole==="brand"?"Brand":"Agency"} has started for {companyName || (signupRole==="brand"?"your brand":"your agency")}. Explore the platform below — no setup required.
                 </div>
               </div>
-              <Btn variant="primary" fullWidth onClick={()=>onLogin(signupRole)}>Enter DVURE</Btn>
+              <Btn variant="primary" fullWidth onClick={closeSignup}>Enter DVURE</Btn>
             </div>
           )}
         </Modal>

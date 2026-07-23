@@ -48,7 +48,7 @@ export interface CardComment {
 // This becomes the `talent_profiles` table in Milestone B, with
 // campaign submissions as a separate table referencing it.
 export interface RosterModel {
-  id: number;
+  id: string;
   name: string;
   email: string;
   agency: string;

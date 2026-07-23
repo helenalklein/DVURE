@@ -119,7 +119,7 @@ export const NOTIFS = [
 // campaigns are now individually addressable by id.
 
 export const CAMPAIGNS: Campaign[] = [
-  { id:1, name:"AW25 Womenswear Campaign", type:"Editorial",    status:"active",   due:"06/20", dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850, submissionOpen:"May 1, 2026",  submissionClose:"Jun 15, 2026" },
+  { id:1, name:"AW25 Womenswear Campaign", type:"Editorial",    status:"active",   due:"06/20", dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850, submissionOpen:"May 1, 2026",  submissionClose:"Aug 15, 2026" },
   { id:2, name:"SS25 Fragrance Launch",    type:"Advertising",  status:"active",   due:"06/24", dueLabel:"5 days remaining", dueUrgency:"medium", submitted:9,  approved:4,  booked:0, talentNeeded:2, budget:10000, committed:0,     remaining:10000, submissionOpen:"May 15, 2026", submissionClose:"Jul 25, 2026" },
   { id:3, name:"Resort Lookbook 2025",     type:"E-commerce",   status:"active",   due:"07/03", dueLabel:"14 days",          dueUrgency:"low",    submitted:21, approved:7,  booked:0, talentNeeded:3, budget:7000,  committed:0,     remaining:7000,  submissionOpen:"Jun 1, 2026",  submissionClose:"Aug 10, 2026" },
   { id:4, name:"FW24 Campaign",            type:"Editorial",    status:"archived", due:"01/15", dueLabel:"Archived",         dueUrgency:"low",    submitted:41, approved:11, booked:3, talentNeeded:4, budget:15000, committed:15000, remaining:0,     submissionOpen:"Nov 1, 2025",  submissionClose:"Dec 15, 2025" },

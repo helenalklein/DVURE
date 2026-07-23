@@ -12,6 +12,10 @@ import {
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
+import { useAuth } from "../shared/auth";
+import { findCampaignIdByName } from "../../lib/queries/campaigns";
+import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
+import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import RelayConsole from "./relay/RelayConsole";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
@@ -85,15 +89,17 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
 function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
   active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void;
 }) {
+  const currentUser = useCurrentUser();
+  const orgName = currentUser?.org ?? "";
   const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
-          <span className="text-primary-foreground text-xs font-bold">A</span>
+          <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate flex items-center gap-1.5">Acne Studios <CountryFlag country={ORG_COUNTRY["Acne Studios"]} className="text-xs"/></div>
+          <div className="text-sm font-semibold truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
         <button onClick={()=>onNav("campaigns")} title="Campaigns"
@@ -158,16 +164,18 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
   onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
 }) {
+  const currentUser = useCurrentUser();
+  const orgName = currentUser?.org ?? "";
   const nav = campaignNavFor(campaign.type);
   const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
-          <span className="text-primary-foreground text-xs font-bold">A</span>
+          <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate flex items-center gap-1.5">Acne Studios <CountryFlag country={ORG_COUNTRY["Acne Studios"]} className="text-xs"/></div>
+          <div className="text-sm font-semibold truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
         <button onClick={onHome} title="Campaigns"
@@ -234,8 +242,8 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
 
-function Moodboard({ talent, setTalent, onContractPrompt, onViewAgency }: {
-  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void;
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency }: {
+  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [dragging, setDragging] = useState<number|null>(null);
@@ -245,14 +253,13 @@ function Moodboard({ talent, setTalent, onContractPrompt, onViewAgency }: {
   const [drawer, setDrawer] = useState<Talent|null>(null);
   const [declineModal, setDeclineModal] = useState<Talent|null>(null);
   const [declineReason, setDeclineReason] = useState("");
-  const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [commentDraft, setCommentDraft] = useState("");
 
   const commentsFor = (talentId: number) => comments.filter(c => c.talentId === talentId);
 
   function postComment(talentId: number) {
     if (!commentDraft.trim()) return;
-    setComments(prev => [...prev, { id: Date.now(), talentId, author: "Marcus Webb", org: "Acne Studios", text: commentDraft, ts: "Now" }]);
+    onPostComment(talentId, commentDraft);
     setCommentDraft("");
   }
 
@@ -912,7 +919,14 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
 function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
   campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
 }) {
+  const { profile, org } = useAuth();
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
+  const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
+  const [shim, setShim] = useState<SubmissionShim>(new Map());
+  // Non-null once `campaign.name` resolves to a real Supabase campaign
+  // for the signed-in org (RLS-scoped) — only then do talent/comments
+  // reflect real data instead of the SAMPLE_TALENT/CARD_COMMENTS mock.
+  const [realCampaignId, setRealCampaignId] = useState<string | null>(null);
   const [contractModal, setContractModal] = useState<Talent|null>(null);
   const [extensions, setExtensions] = useState<SubmissionExtension[]>([]);
   const [showExtendModal, setShowExtendModal] = useState(false);
@@ -920,6 +934,54 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
   const [focusAgency, setFocusAgency] = useState<string|null>(null);
 
   const campaign = CAMPAIGNS.find(c=>c.id===campaignId) ?? CAMPAIGNS[0];
+
+  useEffect(() => {
+    let active = true;
+    findCampaignIdByName(campaign.name).then(async (realId) => {
+      if (!active) return;
+      setRealCampaignId(realId);
+      if (!realId) return; // no real campaign for this org yet — mock data already seeded above
+      const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
+      if (!active) return;
+      setTalent(realTalent);
+      setShim(realShim);
+      const realComments = await fetchSubmissionComments(realShim);
+      if (!active) return;
+      setComments(realComments);
+    });
+    return () => { active = false; };
+  }, [campaign.name]);
+
+  function persistingSetTalent(fn: (prev: Talent[]) => Talent[]) {
+    setTalent(prev => {
+      const next = fn(prev);
+      if (realCampaignId) {
+        for (const t of next) {
+          const prevT = prev.find(p => p.id === t.id);
+          if (prevT && prevT.stage !== t.stage) {
+            const entry = shim.get(t.id);
+            if (entry) updateSubmissionStage(entry.submissionId, t.stage, { reviewedByProfileId: profile?.id });
+          }
+        }
+      }
+      return next;
+    });
+  }
+
+  function handlePostComment(talentId: number, text: string) {
+    const author = profile?.fullName ?? "";
+    const authorOrg = org?.name ?? "";
+    if (realCampaignId) {
+      const entry = shim.get(talentId);
+      if (entry && profile && org) {
+        insertSubmissionComment(entry.submissionId, profile.id, org.id, text).then(({ error }) => {
+          if (!error) setComments(prev => [...prev, { id: Date.now(), talentId, author, org: authorOrg, text, ts: "Now" }]);
+        });
+      }
+      return;
+    }
+    setComments(prev => [...prev, { id: Date.now(), talentId, author, org: authorOrg, text, ts: "Now" }]);
+  }
   // Only an extension covering every partnered agency moves the
   // campaign-wide Open/Closed indicator — partial extensions stay listed
   // per-agency instead of overstating what's actually open to everyone.
@@ -1001,7 +1063,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={setTalent} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency}/>}
 
           {section==="casting" && <CastingBoard campaign={campaign}/>}
 
@@ -1150,7 +1212,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                 </div>
                 <div className="space-y-2 mb-5">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Brand</div>
-                  {ORG_USERS.filter(u=>u.org==="Acne Studios").slice(0,4).map(u=>(
+                  {ORG_USERS.filter(u=>u.org===(org?.name ?? "")).slice(0,4).map(u=>(
                     <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
                       <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title}</div></div>
@@ -1160,7 +1222,7 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
                 </div>
                 <div className="space-y-2">
                   <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency</div>
-                  {ORG_USERS.filter(u=>u.org!=="Acne Studios").map(u=>(
+                  {ORG_USERS.filter(u=>u.org!==(org?.name ?? "")).map(u=>(
                     <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
                       <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
@@ -1187,8 +1249,6 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
 // ─── COLLABORATION ───────────────────────────────────────────────────────────
 
 type CollabScope = "internal" | "agency";
-const ME_NAME = "Marcus Webb";
-const ME_ORG = "Acne Studios";
 
 // Every agency distributed on a campaign gets its own private thread with
 // the brand — two agencies never see each other's messages. Models get
@@ -1200,6 +1260,9 @@ const ME_ORG = "Acne Studios";
 function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   campaign: Campaign; focusAgency: string | null; onFocusAgencyHandled: () => void;
 }) {
+  const currentUser = useCurrentUser();
+  const meName = currentUser?.name ?? "";
+  const meOrg = currentUser?.org ?? "";
   const agencies = CAMPAIGN_AGENCIES[campaign.id] ?? [];
   const [scope, setScope] = useState<CollabScope>("internal");
   const [selectedAgency, setSelectedAgency] = useState(agencies[0] ?? "");
@@ -1229,9 +1292,9 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   function send() {
     if (!input.trim()) return;
     if (isInternal) {
-      setInternalMsgs(p=>[...p,{ id:Date.now(), from:ME_NAME, text:input, ts:"Now" }]);
+      setInternalMsgs(p=>[...p,{ id:Date.now(), from:meName, text:input, ts:"Now" }]);
     } else {
-      setThreads(p=>({ ...p, [selectedAgency]: [...(p[selectedAgency]??[]), { id:Date.now(), from:ME_NAME, fromOrg:ME_ORG, text:input, ts:"Now" }] }));
+      setThreads(p=>({ ...p, [selectedAgency]: [...(p[selectedAgency]??[]), { id:Date.now(), from:meName, fromOrg:meOrg, text:input, ts:"Now" }] }));
     }
     setInput("");
   }
@@ -1241,7 +1304,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
     setThreads(prev => {
       const next = { ...prev };
       for (const a of agencies) {
-        const msg: CampaignThreadMessage = { id:Date.now()+Math.random(), from:ME_NAME, fromOrg:ME_ORG, text:broadcastText, ts:"Now", broadcast:true };
+        const msg: CampaignThreadMessage = { id:Date.now()+Math.random(), from:meName, fromOrg:meOrg, text:broadcastText, ts:"Now", broadcast:true };
         next[a] = [...(next[a]??[]), msg];
       }
       return next;
@@ -1273,9 +1336,9 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
       <div className="flex-1 flex flex-col min-h-0">
         <div className="px-6 py-2.5 border-b border-border flex items-center justify-between shrink-0">
           <div>
-            <div className="text-xs font-semibold">{isInternal ? "Acne Studios — Internal" : `${campaign.name} — ${selectedAgency}`}</div>
+            <div className="text-xs font-semibold">{isInternal ? `${meOrg} — Internal` : `${campaign.name} — ${selectedAgency}`}</div>
             <div className="text-[10px] text-muted-foreground">
-              {isInternal ? "Visible only to Acne Studios" : `Private to Acne Studios + ${selectedAgency} — no other agency can see this`}
+              {isInternal ? `Visible only to ${meOrg}` : `Private to ${meOrg} + ${selectedAgency} — no other agency can see this`}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1288,7 +1351,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
             <div className="text-xs text-muted-foreground italic">No messages yet.</div>
           )}
           {(isInternal ? internalMsgs : agencyMsgs).map(m => {
-            const isMe = m.from === ME_NAME;
+            const isMe = m.from === meName;
             return (
               <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
                 {"broadcast" in m && m.broadcast && (
@@ -1362,6 +1425,7 @@ const OVERDUE_ACTIONS = [
 ];
 
 function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
+  const currentUser = useCurrentUser();
   const [tab, setTab] = useState("active");
   const [attentionOpen, setAttentionOpen] = useState(false);
   const attentionRef = useRef<HTMLDivElement>(null);
@@ -1381,7 +1445,7 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
   }, [attentionOpen]);
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Campaigns" sub="Acne Studios · Brand"/>
+      <TopBar title="Campaigns" sub={`${currentUser?.org ?? ""} · Brand`}/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
         <div className="flex items-center gap-1 mb-4 border-b border-border">
           {["active","drafts","archived"].map(t=>(
@@ -1467,10 +1531,11 @@ function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void })
 // the same items the metric is counting.
 
 function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => void }) {
+  const currentUser = useCurrentUser();
   const byType = (t: string) => OVERDUE_ACTIONS.filter(a=>a.type===t).length;
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Tasks" sub={`Acne Studios · ${OVERDUE_ACTIONS.length} actions past due`}/>
+      <TopBar title="Tasks" sub={`${currentUser?.org ?? ""} · ${OVERDUE_ACTIONS.length} actions past due`}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="flex gap-10">
           <div className="flex-1 min-w-0 max-w-2xl space-y-3">
@@ -1649,9 +1714,10 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
 // ─── GLOBAL CONTRACTS ─────────────────────────────────────────────────────────
 
 function GlobalContracts() {
+  const currentUser = useCurrentUser();
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Contracts" sub="All contracts · Acne Studios" actions={<Btn variant="primary" size="sm" icon={<Plus size={13}/>}>Generate Contract</Btn>}/>
+      <TopBar title="Contracts" sub={`All contracts · ${currentUser?.org ?? ""}`} actions={<Btn variant="primary" size="sm" icon={<Plus size={13}/>}>Generate Contract</Btn>}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-3 gap-3 mb-6">
           <Stat label="Active contracts" value="3" sub="2 awaiting signature"/>
@@ -1741,6 +1807,7 @@ function PaymentSuccessOverlay({ campaign, amount, onClose }: { campaign: string
 }
 
 function GlobalPayments() {
+  const currentUser = useCurrentUser();
   const [showPayModal, setShowPayModal] = useState(false);
   const [payState, setPayState] = useState<"idle"|"processing">("idle");
   const [selectedBooking, setSelectedBooking] = useState<string>("");
@@ -1751,7 +1818,7 @@ function GlobalPayments() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Payments" sub="Acne Studios · Outstanding booking payments"/>
+      <TopBar title="Payments" sub={`${currentUser?.org ?? ""} · Outstanding booking payments`}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-3 gap-3 mb-6">
           <Stat label="Outstanding" value={outstanding.length} sub="Bookings awaiting payment"/>
@@ -2217,7 +2284,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Settings" sub="Acne Studios · Account settings"/>
+      <TopBar title="Settings" sub={`${user?.org ?? ""} · Account settings`}/>
       <div className="flex-1 flex min-h-0">
         <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
           {TABS.map(([id,label])=>(
@@ -2345,6 +2412,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 
 export default function BrandApp({ onLogout }: { onLogout: () => void }) {
+  const { profile, org } = useAuth();
   const [view, setView] = useState<AppView>("campaigns");
   const [globalNav, setGlobalNav] = useState<GlobalView>("campaigns");
   const [activeCampaignId, setActiveCampaignId] = useState<number>(1);
@@ -2378,7 +2446,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   if (view === "relay") return <RelayConsole onExit={()=>setView("campaign")}/>;
 
   return (
-    <CurrentUserProvider user={{ name:ORG_USERS[0].name, title:ORG_USERS[0].title, org:ORG_USERS[0].org, email:ORG_USERS[0].email, phone:ORG_USERS[0].phone, access:ORG_USERS[0].access as "administrator"|"enhanced"|"basic", onSettings:()=>handleGlobalNav("settings") }}>
+    <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:org?.name ?? "", email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>handleGlobalNav("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
         {inCampaign ? (
           <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")}/>

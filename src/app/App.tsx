@@ -1,36 +1,53 @@
 import { useState, useEffect, useRef } from "react";
 import type { Role } from "./shared/types";
 import { cx } from "./shared/ui";
+import { useAuth } from "./shared/auth";
 import LoginScreen from "./LoginScreen";
 import BrandApp from "./brand/BrandApp";
 import AgencyApp from "./agency/AgencyApp";
 import ModelApp from "./model/ModelApp";
 
-// One app, one login, three role-based views. Role currently comes from
-// DevRoleSwitcher below (or the Try Demo signup flow) rather than a real
-// credential check — Milestone B swaps this for a Supabase Auth session
-// where the role lives on the account itself.
+// One app, one login, three role-based views. Role/org/access come from
+// a real Supabase Auth session (src/app/shared/auth.tsx), resolved from
+// the profiles/org_memberships/model_profiles tables — not local state.
 
 export default function App() {
-  const [role, setRole] = useState<Role | null>(null);
-  const onLogout = () => setRole(null);
+  const { status, appRole, signOut } = useAuth();
+  const [signupModalOpen, setSignupModalOpen] = useState(false);
+  // Dev-only preview override — lets a developer look at any of the three
+  // apps regardless of which role is actually signed in. Screens backed
+  // by real data (Moodboard, roster) will show empty states if the
+  // override doesn't match the real signed-in org; mock/layout screens
+  // render fine either way.
+  const [devOverride, setDevOverride] = useState<Role | null>(null);
+
+  const effectiveRole: Role | null = import.meta.env.DEV && devOverride ? devOverride : appRole ?? null;
+  const onLogout = () => { setDevOverride(null); signOut(); };
+
+  const showLogin = status !== "signedIn" || signupModalOpen;
 
   return (
     <>
-      {!role && <LoginScreen onLogin={setRole}/>}
-      {role === "agency" && <AgencyApp onLogout={onLogout}/>}
-      {role === "model" && <ModelApp onLogout={onLogout}/>}
-      {role === "brand" && <BrandApp onLogout={onLogout}/>}
-      {import.meta.env.DEV && <DevRoleSwitcher role={role} onSelect={setRole}/>}
+      {status === "loading" && (
+        <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
+      )}
+      {status === "error" && (
+        <div className="h-screen flex items-center justify-center text-sm text-red-500 text-center px-6">
+          Something went wrong loading your account. Try refreshing the page.
+        </div>
+      )}
+      {status !== "loading" && status !== "error" && showLogin && <LoginScreen onModalOpenChange={setSignupModalOpen}/>}
+      {status === "signedIn" && !signupModalOpen && effectiveRole === "agency" && <AgencyApp onLogout={onLogout}/>}
+      {status === "signedIn" && !signupModalOpen && effectiveRole === "model" && <ModelApp onLogout={onLogout}/>}
+      {status === "signedIn" && !signupModalOpen && effectiveRole === "brand" && <BrandApp onLogout={onLogout}/>}
+      {import.meta.env.DEV && <DevRoleSwitcher role={effectiveRole} onSelect={setDevOverride}/>}
     </>
   );
 }
 
-// Dev-only view switcher — the public login form no longer lets a visitor
-// pick their own role (that's supposed to come from their actual account),
-// but there's still no real backend to log into, so this stays as the one
-// way to preview all three workflows without logging out and back in.
-// Mounted at the App root, so it floats above every screen including login.
+// Dev-only view switcher — lets a developer preview all three role-based
+// workflows without needing separate logins for each. Mounted at the App
+// root, so it floats above every screen including login.
 function DevRoleSwitcher({ role, onSelect }: { role: Role | null; onSelect: (r: Role) => void }) {
   const [open, setOpen] = useState(true);
   const wrapRef = useRef<HTMLDivElement>(null);
