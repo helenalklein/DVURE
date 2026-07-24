@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import type { Role } from "./shared/types";
 import { cx } from "./shared/ui";
 import { useAuth } from "./shared/auth";
@@ -6,10 +7,14 @@ import LoginScreen from "./LoginScreen";
 import BrandApp from "./brand/BrandApp";
 import AgencyApp from "./agency/AgencyApp";
 import ModelApp from "./model/ModelApp";
+import AcceptInvitePage from "./AcceptInvitePage";
 
-// One app, one login, three role-based views. Role/org/access come from
-// a real Supabase Auth session (src/app/shared/auth.tsx), resolved from
-// the profiles/org_memberships/model_profiles tables — not local state.
+// One app, one login, three role-based views, each at a real URL. Role/org/
+// access come from a real Supabase Auth session (src/app/shared/auth.tsx),
+// resolved from the profiles/org_memberships/model_profiles tables — not
+// local state. Scope is deliberately bounded: only the top-level app and
+// one deep link (a brand's specific campaign) are real URL paths; each
+// app's own internal tabs/sections stay local React state for now.
 
 export default function App() {
   const { status, appRole, signOut } = useAuth();
@@ -20,29 +25,77 @@ export default function App() {
   // override doesn't match the real signed-in org; mock/layout screens
   // render fine either way.
   const [devOverride, setDevOverride] = useState<Role | null>(null);
+  const navigate = useNavigate();
 
   const effectiveRole: Role | null = import.meta.env.DEV && devOverride ? devOverride : appRole ?? null;
   const onLogout = () => { setDevOverride(null); signOut(); };
 
-  const showLogin = status !== "signedIn" || signupModalOpen;
+  if (status === "loading") {
+    return <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;
+  }
+  if (status === "error") {
+    return (
+      <div className="h-screen flex items-center justify-center text-sm text-red-500 text-center px-6">
+        Something went wrong loading your account. Try refreshing the page.
+      </div>
+    );
+  }
+
+  // Real credentials exist (status==="signedIn") but the Try Demo modal may
+  // still be open mid-signup (session live, org not created yet) — same
+  // gate the old conditional-render version used, now driving route guards
+  // instead of a plain boolean render.
+  const canEnterApp = status === "signedIn" && !signupModalOpen;
 
   return (
     <>
-      {status === "loading" && (
-        <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
+      <Routes>
+        <Route path="/login" element={
+          canEnterApp
+            ? <Navigate to={`/${effectiveRole}`} replace/>
+            : <LoginScreen onModalOpenChange={setSignupModalOpen}/>
+        }/>
+        <Route path="/brand" element={
+          <RoleRoute canEnterApp={canEnterApp} match={effectiveRole==="brand"} effectiveRole={effectiveRole}>
+            <BrandApp onLogout={onLogout}/>
+          </RoleRoute>
+        }/>
+        <Route path="/brand/campaigns/:id" element={
+          <RoleRoute canEnterApp={canEnterApp} match={effectiveRole==="brand"} effectiveRole={effectiveRole}>
+            <BrandApp onLogout={onLogout}/>
+          </RoleRoute>
+        }/>
+        <Route path="/agency" element={
+          <RoleRoute canEnterApp={canEnterApp} match={effectiveRole==="agency"} effectiveRole={effectiveRole}>
+            <AgencyApp onLogout={onLogout}/>
+          </RoleRoute>
+        }/>
+        <Route path="/model" element={
+          <RoleRoute canEnterApp={canEnterApp} match={effectiveRole==="model"} effectiveRole={effectiveRole}>
+            <ModelApp onLogout={onLogout}/>
+          </RoleRoute>
+        }/>
+        <Route path="/accept-invite/:token" element={<AcceptInvitePage/>}/>
+        <Route path="/" element={<Navigate to={canEnterApp ? `/${effectiveRole}` : "/login"} replace/>}/>
+        <Route path="*" element={<Navigate to="/" replace/>}/>
+      </Routes>
+      {import.meta.env.DEV && (
+        <DevRoleSwitcher role={effectiveRole} onSelect={(r) => { setDevOverride(r); navigate(`/${r}`); }}/>
       )}
-      {status === "error" && (
-        <div className="h-screen flex items-center justify-center text-sm text-red-500 text-center px-6">
-          Something went wrong loading your account. Try refreshing the page.
-        </div>
-      )}
-      {status !== "loading" && status !== "error" && showLogin && <LoginScreen onModalOpenChange={setSignupModalOpen}/>}
-      {status === "signedIn" && !signupModalOpen && effectiveRole === "agency" && <AgencyApp onLogout={onLogout}/>}
-      {status === "signedIn" && !signupModalOpen && effectiveRole === "model" && <ModelApp onLogout={onLogout}/>}
-      {status === "signedIn" && !signupModalOpen && effectiveRole === "brand" && <BrandApp onLogout={onLogout}/>}
-      {import.meta.env.DEV && <DevRoleSwitcher role={effectiveRole} onSelect={setDevOverride}/>}
     </>
   );
+}
+
+// Gates a role-specific app behind both "is anyone really allowed in right
+// now" (signed in, not mid-signup) and "is this the URL for the role
+// that's actually signed in" — typing /agency in the address bar while
+// signed in as a brand bounces back rather than rendering the wrong app.
+function RoleRoute({ canEnterApp, match, effectiveRole, children }: {
+  canEnterApp: boolean; match: boolean; effectiveRole: Role | null; children: React.ReactNode;
+}) {
+  if (!canEnterApp) return <Navigate to="/login" replace/>;
+  if (!match) return <Navigate to={effectiveRole ? `/${effectiveRole}` : "/login"} replace/>;
+  return <>{children}</>;
 }
 
 // Dev-only view switcher — lets a developer preview all three role-based

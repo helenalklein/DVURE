@@ -56,6 +56,10 @@ export interface RosterModel {
   rate: string;
   height: string;
   exp: string;
+  // Whether this model has claimed a real DVURE login yet (model_profiles
+  // .profile_id is set) — drives whether the agency sees "Invite to
+  // DVURE" or a "Has login" badge on their roster card.
+  hasLogin: boolean;
 }
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────

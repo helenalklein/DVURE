@@ -9,7 +9,7 @@ function parseRate(rate: string): number | null {
 export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string): Promise<RosterModel[]> {
   const { data, error } = await supabase
     .from("agency_model_relationships")
-    .select("model_id, model_profiles(id, full_name, location, default_day_rate, height, experience)")
+    .select("model_id, model_profiles(id, full_name, email, location, default_day_rate, height, experience, profile_id)")
     .eq("agency_org_id", agencyOrgId)
     .eq("status", "active");
 
@@ -22,12 +22,13 @@ export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string)
       return {
         id: m.id as string,
         name: m.full_name,
-        email: `${String(m.full_name).toLowerCase().replace(/\s+/g, ".")}@models.example`,
+        email: m.email ?? "",
         agency: agencyName,
         location: m.location ?? "",
         rate: m.default_day_rate != null ? `$${m.default_day_rate}/day` : "",
         height: m.height ?? "",
         exp: m.experience ?? "",
+        hasLogin: m.profile_id != null,
       };
     });
 }
@@ -46,6 +47,7 @@ export async function insertRosterModel(
     .from("model_profiles")
     .insert({
       full_name: input.name,
+      email: input.email,
       location: input.location,
       default_day_rate: parseRate(input.rate),
       height: input.height,
@@ -72,6 +74,7 @@ export async function insertRosterModel(
       rate: input.rate,
       height: input.height,
       exp: input.exp,
+      hasLogin: false,
     },
     error: null,
   };

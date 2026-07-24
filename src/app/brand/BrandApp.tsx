@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
   X, Check, Star, Search, Briefcase,
@@ -13,7 +14,7 @@ import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingSta
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag } from "../shared/ui";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
-import { findCampaignIdByName } from "../../lib/queries/campaigns";
+import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import RelayConsole from "./relay/RelayConsole";
@@ -916,16 +917,16 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   );
 }
 
-function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
-  campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
+function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
+  campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
 }) {
   const { profile, org } = useAuth();
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [shim, setShim] = useState<SubmissionShim>(new Map());
-  // Non-null once `campaign.name` resolves to a real Supabase campaign
-  // for the signed-in org (RLS-scoped) — only then do talent/comments
-  // reflect real data instead of the SAMPLE_TALENT/CARD_COMMENTS mock.
+  // Non-null once `campaignId` resolves to a real Supabase campaign via
+  // realIdShim — only then do talent/comments reflect real data instead
+  // of the SAMPLE_TALENT/CARD_COMMENTS mock.
   const [realCampaignId, setRealCampaignId] = useState<string | null>(null);
   const [contractModal, setContractModal] = useState<Talent|null>(null);
   const [extensions, setExtensions] = useState<SubmissionExtension[]>([]);
@@ -933,14 +934,14 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
   const [viewingAgency, setViewingAgency] = useState<string|null>(null);
   const [focusAgency, setFocusAgency] = useState<string|null>(null);
 
-  const campaign = CAMPAIGNS.find(c=>c.id===campaignId) ?? CAMPAIGNS[0];
+  const campaign = campaigns.find(c=>c.id===campaignId);
 
   useEffect(() => {
     let active = true;
-    findCampaignIdByName(campaign.name).then(async (realId) => {
-      if (!active) return;
-      setRealCampaignId(realId);
-      if (!realId) return; // no real campaign for this org yet — mock data already seeded above
+    const realId = realIdShim.get(campaignId) ?? null;
+    setRealCampaignId(realId);
+    if (!realId) return; // no real campaign for this id — mock data already seeded above
+    (async () => {
       const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
       if (!active) return;
       setTalent(realTalent);
@@ -948,9 +949,18 @@ function CampaignWorkspace({ campaignId, section, onSection, onBack, onNewCampai
       const realComments = await fetchSubmissionComments(realShim);
       if (!active) return;
       setComments(realComments);
-    });
+    })();
     return () => { active = false; };
-  }, [campaign.name]);
+  }, [campaignId, realIdShim]);
+
+  if (!campaign) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground gap-2">
+        Campaign not found.
+        <button onClick={onHome} className="underline cursor-pointer">Back to campaigns</button>
+      </div>
+    );
+  }
 
   function persistingSetTalent(fn: (prev: Talent[]) => Talent[]) {
     setTalent(prev => {
@@ -1424,12 +1434,12 @@ const OVERDUE_ACTIONS = [
   { id:4, type:"Payment",  msg:"Payment due for Ines Ferreira booking — 1 day overdue.",              campaignId:2, due:"Jul 14, 2026" },
 ];
 
-function CampaignsList({ openCampaign }: { openCampaign: (id: number) => void }) {
+function CampaignsList({ campaigns, openCampaign }: { campaigns: Campaign[]; openCampaign: (id: number) => void }) {
   const currentUser = useCurrentUser();
   const [tab, setTab] = useState("active");
   const [attentionOpen, setAttentionOpen] = useState(false);
   const attentionRef = useRef<HTMLDivElement>(null);
-  const filtered = tab==="active"?CAMPAIGNS.filter(c=>c.status==="active"):tab==="drafts"?[]:CAMPAIGNS.filter(c=>c.status==="archived");
+  const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
 
   // Document listener, not a fixed-position click-catcher — a fixed overlay
   // gets clipped to the nearest backdrop-filter ancestor's box (TopBar's
@@ -1583,17 +1593,80 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
 
 const CAMPAIGN_TYPES = ["Runway","Editorial","Advertising","E-commerce","TV Commercial","Beauty","Other"];
 
-function CreateCampaign({ onBack }: { onBack: () => void }) {
+function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: (realId: string) => void }) {
+  const { profile, org } = useAuth();
   const [step, setStep] = useState(1);
   const [genders, setGenders] = useState(["Female"]);
   const [cats, setCats] = useState(["Editorial"]);
   const [campaignType, setCampaignType] = useState("Editorial");
   const [customType, setCustomType] = useState("");
-  const [selectedAgencies, setSelectedAgencies] = useState<string[]>(PARTNERED_AGENCIES);
+  const [name, setName] = useState("");
+  const [shootStart, setShootStart] = useState("");
+  const [submissionOpen, setSubmissionOpen] = useState("");
+  const [submissionClose, setSubmissionClose] = useState("");
+  const [talentNeeded, setTalentNeeded] = useState("3");
+  const [budget, setBudget] = useState("");
+  const [partneredAgencies, setPartneredAgencies] = useState<{ id: string; name: string }[]>([]);
+  const [selectedAgencies, setSelectedAgencies] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
     set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
-  const allAgenciesSelected = selectedAgencies.length === PARTNERED_AGENCIES.length;
+  const allAgenciesSelected = partneredAgencies.length > 0 && selectedAgencies.length === partneredAgencies.length;
   const STEPS = [{n:1,label:"Basics"},{n:2,label:"Talent"},{n:3,label:"Brief"},{n:4,label:"Publish"}];
+
+  useEffect(() => {
+    if (!org) return;
+    fetchPartneredAgencies(org.id).then(agencies => {
+      setPartneredAgencies(agencies);
+      setSelectedAgencies(agencies.map(a => a.id));
+    });
+  }, [org?.id]);
+
+  async function handleSaveDraft() {
+    if (!org || !profile || !name.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    const { id, error } = await createCampaign({
+      brandOrgId: org.id,
+      createdByProfileId: profile.id,
+      name: name.trim(),
+      type: campaignType as any,
+      status: "drafts",
+      dueDate: shootStart || undefined,
+      submissionOpen: submissionOpen || undefined,
+      submissionClose: submissionClose || undefined,
+      talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
+      budget: budget ? Number(budget) : undefined,
+    });
+    setSaving(false);
+    if (error || !id) { setSaveError(error ?? "Couldn't save draft."); return; }
+    onCreated(id);
+  }
+
+  async function handlePublish() {
+    if (!org || !profile || !name.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    const { id, error } = await createCampaign({
+      brandOrgId: org.id,
+      createdByProfileId: profile.id,
+      name: name.trim(),
+      type: campaignType as any,
+      status: "active",
+      dueDate: shootStart || undefined,
+      submissionOpen: submissionOpen || undefined,
+      submissionClose: submissionClose || undefined,
+      talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
+      budget: budget ? Number(budget) : undefined,
+    });
+    if (error || !id) { setSaving(false); setSaveError(error ?? "Couldn't publish campaign."); return; }
+    const { error: distError } = await distributeCampaignToAgencies(id, selectedAgencies, profile.id);
+    setSaving(false);
+    if (distError) { setSaveError(distError); return; }
+    onCreated(id);
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="New Campaign" sub={`Step ${step} of 4`} actions={<Btn variant="ghost" size="sm" onClick={onBack}><X size={13}/> Discard</Btn>}/>
@@ -1614,7 +1687,7 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
         <div className="max-w-xl mx-auto px-6 py-8 space-y-5">
           {step===1&&(<><div><h2 className="text-base font-semibold mb-0.5">Campaign Basics</h2><p className="text-sm text-muted-foreground">Define the campaign and its timeline.</p></div>
             <div className="border-t border-border"/>
-            <TextInput label="Campaign Name" placeholder="e.g. AW25 Womenswear Campaign"/>
+            <TextInput label="Campaign Name" placeholder="e.g. AW25 Womenswear Campaign" value={name} onChange={e=>setName(e.target.value)}/>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <FieldLabel>Type</FieldLabel>
@@ -1631,17 +1704,17 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
                   </div>
                 )}
               </div>
-              <TextInput label="Brand" placeholder="e.g. Acne Studios"/>
-              <TextInput label="Shoot Start" placeholder="MM/DD/YYYY" type="date"/>
-              <TextInput label="Shoot End" placeholder="MM/DD/YYYY" type="date"/>
+              <TextInput label="Talent Needed" placeholder="e.g. 3" type="number" value={talentNeeded} onChange={e=>setTalentNeeded(e.target.value)}/>
+              <TextInput label="Budget" placeholder="e.g. 18000" type="number" value={budget} onChange={e=>setBudget(e.target.value)}/>
+              <TextInput label="Shoot Date" placeholder="MM/DD/YYYY" type="date" value={shootStart} onChange={e=>setShootStart(e.target.value)}/>
             </div>
             <TextInput label="Location" placeholder="City, state, or studio address"/>
             <div>
               <FieldLabel>Talent Submission Window</FieldLabel>
               <p className="text-xs text-muted-foreground mb-2">Agencies can only submit talent between these dates.</p>
               <div className="grid grid-cols-2 gap-4">
-                <TextInput label="Opens" placeholder="MM/DD/YYYY" type="date"/>
-                <TextInput label="Closes" placeholder="MM/DD/YYYY" type="date"/>
+                <TextInput label="Opens" placeholder="MM/DD/YYYY" type="date" value={submissionOpen} onChange={e=>setSubmissionOpen(e.target.value)}/>
+                <TextInput label="Closes" placeholder="MM/DD/YYYY" type="date" value={submissionClose} onChange={e=>setSubmissionClose(e.target.value)}/>
               </div>
             </div>
           </>)}
@@ -1680,30 +1753,32 @@ function CreateCampaign({ onBack }: { onBack: () => void }) {
             <div className="bg-secondary border border-border rounded-md p-4">
               <div className="flex items-center justify-between mb-1">
                 <FieldLabel>Distribute to partnered agencies</FieldLabel>
-                <button onClick={()=>setSelectedAgencies(allAgenciesSelected?[]:PARTNERED_AGENCIES)}
+                <button onClick={()=>setSelectedAgencies(allAgenciesSelected?[]:partneredAgencies.map(a=>a.id))}
                   className="text-[10px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer">
                   {allAgenciesSelected?"Clear all":"Select all"}
                 </button>
               </div>
               <div className="flex flex-wrap gap-2 mt-1">
-                {PARTNERED_AGENCIES.map(a=>(
-                  <Chip key={a} active={selectedAgencies.includes(a)} onClick={()=>toggle(selectedAgencies,a,setSelectedAgencies)}>{a}</Chip>
+                {partneredAgencies.map(a=>(
+                  <Chip key={a.id} active={selectedAgencies.includes(a.id)} onClick={()=>toggle(selectedAgencies,a.id,setSelectedAgencies)}>{a.name}</Chip>
                 ))}
               </div>
-              <div className="text-[10px] text-muted-foreground font-mono mt-2">{selectedAgencies.length} of {PARTNERED_AGENCIES.length} selected</div>
+              {partneredAgencies.length===0 && <div className="text-xs text-muted-foreground mt-1">No partnered agencies yet.</div>}
+              <div className="text-[10px] text-muted-foreground font-mono mt-2">{selectedAgencies.length} of {partneredAgencies.length} selected</div>
             </div>
             <div className="glass-subtle border rounded-md p-4 flex items-start gap-2.5">
               <AlertCircle size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
               <div className="text-xs text-muted-foreground leading-relaxed">No payment is due until talent is booked.</div>
             </div>
           </>)}
+          {saveError && <div className="text-xs text-red-500">{saveError}</div>}
           <div className="flex items-center justify-between pt-6 border-t border-border">
             <div className="flex gap-2">
               {step>1&&<Btn variant="outline" onClick={()=>setStep(step-1)}><ChevronLeft size={13}/> Back</Btn>}
-              <Btn variant="ghost" size="sm">Save draft</Btn>
+              <Btn variant="ghost" size="sm" disabled={!name.trim() || saving} onClick={handleSaveDraft}>Save draft</Btn>
             </div>
-            {step<4?<Btn variant="primary" onClick={()=>setStep(step+1)}>Continue <ChevronRight size={13}/></Btn>
-              :<Btn variant="primary" icon={<Check size={13}/>} disabled={selectedAgencies.length===0} onClick={onBack}>Publish Campaign</Btn>}
+            {step<4?<Btn variant="primary" disabled={!name.trim()} onClick={()=>setStep(step+1)}>Continue <ChevronRight size={13}/></Btn>
+              :<Btn variant="primary" icon={<Check size={13}/>} disabled={!name.trim() || selectedAgencies.length===0 || saving} onClick={handlePublish}>{saving?"Publishing…":"Publish Campaign"}</Btn>}
           </div>
         </div>
       </div>
@@ -2413,12 +2488,32 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
 
 export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const { profile, org } = useAuth();
+  const navigate = useNavigate();
+  const { id: campaignIdParam } = useParams<{ id?: string }>();
+  const activeCampaignId = campaignIdParam ? Number(campaignIdParam) : null;
   const [view, setView] = useState<AppView>("campaigns");
   const [globalNav, setGlobalNav] = useState<GlobalView>("campaigns");
-  const [activeCampaignId, setActiveCampaignId] = useState<number>(1);
   const [campaignSection, setCampaignSection] = useState<CampaignSection>("moodboard");
   const [activityOpen, setActivityOpen] = useState(false);
   const activityRef = useRef<HTMLDivElement>(null);
+
+  const [realCampaigns, setRealCampaigns] = useState<Campaign[]>([]);
+  const [realIdShim, setRealIdShim] = useState<Map<number, string>>(new Map());
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const allCampaigns = [...CAMPAIGNS, ...realCampaigns];
+
+  async function refetchCampaigns() {
+    if (!org) return null;
+    const { campaigns: fetched, realIdShim: shim } = await fetchBrandCampaigns(org.id);
+    setRealCampaigns(fetched);
+    setRealIdShim(shim);
+    setCampaignsLoading(false);
+    return shim;
+  }
+
+  useEffect(() => {
+    if (org) refetchCampaigns();
+  }, [org?.id]);
 
   useEffect(() => {
     if (!activityOpen) return;
@@ -2430,33 +2525,42 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   }, [activityOpen]);
 
   function openCampaign(id: number) {
-    const campaign = CAMPAIGNS.find(c=>c.id===id);
-    setActiveCampaignId(id);
-    setView("campaign");
+    const campaign = allCampaigns.find(c=>c.id===id);
     setCampaignSection(campaign?.type==="Runway" ? "casting" : "moodboard");
+    navigate(`/brand/campaigns/${id}`);
   }
-  function backToCampaigns() { setView("campaigns"); setGlobalNav("campaigns"); }
-  function handleGlobalNav(v: GlobalView) { setGlobalNav(v); setView(v); }
+  function backToCampaigns() { setGlobalNav("campaigns"); navigate("/brand"); }
+  function handleGlobalNav(v: GlobalView) { setGlobalNav(v); setView(v); navigate("/brand"); }
 
-  const inCampaign = view === "campaign";
+  async function handleCampaignCreated(realId: string) {
+    const shim = await refetchCampaigns();
+    const shimId = shim ? [...shim.entries()].find(([, v]) => v === realId)?.[0] : undefined;
+    setView("campaigns");
+    navigate(shimId != null ? `/brand/campaigns/${shimId}` : "/brand");
+  }
 
   // Relay is a hard context switch, not another campaign tab — its own
   // full-bleed console (own sidebar, dark-mode scoped), not nested inside
-  // the normal light-mode chrome.
-  if (view === "relay") return <RelayConsole onExit={()=>setView("campaign")}/>;
+  // the normal light-mode chrome. Exiting it lands back on the same
+  // campaign, since the URL never changed while relay was open.
+  if (view === "relay") return <RelayConsole onExit={()=>setView("campaigns")}/>;
+
+  if (activeCampaignId != null && campaignsLoading) {
+    return <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;
+  }
 
   return (
     <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:org?.name ?? "", email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>handleGlobalNav("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
-        {inCampaign ? (
-          <CampaignWorkspace campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>setView("create-campaign")} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")}/>
+        {activeCampaignId != null ? (
+          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")}/>
         ) : (
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
             <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {view==="campaigns"        && <CampaignsList openCampaign={openCampaign}/>}
+              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign}/>}
               {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign}/>}
-              {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")}/>}
+              {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
               {view==="contracts-global" && <GlobalContracts/>}
               {view==="payments-global"  && <GlobalPayments/>}
               {view==="messaging"        && <MessagingScreen/>}

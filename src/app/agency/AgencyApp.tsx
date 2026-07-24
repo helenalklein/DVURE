@@ -7,6 +7,7 @@ import { useAuth } from "../shared/auth";
 import { fetchAgencyRoster, insertRosterModel } from "../../lib/queries/roster";
 import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
+import { createModelInvite } from "../../lib/queries/invites";
 
 type View = "invitations" | "submit" | "roster" | "payments" | "messaging";
 
@@ -326,7 +327,7 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
   );
 }
 
-function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omit<RosterModel,"id"|"agency">) => void }) {
+function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omit<RosterModel,"id"|"agency"|"hasLogin">) => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [location, setLocation] = useState("");
@@ -358,8 +359,9 @@ function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omi
   );
 }
 
-function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel: (m: Omit<RosterModel,"id"|"agency">) => void }) {
+function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel: (m: Omit<RosterModel,"id"|"agency"|"hasLogin">) => void }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [invitingModel, setInvitingModel] = useState<RosterModel | null>(null);
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
@@ -375,6 +377,11 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
               <div className="text-xs text-muted-foreground">{m.location} · {m.email}</div>
             </div>
             <div className="text-xs font-mono">{m.rate}</div>
+            {m.hasLogin ? (
+              <Badge label="Has login" variant="active"/>
+            ) : (
+              <Btn variant="outline" size="sm" onClick={()=>setInvitingModel(m)}>Invite to DVURE</Btn>
+            )}
           </div>
         ))}
         {roster.length===0 && (
@@ -382,7 +389,67 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
         )}
       </div>
       {showAdd && <AddModelModal onClose={()=>setShowAdd(false)} onAdd={onAddModel}/>}
+      {invitingModel && <InviteModelModal model={invitingModel} onClose={()=>setInvitingModel(null)}/>}
     </div>
+  );
+}
+
+function InviteModelModal({ model, onClose }: { model: RosterModel; onClose: () => void }) {
+  const { org, profile } = useAuth();
+  const [email, setEmail] = useState(model.email);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleSend() {
+    if (!org || !profile || !email.trim()) return;
+    setSending(true);
+    setError(null);
+    const { token, error: err } = await createModelInvite(org.id, profile.id, model.id, email.trim());
+    setSending(false);
+    if (err || !token) { setError(err ?? "Couldn't create invite."); return; }
+    setLink(`${window.location.origin}/accept-invite/${token}`);
+  }
+
+  function handleCopy() {
+    if (!link) return;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-sm font-semibold">Invite {model.name} to DVURE</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+      </div>
+      {!link ? (
+        <>
+          <div className="p-5 space-y-3">
+            <TextInput label="Email" placeholder="model@example.com" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+            <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+              This creates a private sign-up link for {model.name} to set their own password and see their own bookings and payment status. There's no automated email yet — share the link with them directly.
+            </div>
+            {error && <div className="text-xs text-red-500">{error}</div>}
+          </div>
+          <div className="px-5 pb-5 flex gap-2">
+            <Btn variant="primary" disabled={!email.trim() || sending} onClick={handleSend}>{sending ? "Creating…" : "Create Invite Link"}</Btn>
+            <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+          </div>
+        </>
+      ) : (
+        <div className="p-5 space-y-3">
+          <div className="text-xs text-muted-foreground">Share this link with {model.name} — it lets them set their own password and activate their account.</div>
+          <div className="flex items-center gap-2 border border-border rounded-md bg-input-background px-3 py-2">
+            <div className="flex-1 text-xs font-mono truncate">{link}</div>
+            <button onClick={handleCopy} className="text-xs font-medium text-foreground hover:underline cursor-pointer shrink-0">{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <Btn variant="outline" fullWidth onClick={onClose}>Done</Btn>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -549,7 +616,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
     return () => { active = false; };
   }, [org?.id, org?.name]);
 
-  async function addModel(m: Omit<RosterModel,"id"|"agency">) {
+  async function addModel(m: Omit<RosterModel,"id"|"agency"|"hasLogin">) {
     if (!org) return;
     const { model } = await insertRosterModel(org.id, agencyName, m);
     if (model) setRoster(prev => [...prev, model]);
