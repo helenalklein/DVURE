@@ -2598,7 +2598,7 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
         <Edit3 size={14} className="text-muted-foreground"/>
         <div className="text-heading text-sm">New Message</div>
       </div>
-      <div key={`${formKey}-${replyTo?.id ?? "new"}`} className="flex-1 overflow-auto p-6 space-y-4 max-w-xl">
+      <div key={`${formKey}-${replyTo?.id ?? "new"}`} className="flex-1 overflow-auto p-6 space-y-4 max-w-2xl mx-auto w-full">
         <div>
           <FSelect label="To" options={ORG_USERS.map(u=>`${u.name} (${u.org})`)}
             value={replyTo ? `${replyTo.sender} (${replyTo.org})` : undefined}/>
@@ -2628,7 +2628,7 @@ function MessageDetailPane({ msg, onReply, onToggleRead }: { msg: typeof INBOX_M
         </div>
         <div className="text-xs text-muted-foreground">{msg.sender} · {msg.org} · {msg.title} · {msg.date}</div>
       </div>
-      <div className="flex-1 overflow-auto p-6 max-w-xl">
+      <div className="flex-1 overflow-auto p-6 max-w-2xl mx-auto w-full">
         <p className="text-sm leading-relaxed">{msg.body}</p>
       </div>
       <div className="border-t border-border px-6 py-3 flex items-center gap-2 shrink-0">
