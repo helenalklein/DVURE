@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import type { Role } from "./shared/types";
-import { cx } from "./shared/ui";
+import { cx, DvureMark, DvureSignature } from "./shared/ui";
 import { useAuth } from "./shared/auth";
 import LoginScreen from "./LoginScreen";
 import BrandApp from "./brand/BrandApp";
@@ -31,7 +31,12 @@ export default function App() {
   const onLogout = () => { setDevOverride(null); signOut(); };
 
   if (status === "loading") {
-    return <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-3">
+        <DvureMark size={40} className="animate-pulse"/>
+        <DvureSignature size={16}/>
+      </div>
+    );
   }
   if (status === "error") {
     return (

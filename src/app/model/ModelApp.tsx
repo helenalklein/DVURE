@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare } from "lucide-react";
-import { cx, Badge, TopBar, Stat, CurrentUserProvider, useCurrentUser } from "../shared/ui";
+import { cx, Badge, TopBar, Stat, CurrentUserProvider, useCurrentUser, DvureMark, DvureSignature } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 
@@ -172,6 +172,9 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
             <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-md hover:bg-secondary">
               <LogOut size={13}/> Sign out
             </button>
+            <div className="flex items-center justify-center gap-1.5 pt-3 opacity-40">
+              <DvureMark size={12}/><DvureSignature size={10}/>
+            </div>
           </div>
         </aside>
         <main className="flex-1 flex flex-col min-h-0">

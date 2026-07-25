@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Lock } from "lucide-react";
-import { FieldLabel, Btn } from "./shared/ui";
+import { FieldLabel, Btn, DvureSignature } from "./shared/ui";
 import { useAuth } from "./shared/auth";
 import { getInviteByToken, type InviteDetails } from "../lib/queries/invites";
 import { supabase } from "../lib/supabaseClient";
@@ -82,7 +82,7 @@ export default function AcceptInvitePage() {
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">
           <div>
             <div className="text-sm font-semibold">
-              {invite.orgName ? `${invite.orgName} invited you to DVURE` : "You've been invited to DVURE"}
+              {invite.orgName ? <>{invite.orgName} invited you to <DvureSignature size={13}/></> : <>You've been invited to <DvureSignature size={13}/></>}
             </div>
             {invite.modelFullName && (
               <div className="text-xs text-muted-foreground mt-1">Activating the account for {invite.modelFullName}</div>

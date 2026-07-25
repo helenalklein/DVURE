@@ -39,7 +39,7 @@
   --glass-border: rgba(255, 255, 255, 0.8);
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
-  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: "Bodoni Moda", ui-serif, Georgia, "Times New Roman", serif;
   --font-sans: "Inter", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
   /* Soft gold accent — DVURE's signature brand color, reserved for the
      wordmark's "D" and primary CTAs (Btn variant="primary"). Kept rare
@@ -282,5 +282,49 @@
   }
   .font-display {
     font-family: var(--font-display);
+  }
+  /* ── Repeatable type system ────────────────────────────────────────────
+     Three tiers, applied consistently instead of ad-hoc text-sm/text-lg:
+     .text-heading  — "bigger text": page/section titles, modal headers.
+     .text-subtext  — supporting copy under a heading (Inter, muted).
+     .text-meta     — small labels/timestamps/ids (already this app's
+                      existing font-mono uppercase tracking-wider
+                      convention — named here so it's reused, not
+                      reinvented per screen).
+     .dvure-signature — every literal "DVURE"/"Dvure" mention in copy,
+                        set in the same face as the wordmark itself. */
+  .text-heading {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+  .text-subtext {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    color: var(--muted-foreground);
+    line-height: 1.5;
+  }
+  .text-meta {
+    font-family: ui-monospace, "SF Mono", monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted-foreground);
+  }
+  /* The DVURE brand's own "big 3" mark system (mirrors DIOR/CD-monogram/
+     Dior): 1. the wordmark — upright, tracked, all-caps — for formal,
+     official, legal, and billing copy; 2. the D monogram (image, see
+     DvureMark); 3. the signature mark — italic, mixed-case "Dvure" — for
+     editorial/narrative mentions and every in-product brand reference,
+     matching the brand board's own dashboard example. */
+  .dvure-wordmark {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .dvure-signature {
+    font-family: var(--font-display);
+    font-style: italic;
+    letter-spacing: 0.01em;
   }
 }

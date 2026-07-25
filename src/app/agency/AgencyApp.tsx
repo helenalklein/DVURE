@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag } from "../shared/ui";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage } from "../shared/types";
 import { useAuth } from "../shared/auth";
@@ -287,7 +287,7 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
                 </div>
                 <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-0.5 shrink-0">Change <ChevronRight size={11}/></span>
               </button>
-              <div className="text-[10px] text-muted-foreground font-mono mt-1">Pulled from their DVURE profile.</div>
+              <div className="text-[10px] text-muted-foreground font-mono mt-1">Pulled from their <DvureSignature size={9}/> profile.</div>
             </div>
             <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)} value={pickedCampaign} onChange={setPickedCampaign}/>
             {pickedInvitation && (
@@ -345,7 +345,7 @@ function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omi
         <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
         <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
         <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
-          An invitation email will be sent to this model to set up their DVURE login, so they can see their own bookings and payment status.
+          An invitation email will be sent to this model to set up their <DvureSignature size={11}/> login, so they can see their own bookings and payment status.
         </div>
       </div>
       <div className="px-5 pb-5 flex gap-2">
@@ -380,7 +380,7 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
             {m.hasLogin ? (
               <Badge label="Has login" variant="active"/>
             ) : (
-              <Btn variant="outline" size="sm" onClick={()=>setInvitingModel(m)}>Invite to DVURE</Btn>
+              <Btn variant="outline" size="sm" onClick={()=>setInvitingModel(m)}>Invite to <DvureSignature size={11}/></Btn>
             )}
           </div>
         ))}
@@ -422,7 +422,7 @@ function InviteModelModal({ model, onClose }: { model: RosterModel; onClose: () 
   return (
     <Modal onClose={onClose}>
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <div className="text-sm font-semibold">Invite {model.name} to DVURE</div>
+        <div className="text-sm font-semibold">Invite {model.name} to <DvureSignature size={13}/></div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
       </div>
       {!link ? (
@@ -653,6 +653,9 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
             <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-md hover:bg-secondary">
               <LogOut size={13}/> Sign out
             </button>
+            <div className="flex items-center justify-center gap-1.5 pt-3 opacity-40">
+              <DvureMark size={12}/><DvureSignature size={10}/>
+            </div>
           </div>
         </aside>
         <main className="flex-1 flex flex-col min-h-0">

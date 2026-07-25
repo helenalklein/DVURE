@@ -1,6 +1,9 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
 import { Bell, X, ChevronDown, Settings } from "lucide-react";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
+import dvureMarkD from "../../assets/dvure-mark-d.png";
+import dvureMarkWordmark from "../../assets/dvure-mark-wordmark.png";
+import dvureMarkSignature from "../../assets/dvure-mark-signature.png";
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
 
@@ -115,6 +118,42 @@ export function Stat({ label, value, sub, accent }: { label: string; value: stri
 
 export function FieldLabel({ children }: { children: string }) {
   return <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1.5">{children}</div>;
+}
+
+// ─── DVURE BRAND MARKS ──────────────────────────────────────────────────
+// The brand's own "big 3" system, same idea as DIOR/CD-monogram/Dior —
+// all three cropped directly from real reference artwork, not redrawn
+// or font-matched, per the brand's own trademark-filing board:
+// 1. The Wordmark — DVURE, upright, all-caps — "Authority. Institution."
+//    Formal, official, legal, and billing contexts.
+// 2. The Monogram — the standalone "D" (DvureMark), cropped from the
+//    login lockup (src/assets/dvure-mark-d.png). Icons, hardware,
+//    small spaces.
+// 3. The Signature Mark — Dvure, italic, mixed-case (DvureSignature) —
+//    "Expression. Culture. Story." Editorial/narrative contexts, and
+//    every in-product brand mention (per the brand board's own
+//    dashboard example, which uses this exact mark for the app's own
+//    on-screen name) — this is "the signature text" whenever running
+//    copy just says the platform's name in passing.
+// The Wordmark and Signature Mark are cropped from the brand's
+// trademark-filing reference board (src/assets/dvure-mark-wordmark.png,
+// dvure-mark-signature.png) — that board is the only place the
+// Signature Mark's lowercase letterforms exist at all. Being flat
+// images, none of the three recolor per-theme; match the existing
+// convention (dark ink) rather than inventing a workaround.
+
+export function DvureWordmark({ size = 13, className }: { size?: number; className?: string }) {
+  return <img src={dvureMarkWordmark} alt="DVURE" style={{ height: size, width: "auto", verticalAlign: "-0.1em" }} className={cx("inline-block", className)}/>;
+}
+
+export function DvureSignature({ size = 15, className }: { size?: number; className?: string }) {
+  return <img src={dvureMarkSignature} alt="DVURE" style={{ height: size, width: "auto", verticalAlign: "-0.15em" }} className={cx("inline-block", className)}/>;
+}
+
+// The Monogram — cropped from the real wordmark lockup
+// (src/assets/dvure-mark-d.png), not hand-drawn.
+export function DvureMark({ size = 24, className }: { size?: number; className?: string }) {
+  return <img src={dvureMarkD} alt="DVURE" style={{ height: size, width: "auto" }} className={cx("inline-block", className)}/>;
 }
 
 export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, readOnly }: {
@@ -304,8 +343,8 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
   return (
     <div className="h-14 border-b glass flex items-center px-6 gap-4 shrink-0 z-20 relative">
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold truncate tracking-tight">{title}</div>
-        {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
+        <div className="text-heading text-lg truncate">{title}</div>
+        {sub && <div className="text-subtext text-xs">{sub}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">{actions}<RefreshButton/><UserMenuButton/><BellButton/></div>
     </div>

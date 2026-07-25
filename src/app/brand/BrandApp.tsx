@@ -5,14 +5,14 @@ import {
   X, Check, Star, Search, Briefcase,
   AlertCircle, Camera,
   MessageSquare, Download, CreditCard, MapPin,
-  Settings, Building2,
+  Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, BOOKINGS, bookingBreakdown, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark } from "../shared/ui";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
@@ -135,6 +135,9 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
         <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary">
           <LogOut size={13}/> Sign out
         </button>
+        <div className="flex items-center justify-center gap-1.5 pt-3 opacity-40">
+          <DvureMark size={12}/><DvureSignature size={10}/>
+        </div>
       </div>
     </aside>
   );
@@ -1881,42 +1884,483 @@ function PaymentSuccessOverlay({ campaign, amount, onClose }: { campaign: string
   );
 }
 
+type PaymentState = "idle" | "processing" | "complete";
+
 function GlobalPayments() {
   const currentUser = useCurrentUser();
+  const org = currentUser?.org ?? "";
+  const meName = currentUser?.name ?? "";
+  const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices">("payments");
   const [showPayModal, setShowPayModal] = useState(false);
-  const [payState, setPayState] = useState<"idle"|"processing">("idle");
-  const [selectedBooking, setSelectedBooking] = useState<string>("");
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showSigModal, setShowSigModal] = useState(false);
+  const [showAddCard, setShowAddCard] = useState(false);
+  const [showAddBank, setShowAddBank] = useState(false);
+  const [signature, setSignature] = useState<string|null>(null);
+  const [sigInput, setSigInput] = useState("");
+  const [payState, setPayState] = useState<PaymentState>("idle");
+  const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [payAmount, setPayAmount] = useState("");
 
-  const outstanding = BOOKINGS.filter(b=>b.paymentStatus!=="paid");
-  const selected = BOOKINGS.find(b=>b.id===selectedBooking);
-  const bd = selected ? bookingBreakdown(selected) : null;
+  // Sorted: red (overdue) first, yellow (≤3 days) second, green last
+  const invoices = [
+    { campaign:"FW24 Campaign — Balance",  amount:"$980",   due:"06/10/2025", urgency:"red"    },
+    { campaign:"AW25 Womenswear Campaign", amount:"$2,850", due:"06/20/2025", urgency:"yellow" },
+    { campaign:"SS25 Fragrance Launch",    amount:"$2,300", due:"06/24/2025", urgency:"green"  },
+    { campaign:"Resort Lookbook 2025",     amount:"$1,100", due:"07/03/2025", urgency:"green"  },
+    { campaign:"Beauty Campaign Q1",       amount:"$1,450", due:"07/10/2025", urgency:"green"  },
+  ];
+
+  const urgencyDot = (u: string) => {
+    if (u === "red")    return "w-2.5 h-2.5 rounded-full bg-[#C0392B] shrink-0";
+    if (u === "yellow") return "w-2.5 h-2.5 rounded-full bg-[#D4A017] shrink-0";
+    return "w-2.5 h-2.5 rounded-full bg-[#27AE60] shrink-0";
+  };
+
+  const hasCard = true;
+  const amountDue = selectedCampaign ? "2850" : "";
+
+  function handleComplete() {
+    setPayState("processing");
+    setTimeout(()=>setPayState("complete"), 2500);
+    setTimeout(()=>{ setPayState("idle"); setShowPayModal(false); }, 5000);
+  }
+
+  function attemptClose() {
+    if (payAmount || selectedCampaign) { setShowDiscardConfirm(true); } else { setShowPayModal(false); }
+  }
+
+  const canAuthorize = !!(selectedCampaign && payAmount && signature);
+
+  // Gold button style for Authorize Payment + Authorize
+  const goldBtn = "bg-[#C4A84A] hover:bg-[#B8962E] text-white font-semibold tracking-widest uppercase transition-all shadow-md hover:shadow-lg";
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Payments" sub={`${currentUser?.org ?? ""} · Outstanding booking payments`}/>
+      <TopBar title="Payments" sub={`${org} · Payment methods and invoices`}/>
+      {/* Tab bar: Payments | Invoices */}
+      <div className="bg-card border-b border-border px-6 flex items-center shrink-0">
+        {(["payments","invoices"] as const).map(t=>(
+          <button key={t} onClick={()=>setPaymentsTab(t)}
+            className={cx("px-5 py-3 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
+              paymentsTab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
+            )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+        ))}
+      </div>
+      {paymentsTab==="invoices" && <InvoicesPanel/>}
+      {paymentsTab==="payments" && <div className="flex-1 flex min-h-0">
+      {/* Full-height layout — button pinned to bottom */}
+      <div className="flex-1 flex min-h-0 p-6 gap-5">
+
+        {/* LEFT 1/3 — Cards + Bank Accounts */}
+        <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto">
+          <div>
+            <h2 className="text-heading text-base mb-3">Payment Cards</h2>
+            {hasCard ? (
+              <div className="space-y-3">
+                <div className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#C9961A] via-[#E2B84A] to-[#9A7015] p-5 flex flex-col justify-between select-none cursor-pointer hover:shadow-lg transition-shadow">
+                  <div className="flex items-start justify-between">
+                    <div><div className="text-[10px] font-mono text-yellow-100/80 uppercase tracking-widest">Primary</div><div className="text-base font-bold text-white tracking-widest mt-1">AMEX</div></div>
+                    <div className="text-right"><div className="text-[10px] text-yellow-100/70">American Express</div><div className="text-xs text-yellow-100/90 mt-1">Gold</div></div>
+                  </div>
+                  <div>
+                    <div className="text-white font-mono text-lg tracking-widest mb-2">•••• •••• •••• 4242</div>
+                    <div className="flex items-end justify-between">
+                      <div><div className="text-[9px] text-yellow-100/60 uppercase">Card Holder</div><div className="text-xs text-white font-medium">{meName.toUpperCase()}</div></div>
+                      <div className="text-right"><div className="text-[9px] text-yellow-100/60 uppercase">Expires</div><div className="text-xs text-white font-mono">09/27</div></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="relative rounded-xl overflow-hidden h-28 bg-gradient-to-br from-[#2a2a2a] to-[#444] p-4 flex flex-col justify-between cursor-pointer hover:shadow-md transition-shadow opacity-70">
+                  <div className="text-xs text-white/60 font-mono">VISA</div>
+                  <div><div className="text-white font-mono text-sm tracking-widest mb-1">•••• •••• •••• 8891</div><div className="text-xs text-white/60">{meName.toUpperCase()} · 03/26</div></div>
+                </div>
+                <button onClick={()=>setShowAddCard(true)} className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 flex items-center justify-center gap-1 hover:border-foreground transition-colors w-full">
+                  <Plus size={12}/> Add card
+                </button>
+              </div>
+            ) : (
+              <div className="h-44 border-2 border-dashed border-border rounded-xl flex items-center justify-center cursor-pointer hover:border-foreground transition-colors" onClick={()=>setShowAddCard(true)}>
+                <div className="text-center"><Plus size={20} className="text-muted-foreground mx-auto mb-1"/><div className="text-xs text-muted-foreground">Add payment card</div></div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h2 className="text-heading text-base mb-3">Bank Accounts</h2>
+            <div className="space-y-2">
+              <div className="glass-subtle border border-foreground/20 rounded-md p-3">
+                <div className="flex items-start justify-between mb-1.5">
+                  <div><div className="text-xs font-semibold">{org} Operating</div><div className="text-[10px] text-muted-foreground font-mono">Checking · Primary</div></div>
+                  <Badge label="Default" variant="active"/>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Account</span><span className="font-mono">••••4422</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Routing</span><span className="font-mono">021000021</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Bank</span><span className="font-mono">JPMorgan Chase</span></div>
+                </div>
+              </div>
+              <div className="glass-subtle border rounded-md p-3">
+                <div className="text-xs font-semibold mb-0.5">Creative Fund</div>
+                <div className="text-[10px] text-muted-foreground font-mono mb-1.5">Savings</div>
+                <div className="flex justify-between text-xs"><span className="text-muted-foreground">Account</span><span className="font-mono">••••8834</span></div>
+              </div>
+              <button className="text-xs text-muted-foreground hover:text-foreground w-full text-center border border-dashed border-border rounded-md px-4 py-2 hover:border-foreground transition-colors">See all accounts</button>
+              <button onClick={()=>setShowAddBank(true)} className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 flex items-center justify-center gap-1 hover:border-foreground w-full transition-colors"><Plus size={12}/> Add account</button>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT 2/3 — Invoices flex-1, button pinned bottom */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Header row: legend left, see all right */}
+          <div className="flex items-center justify-between mb-3 shrink-0">
+            <div className="flex items-center gap-1">
+              <h2 className="text-heading text-base mr-3">Outstanding Invoices</h2>
+              <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#C0392B] inline-block"/>Overdue</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#D4A017] inline-block"/>Due soon</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#27AE60] inline-block"/>On track</span>
+              </div>
+            </div>
+            <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer" onClick={() => setPaymentsTab("invoices")}>
+              See all invoices →
+            </button>
+          </div>
+          {/* 3×3 grid — unpaid invoices only, taller cards */}
+          <div className="flex-1 overflow-auto">
+            <div className="grid grid-cols-3 gap-3">
+              {invoices.slice(0,9).map((inv,i)=>(
+                <div key={i} className={cx("glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 transition-all flex flex-col gap-3", inv.urgency==="red"&&"border-[#C0392B]/30 bg-[#C0392B]/5")}>
+                  <div className="flex items-center justify-between">
+                    <span className={urgencyDot(inv.urgency)}/>
+                    <div className="text-[10px] font-mono text-muted-foreground">{inv.due}</div>
+                  </div>
+                  <div className="text-xs font-medium leading-snug flex-1">{inv.campaign}</div>
+                  <div className="text-base font-semibold font-mono">{inv.amount}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Authorize Payment — gold with white text, inevitably tall */}
+          <button
+            onClick={()=>setShowPayModal(true)}
+            className={`w-full py-10 mt-4 rounded-md ${goldBtn} text-lg`}
+          >
+            Authorize Payment
+          </button>
+        </div>
+      </div>{/* end payments flex */}
+      </div>}{/* end paymentsTab==="payments" */}
+
+      {/* ── AUTHORIZE PAYMENT MODAL ── */}
+      {showPayModal && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden relative">
+            {/* Header row */}
+            <div className="px-6 py-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                {/* Campaign selector */}
+                <div className="flex-1 relative">
+                  <select value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}
+                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+                    <option value="">Select campaign…</option>
+                    <option>AW25 Womenswear Campaign</option>
+                    <option>SS25 Fragrance Launch</option>
+                    <option>Resort Lookbook 2025</option>
+                  </select>
+                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
+                </div>
+                {/* Due date — same row as date picker */}
+                <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-muted-foreground shrink-0 whitespace-nowrap">
+                  Due: {selectedCampaign ? "06/20/2025" : "—"}
+                </div>
+                {/* Payment Date — labeled, defaults to today */}
+                <div className="flex flex-col gap-1 shrink-0">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Payment Date</div>
+                  <input type="date" defaultValue="2026-06-19" className="bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground hover:bg-secondary" title="Contact support">?</button>
+                  <button onClick={attemptClose} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-5">
+              {/* Amount row */}
+              <div className="flex items-stretch gap-4">
+                <div className="flex-1">
+                  <FieldLabel>Payment Amount</FieldLabel>
+                  <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden">
+                    <span className="px-3 py-2 text-sm text-muted-foreground border-r border-border">$</span>
+                    <input value={payAmount} onChange={e=>setPayAmount(e.target.value)} placeholder="0.00"
+                      className="flex-1 px-3 py-2 text-sm bg-transparent focus:outline-none"/>
+                    {amountDue && (
+                      <button onClick={()=>setPayAmount(amountDue)}
+                        className="px-3 py-2 text-xs font-medium text-muted-foreground border-l border-border hover:bg-secondary hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
+                        Pay in full
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* Amount Due — hero */}
+                <div className="bg-foreground rounded-md px-6 py-3 flex flex-col items-center justify-center text-primary-foreground shrink-0 min-w-[150px]">
+                  <div className="text-[10px] font-mono uppercase tracking-widest opacity-60 mb-1">Amount Due</div>
+                  <div className="text-2xl font-semibold font-mono">{selectedCampaign ? "$2,850" : "—"}</div>
+                </div>
+              </div>
+
+              {/* Payer + timestamp */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <FieldLabel>Payment Submitted By</FieldLabel>
+                  <input readOnly value={meName} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"/>
+                </div>
+                <div className="flex-1">
+                  <FieldLabel>Processing Timestamp</FieldLabel>
+                  <input readOnly value="Jun 19, 2026 · 2:34 PM EST" className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground cursor-not-allowed font-mono"/>
+                </div>
+              </div>
+
+              {/* E-Signature */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <FieldLabel>Authorized Representative E-Signature</FieldLabel>
+                  <div className="text-xs text-muted-foreground">By signing, you authorize this payment on behalf of {org}.</div>
+                </div>
+                <div className="shrink-0">
+                  {signature ? (
+                    <div className="border border-border rounded-md px-4 py-3 min-w-[140px] flex items-center justify-center bg-secondary cursor-pointer hover:border-foreground">
+                      <span className="font-serif italic text-lg">{signature}</span>
+                    </div>
+                  ) : (
+                    <button onClick={()=>setShowSigModal(true)} className="border border-dashed border-border rounded-md px-4 py-3 min-w-[140px] text-xs text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1">
+                      <Plus size={12}/> Add signature
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t-2 border-border bg-muted/20">
+              {/* Row 1: i button · Discard · Save Draft */}
+              <div className="px-6 py-3 flex items-center gap-2 border-b border-border">
+                <button className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground hover:bg-secondary" title="Open invoice">i</button>
+                <div className="flex-1"/>
+                <button onClick={()=>setShowDiscardConfirm(true)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-muted transition-colors">Discard</button>
+                <button onClick={()=>setShowPayModal(false)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-secondary transition-colors">Save Draft</button>
+              </div>
+              {/* Row 2: Authorize — always visible, gold when ready */}
+              <div className="px-6 py-4">
+                <button
+                  onClick={canAuthorize ? handleComplete : undefined}
+                  className={cx("w-full py-3.5 rounded-md text-sm tracking-widest uppercase transition-all",
+                    canAuthorize
+                      ? `${goldBtn} cursor-pointer`
+                      : "bg-[#C4A84A]/30 text-white/40 cursor-not-allowed"
+                  )}
+                >
+                  Authorize
+                </button>
+                {!canAuthorize && (
+                  <div className="text-center text-[10px] text-muted-foreground mt-2">
+                    {!selectedCampaign ? "Select a campaign to continue" : !payAmount ? "Enter payment amount" : "Add e-signature to authorize"}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Processing overlay */}
+            {payState !== "idle" && (
+              <PaymentSuccessOverlay
+                campaign={selectedCampaign || "AW25 Womenswear Campaign"}
+                amount={payAmount ? `$${Number(payAmount).toLocaleString()}` : "$2,850"}
+                onClose={()=>{ setPayState("idle"); setShowPayModal(false); }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Discard Confirm */}
+      {showDiscardConfirm && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
+          <div className="bg-card border border-border rounded-md w-80 p-6 shadow-xl">
+            <div className="text-sm font-semibold mb-2">Discard payment draft?</div>
+            <div className="text-xs text-muted-foreground mb-5">This payment draft will be lost. This action cannot be undone.</div>
+            <div className="flex gap-2">
+              <Btn variant="primary" fullWidth onClick={()=>{ setShowDiscardConfirm(false); setShowPayModal(false); setSelectedCampaign(""); setPayAmount(""); }}>Discard</Btn>
+              <Btn variant="outline" fullWidth onClick={()=>setShowDiscardConfirm(false)}>Keep editing</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* E-Signature Modal */}
+      {showSigModal && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
+          <div className="bg-card border border-border rounded-md w-96 overflow-hidden shadow-xl">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div className="text-sm font-semibold">Create E-Signature</div>
+              <button onClick={()=>setShowSigModal(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="text-xs text-muted-foreground">Type your full name to create your authorized e-signature.</div>
+              <div><FieldLabel>Full Name</FieldLabel><input value={sigInput} onChange={e=>setSigInput(e.target.value)} placeholder={`e.g. ${meName || "Jordan Smith"}`} className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/></div>
+              {sigInput && (<div className="border border-border rounded-md p-4 bg-secondary text-center"><div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-mono">Preview</div><div className="font-serif italic text-2xl">{sigInput}</div></div>)}
+              <div className="text-[10px] text-muted-foreground leading-relaxed">By creating this e-signature, you agree it is legally equivalent to your handwritten signature within <DvureWordmark size={9}/>.</div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" disabled={!sigInput} onClick={()=>{ setSignature(sigInput); setShowSigModal(false); setSigInput(""); }}>Create Signature</Btn>
+              <Btn variant="outline" onClick={()=>setShowSigModal(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Card Modal */}
+      {showAddCard && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div className="text-sm font-semibold">Add Payment Card</div>
+              <button onClick={()=>setShowAddCard(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <TextInput label="Name on Card" placeholder={`e.g. ${meName || "Jordan Smith"}`}/>
+              <div>
+                <FieldLabel>Card Number</FieldLabel>
+                <input placeholder="•••• •••• •••• ••••" maxLength={19}
+                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-foreground tracking-widest"/>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1"><TextInput label="Expiry" placeholder="MM/YY"/></div>
+                <div className="col-span-1"><TextInput label="CVV" placeholder="•••"/></div>
+                <div className="col-span-1"><TextInput label="ZIP Code" placeholder="10001"/></div>
+              </div>
+              <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground flex items-start gap-2">
+                <Lock size={13} className="shrink-0 mt-0.5"/>
+                <span>Your card information is encrypted and processed securely via Stripe. We never store your full card number.</span>
+              </div>
+            </div>
+            <div className="px-6 pb-6 flex gap-2">
+              <button className={`flex-1 py-3 rounded-md text-sm ${goldBtn}`} onClick={()=>setShowAddCard(false)}>Save Card</button>
+              <Btn variant="outline" onClick={()=>setShowAddCard(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Bank Account Modal */}
+      {showAddBank && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div className="text-sm font-semibold">Add Bank Account</div>
+              <button onClick={()=>setShowAddBank(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <TextInput label="Account Nickname" placeholder={`e.g. ${org || "Company"} Operating`}/>
+              <FSelect label="Account Type" options={["Checking","Savings"]}/>
+              <TextInput label="Account Holder Name" placeholder={`e.g. ${org || "Company"} LLC`}/>
+              <div>
+                <FieldLabel>Account Number</FieldLabel>
+                <input placeholder="Enter account number" className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-foreground"/>
+              </div>
+              <TextInput label="Routing Number" placeholder="9 digit routing number"/>
+              <TextInput label="Bank Name" placeholder="e.g. JPMorgan Chase"/>
+              <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground flex items-start gap-2">
+                <Lock size={13} className="shrink-0 mt-0.5"/>
+                <span>ACH account details are verified and stored securely. A micro-deposit may be sent to confirm ownership.</span>
+              </div>
+            </div>
+            <div className="px-6 pb-6 flex gap-2">
+              <button className={`flex-1 py-3 rounded-md text-sm ${goldBtn}`} onClick={()=>setShowAddBank(false)}>Save Account</button>
+              <Btn variant="outline" onClick={()=>setShowAddBank(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── INVOICES PANEL ─────────────────────────────────────────────────────────
+
+const INVOICE_DATA = [
+  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"James Whitfield", dayRate:950,  days:3, amount:2850,  due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"Amara Diallo",    dayRate:1150, days:2, amount:2300,  due:"06/24/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    agency:"IMG Models",        talent:"Mila Tran",       dayRate:1100, days:1, amount:1100,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0768", campaign:"FW24 Campaign",            agency:"DNA Models",        talent:"Sofia Brandt",    dayRate:1200, days:3, amount:3600,  due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0804", campaign:"Resort Lookbook 2025",     agency:"Storm Models",      talent:"Ines Ferreira",   dayRate:1340, days:2, amount:2680,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Next Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+];
+
+function InvoicesPanel() {
+  const currentUser = useCurrentUser();
+  const org = currentUser?.org ?? "";
+  const [selected, setSelected] = useState<typeof INVOICE_DATA[number]|null>(null);
+
+  const urgencyDot = (u: string) => {
+    if (u === "red")    return "w-2 h-2 rounded-full bg-[#C0392B] shrink-0";
+    if (u === "yellow") return "w-2 h-2 rounded-full bg-[#D4A017] shrink-0";
+    return "w-2 h-2 rounded-full bg-[#27AE60] shrink-0";
+  };
+
+  function calcBreakdown(inv: typeof INVOICE_DATA[number]) {
+    const modelFee      = inv.dayRate * inv.days;
+    const agencyFee     = Math.round(modelFee * (inv.agencyPct / 100));
+    const base          = modelFee + agencyFee;
+    const dvureFee      = Math.round(base * (inv.dvurePct / 100));          // 3%
+    const processingFee = Math.round(base * 0.029) + 30;                    // 2.9% + $0.30
+    const totalFees     = dvureFee + processingFee;
+    const tax           = Math.round(base * (inv.taxPct / 100));
+    const total         = base + dvureFee + processingFee + tax;
+    return { modelFee, agencyFee, dvureFee, processingFee, totalFees, tax, total };
+  }
+
+  const urgencyOrder: Record<string,number> = { red:0, yellow:1, green:2 };
+  const sorted = [...INVOICE_DATA].sort((a,b)=>(urgencyOrder[a.urgency]??2)-(urgencyOrder[b.urgency]??2));
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <TopBar title="Invoices" sub={`All invoices · ${org}`}/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <Stat label="Outstanding" value={outstanding.length} sub="Bookings awaiting payment"/>
-          <Stat label="Processing" value={BOOKINGS.filter(b=>b.paymentStatus==="processing").length}/>
-          <Stat label="Paid this month" value={BOOKINGS.filter(b=>b.paymentStatus==="paid").length}/>
+        <div className="flex items-center gap-4 mb-4 text-[10px] font-mono text-muted-foreground">
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#C0392B] inline-block"/>Overdue</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#D4A017] inline-block"/>Due within 3 days</span>
+          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#27AE60] inline-block"/>On track</span>
         </div>
         <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-          {outstanding.map(b=>{
-            const breakdown = bookingBreakdown(b);
+          {sorted.map(inv => {
+            const bd = calcBreakdown(inv);
             return (
-              <div key={b.id} onClick={()=>{setSelectedBooking(b.id);setShowPayModal(true);}}
-                className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all">
+              <div key={inv.id}
+                onClick={() => setSelected(inv)}
+                className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group"
+              >
                 <div className="flex items-start justify-between mb-3">
-                  <span className="text-[10px] font-mono text-muted-foreground">{b.id}</span>
-                  <Badge label={b.paymentStatus==="processing"?"Processing":"Pending"} variant={b.paymentStatus==="processing"?"pending":"draft"}/>
+                  <div className="flex items-center gap-2">
+                    <span className={urgencyDot(inv.urgency)}/>
+                    <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">{inv.due}</span>
                 </div>
                 <div className="mb-4">
-                  <div className="text-sm font-semibold leading-snug mb-0.5">{b.campaign}</div>
-                  <div className="text-xs text-muted-foreground">{b.agency} · {b.model}</div>
+                  <div className="text-sm font-semibold leading-snug mb-0.5">{inv.campaign}</div>
+                  <div className="text-xs text-muted-foreground">{inv.agency}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{inv.talent}</div>
                 </div>
-                <div className="border-t border-border pt-3">
-                  <div className="text-[10px] text-muted-foreground font-mono">Gross Booking Value</div>
-                  <div className="text-xl font-semibold font-mono">${breakdown.grossBookingValue.toLocaleString()}</div>
+                <div className="border-t border-border pt-3 flex items-end justify-between">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground font-mono">Total Due</div>
+                    <div className="text-xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-mono">View →</span>
                 </div>
               </div>
             );
@@ -1924,44 +2368,71 @@ function GlobalPayments() {
         </div>
       </div>
 
-      {showPayModal && selected && bd && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-strong border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden relative">
+      {/* Invoice Detail Modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold">{selected.id}</div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className={urgencyDot(selected.urgency)}/>
+                  <div className="text-sm font-semibold">{selected.id}</div>
+                </div>
                 <div className="text-xs text-muted-foreground">{selected.campaign} · {selected.agency}</div>
               </div>
-              <button onClick={()=>setShowPayModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
+              <button onClick={()=>setSelected(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
             </div>
             <div className="px-6 py-5">
               <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">Fee Breakdown</div>
-              <div className="space-y-1">
-                <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                  <div><div className="text-sm">Model Fee — {selected.model}</div><div className="text-[10px] text-muted-foreground font-mono">{selected.days} day{selected.days>1?"s":""} × ${selected.dayRate.toLocaleString()}/day</div></div>
-                  <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
-                </div>
-                <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                  <div><div className="text-sm">Agency Commission — {selected.agency}</div><div className="text-[10px] text-muted-foreground font-mono">{selected.agencyPct}% of model fee</div></div>
-                  <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
-                </div>
-                <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                  <div><div className="text-sm">Platform Fee</div><div className="text-[10px] text-muted-foreground font-mono">{selected.platformPct}% of model + agency fee</div></div>
-                  <div className="font-mono text-sm font-medium">${bd.platformFee.toLocaleString()}</div>
-                </div>
-                <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
-                  <div className="text-sm font-semibold">Gross Booking Value</div>
-                  <div className="text-2xl font-semibold font-mono">${bd.grossBookingValue.toLocaleString()}</div>
-                </div>
-              </div>
+              {(() => {
+                const bd = calcBreakdown(selected);
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between py-2.5 border-b border-border">
+                      <div>
+                        <div className="text-sm">Model Fee — {selected.talent}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">{selected.days} day{selected.days>1?"s":""} × ${selected.dayRate.toLocaleString()}/day</div>
+                      </div>
+                      <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
+                    </div>
+                    <div className="flex items-baseline justify-between py-2.5 border-b border-border">
+                      <div>
+                        <div className="text-sm">Agency Fee — {selected.agency}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">{selected.agencyPct}% of model fee</div>
+                      </div>
+                      <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
+                    </div>
+                    <div className="flex items-center justify-between py-2.5 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm">Fees &amp; Taxes</div>
+                        <div className="relative group/tooltip">
+                          <span className="w-4 h-4 rounded-full border border-border bg-secondary text-[9px] font-mono text-muted-foreground flex items-center justify-center cursor-default select-none">i</span>
+                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block z-20 w-56 bg-foreground text-primary-foreground rounded-md shadow-lg p-3 text-[10px] font-mono space-y-1.5">
+                            <div className="flex justify-between gap-4"><span><DvureWordmark size={9}/> transaction (3%)</span><span>${bd.dvureFee.toLocaleString()}</span></div>
+                            <div className="flex justify-between gap-4"><span>Processing (2.9% + $0.30)</span><span>${bd.processingFee.toLocaleString()}</span></div>
+                            <div className="border-t border-primary-foreground/20 pt-1.5 flex justify-between gap-4 font-semibold"><span>Total fees</span><span>${bd.totalFees.toLocaleString()}</span></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="font-mono text-sm font-medium">${(bd.dvureFee+bd.processingFee+bd.tax).toLocaleString()}</div>
+                    </div>
+                    <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
+                      <div className="text-sm font-semibold">Invoice Total</div>
+                      <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono text-right">Due {selected.due}</div>
+                  </div>
+                );
+              })()}
             </div>
-            <div className="px-6 pb-6">
-              <button onClick={()=>{ setPayState("processing"); setTimeout(()=>setShowPayModal(false), 3200); }}
-                className="w-full py-3.5 rounded-md text-sm font-semibold tracking-widest uppercase bg-foreground hover:bg-foreground/90 text-primary-foreground transition-all cursor-pointer">
+            <div className="px-6 pb-5 flex gap-2">
+              <button
+                onClick={()=>setSelected(null)}
+                className="flex-1 py-3 rounded-md text-sm font-semibold tracking-widest uppercase bg-[#C4A84A] hover:bg-[#B8962E] text-white transition-all cursor-pointer">
                 Authorize Payment
               </button>
+              <Btn variant="outline" onClick={()=>setSelected(null)}>Message Agency →</Btn>
             </div>
-            {payState==="processing" && <PaymentSuccessOverlay campaign={selected.campaign} amount={`$${bd.grossBookingValue.toLocaleString()}`} onClose={()=>{setPayState("idle");setShowPayModal(false);}}/>}
           </div>
         </div>
       )}
@@ -2173,51 +2644,181 @@ function MessageDetailPane({ msg, onReply, onToggleRead }: { msg: typeof INBOX_M
 function DirectoryScreen() {
   const [filterAccess, setFilterAccess] = useState("all");
   const [search, setSearch] = useState("");
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [showMakeGroup, setShowMakeGroup] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [groupMembers, setGroupMembers] = useState<number[]>([]);
+  const [groups, setGroups] = useState(["Creative Leadership","Campaign Team","Finance","Legal","Elite Team"]);
+  const [users, setUsers] = useState(ORG_USERS);
+
+  const ME_ID = 1; // logged in user is admin (id=1)
+  const isAdmin = (id: number) => users.find(u=>u.id===id)?.access==="administrator";
+
+  function changeAccess(userId: number, newAccess: string) {
+    // Admins can't change other admins' status; only admins can change any status
+    if (isAdmin(userId) && userId !== ME_ID) return;
+    if (!isAdmin(ME_ID)) return;
+    setUsers(p=>p.map(u=>u.id===userId?{...u,access:newAccess}:u));
+  }
+
   const q = search.trim().toLowerCase();
-  const filtered = ORG_USERS
+  const filtered = users
     .filter(u=>filterAccess==="all" || u.access===filterAccess)
     .filter(u=> !q || [u.name,u.title,u.org,u.email].some(f=>f.toLowerCase().includes(q)));
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Directory" sub="Organization members and agency contacts"/>
+      <TopBar title="Directory" sub="Organization members and agency contacts"
+        actions={<button onClick={()=>setShowAddUser(true)} className="px-4 py-2 text-sm font-medium bg-foreground text-primary-foreground rounded-md hover:bg-[#2a2a2a] cursor-pointer flex items-center gap-2"><Plus size={13}/> Add User</button>}
+      />
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex items-center justify-between mb-3 gap-3">
-          <h2 className="text-sm font-semibold shrink-0">Members</h2>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden w-56">
-              <Search size={13} className="text-muted-foreground ml-2.5 shrink-0"/>
-              <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search members…"
-                className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
+        <div className="grid grid-cols-2 gap-5">
+
+          {/* Left: Member roster */}
+          <div>
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <h2 className="text-sm font-semibold shrink-0">Members</h2>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden w-40">
+                  <Search size={13} className="text-muted-foreground ml-2.5 shrink-0"/>
+                  <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
+                    className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
+                </div>
+                <div className="flex items-center gap-1">
+                  {["all","administrator","enhanced","basic"].map(a=>(
+                    <button key={a} onClick={()=>setFilterAccess(a)}
+                      className={cx("text-[9px] font-mono px-2 py-1 rounded-sm border cursor-pointer capitalize transition-colors",
+                        filterAccess===a?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
+                      )}>{a}</button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              {["all","administrator","enhanced","basic"].map(a=>(
-                <button key={a} onClick={()=>setFilterAccess(a)}
-                  className={cx("text-[9px] font-mono px-2 py-1 rounded-sm border cursor-pointer capitalize transition-colors",
-                    filterAccess===a?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
-                  )}>{a}</button>
-              ))}
+            {filtered.length===0 ? (
+              <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No members match "{search}"</div>
+            ) : (
+              <div className="space-y-2">
+                {filtered.map(u=>{
+                  const canEdit = isAdmin(ME_ID) && !(isAdmin(u.id) && u.id !== ME_ID);
+                  return (
+                    <div key={u.id} className="glass-subtle border rounded-md p-3">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar name={u.name} className="w-9 h-9 text-xs"/>
+                          <div><div className="text-sm font-semibold">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
+                        </div>
+                        <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-2">{u.email} · {u.phone}</div>
+                      {canEdit && (
+                        <div className="flex gap-1">
+                          {["basic","enhanced","administrator"].map(a=>(
+                            <button key={a} onClick={()=>changeAccess(u.id, a)}
+                              className={cx("text-[9px] font-mono px-2 py-0.5 rounded-sm border cursor-pointer capitalize transition-colors",
+                                u.access===a?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
+                              )}>{a.slice(0,5)}</button>
+                          ))}
+                        </div>
+                      )}
+                      {!canEdit && isAdmin(u.id) && u.id!==ME_ID && (
+                        <div className="text-[9px] font-mono text-muted-foreground flex items-center gap-1"><Shield size={9}/> Admin status protected</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Groups */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold">Groups</h2>
+              <button onClick={()=>setShowMakeGroup(true)}
+                className="text-xs font-medium bg-secondary border border-border text-muted-foreground rounded-md px-3 py-1.5 hover:border-foreground hover:text-foreground cursor-pointer flex items-center gap-1 transition-colors">
+                <Plus size={11}/> Make Group
+              </button>
+            </div>
+            <div className="space-y-2">
+              {groups.map(g=>{
+                const members = users.filter(u=>u.group===g);
+                return (
+                  <div key={g} className="glass-subtle border rounded-md p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-semibold">{g}</div>
+                      <Badge label={`${members.length} member${members.length!==1?"s":""}`} variant="default"/>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {members.map(m=><span key={m.id} className="text-[9px] bg-secondary text-muted-foreground px-2 py-0.5 rounded-sm font-mono">{m.name.split(" ")[0]}</span>)}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono italic">Agency auto-assign eligible</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
-        {filtered.length===0 ? (
-          <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No members match "{search}"</div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filtered.map(u=>(
-              <div key={u.id} className="glass-subtle border rounded-md p-3">
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div className="flex items-center gap-3">
-                    <UserAvatar name={u.name} className="w-9 h-9 text-xs"/>
-                    <div><div className="text-sm font-semibold">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
-                  </div>
-                  <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
-                </div>
-                <div className="text-xs text-muted-foreground">{u.email} · {u.phone}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
+
+      {/* Add User modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div className="text-sm font-semibold">Add New User</div>
+              <button onClick={()=>setShowAddUser(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <TextInput label="Full Name" placeholder="e.g. Jordan Smith"/>
+              <TextInput label="Email" placeholder="email@company.com" type="email"/>
+              <TextInput label="Title" placeholder="e.g. Campaign Manager"/>
+              <TextInput label="Phone" placeholder="+1 212 555 0100" type="tel"/>
+              <FSelect label="Access Level" options={["basic — Standard access","enhanced — Elevated access","administrator — Full admin access"]}/>
+              <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+                An invitation email will be sent to this user to set up their login credentials.
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" onClick={()=>setShowAddUser(false)}>Send Invitation</Btn>
+              <Btn variant="outline" onClick={()=>setShowAddUser(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Make Group modal */}
+      {showMakeGroup && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div className="text-sm font-semibold">Create Group</div>
+              <button onClick={()=>setShowMakeGroup(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <TextInput label="Group Name" placeholder="e.g. Campaign Team A" value={groupName} onChange={e=>setGroupName(e.target.value)}/>
+              <div>
+                <FieldLabel>Select Members</FieldLabel>
+                <div className="border border-border rounded-md divide-y divide-border max-h-52 overflow-auto">
+                  {users.map(u=>(
+                    <label key={u.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-secondary transition-colors">
+                      <input type="checkbox" checked={groupMembers.includes(u.id)} onChange={()=>setGroupMembers(p=>p.includes(u.id)?p.filter(x=>x!==u.id):[...p,u.id])} className="cursor-pointer"/>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium">{u.name} <span className="text-muted-foreground">· {u.org}</span></div>
+                        <div className="text-[10px] text-muted-foreground">{u.title}</div>
+                      </div>
+                      <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" onClick={()=>{ if(groupName) setGroups(p=>[...p,groupName]); setShowMakeGroup(false); setGroupMembers([]); setGroupName(""); }}>Create Group</Btn>
+              <Btn variant="outline" onClick={()=>setShowMakeGroup(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2227,17 +2828,20 @@ function DirectoryScreen() {
 function Reports() {
   const [running, setRunning] = useState<string|null>(null);
   const reportTypes = [
-    { id:"ytd-finance",  label:"YTD Finance Report",       desc:"Total spend, payments, and budget utilization for the current fiscal year.", icon:BarChart2  },
+    { id:"ytd-finance",  label:"YTD Finance Report",       desc:"Total spend, invoices, payments, and budget utilization for the current fiscal year.", icon:BarChart2  },
     { id:"bookings",     label:"Booking Report",            desc:"All bookings by campaign, talent, agency, and date range.", icon:Briefcase     },
+    { id:"quarterly",    label:"Quarterly Report",          desc:"Campaign performance, talent pipeline metrics, and spend summary by quarter.", icon:Calendar   },
     { id:"campaigns",    label:"Campaign Report",           desc:"Per-campaign breakdown: submissions, approvals, bookings, and costs.", icon:Camera },
+    { id:"contracts",    label:"Contract Report",           desc:"Contract status, execution dates, and signature tracking.", icon:FileCheck    },
     { id:"agencies",     label:"Agency Performance Report", desc:"Submission volume, approval rate, and booking history by agency.", icon:Building2 },
+    { id:"declines",     label:"Decline Reasons Report",    desc:"Reasons talent was declined across all campaigns — identify patterns and brief alignment issues.", icon:X },
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Reports" sub="Generate reports from available data"/>
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl">
-          <p className="text-sm text-muted-foreground mb-6">Generate reports from any data available in DVURE.</p>
+          <p className="text-sm text-muted-foreground mb-6">Generate reports from any data available in <DvureSignature size={13}/>. Select a report type and configure the date range to export.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {reportTypes.map(r=>{
               const RIcon = r.icon;
@@ -2249,13 +2853,17 @@ function Reports() {
                     <div><div className="text-sm font-semibold">{r.label}</div><div className="text-xs text-muted-foreground leading-relaxed mt-0.5">{r.desc}</div></div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <FSelect options={["Last 30 days","This quarter","YTD 2025"]}/>
+                    <FSelect options={["Last 30 days","This quarter","YTD 2025","Custom range"]}/>
                     <Btn variant={isRunning?"secondary":"primary"} size="sm" onClick={()=>setRunning(isRunning?null:r.id)}>{isRunning?"Close":"Run Report"}</Btn>
                   </div>
                   {isRunning&&(
                     <div className="mt-3 bg-secondary border border-border rounded-md p-3">
                       <div className="text-xs font-mono text-muted-foreground mb-2">Preview — {r.label}</div>
                       <div className="text-xs text-muted-foreground">Report data will appear here once wired to Supabase.</div>
+                      <div className="flex gap-2 mt-3">
+                        <Btn variant="outline" size="sm" icon={<Download size={11}/>}>Export CSV</Btn>
+                        <Btn variant="outline" size="sm" icon={<Download size={11}/>}>Export PDF</Btn>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2276,6 +2884,7 @@ function Network() {
     { name:"Elite Model Management", loc:"New York · London · Paris", talent:420, bookings:8, spend:"$24,500", lastSub:"2 days ago",  responseRate:"94%", preferred:true  },
     { name:"IMG Models",             loc:"New York · London · Milan",  talent:380, bookings:5, spend:"$11,100", lastSub:"5 days ago",  responseRate:"87%", preferred:false },
     { name:"Wilhelmina",             loc:"New York · Los Angeles",     talent:210, bookings:2, spend:"$4,400",  lastSub:"12 days ago", responseRate:"76%", preferred:false },
+    { name:"DNA Models",             loc:"New York",                   talent:180, bookings:1, spend:"$3,600",  lastSub:"3 days ago",  responseRate:"91%", preferred:false },
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -2299,9 +2908,14 @@ function Network() {
                     {a.preferred && <Badge label="Preferred Partner" variant="success"/>}
                   </div>
                   <div className="text-xs text-muted-foreground font-mono flex items-center gap-1"><MapPin size={10}/>{a.loc} · {a.talent} talent</div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] text-muted-foreground font-mono">Last submission: <span className="text-foreground">{a.lastSub}</span></span>
+                    <span className="text-[10px] text-muted-foreground font-mono">Response rate: <span className="text-foreground font-semibold">{a.responseRate}</span></span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-5 shrink-0">
                   <div className="text-center hidden md:block"><div className="text-sm font-semibold">{a.bookings}</div><div className="text-xs text-muted-foreground">Bookings</div></div>
+                  <div className="text-center hidden md:block"><div className="text-sm font-semibold font-mono">{a.spend}</div><div className="text-xs text-muted-foreground">Spend</div></div>
                   <button onClick={()=>setAdded(p=>isAdded?p.filter(x=>x!==a.name):[...p,a.name])}
                     className={cx("px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
                       isAdded?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
@@ -2410,10 +3024,10 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             )}
             {tab === "subscription" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your DVURE Brand subscription.</p></div>
+                <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your <DvureWordmark size={11}/> Brand subscription.</p></div>
                 <div className="glass-subtle border rounded-md overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                    <div><div className="text-sm font-semibold">DVURE Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
+                    <div><div className="text-sm font-semibold"><DvureWordmark size={11}/> Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
                     <Badge label="Active Trial" variant="success"/>
                   </div>
                   <div className="px-5 py-4 space-y-3 text-sm">
