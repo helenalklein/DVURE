@@ -1437,6 +1437,16 @@ const OVERDUE_ACTIONS = [
   { id:4, type:"Payment",  msg:"Payment due for Ines Ferreira booking — 1 day overdue.",              campaignId:2, due:"Jul 14, 2026" },
 ];
 
+// Quiet history column for Tasks — same idea as Payments' Recent
+// Activity: real completed items, not another queue to act on.
+const RECENTLY_RESOLVED = [
+  { type:"Payment",  label:"Payment sent — James Whitfield booking",      resolvedDate:"Jul 08" },
+  { type:"Contract", label:"Contract signed — Amara Diallo",              resolvedDate:"Jul 06" },
+  { type:"Review",   label:"SS25 Fragrance — 9 submissions reviewed",     resolvedDate:"Jul 04" },
+  { type:"Payment",  label:"Payment sent — Sofia Brandt booking",         resolvedDate:"Jun 30" },
+  { type:"Contract", label:"Contract signed — James Whitfield",          resolvedDate:"Jun 27" },
+];
+
 function CampaignsList({ campaigns, openCampaign }: { campaigns: Campaign[]; openCampaign: (id: number) => void }) {
   const currentUser = useCurrentUser();
   const [tab, setTab] = useState("active");
@@ -1551,7 +1561,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
       <TopBar title="Tasks" sub={`${currentUser?.org ?? ""} · ${OVERDUE_ACTIONS.length} actions past due`}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="flex gap-10">
-          <div className="flex-1 min-w-0 max-w-2xl space-y-3">
+          <div className="flex-1 min-w-0 max-w-3xl space-y-3">
             {OVERDUE_ACTIONS.map(a=>(
               <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
                 <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
@@ -1582,6 +1592,24 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
                 <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
                   <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
                   <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Recently Resolved — quiet history column, same idea as
+              Payments' Recent Activity: real completed items, not
+              another queue demanding action. */}
+          <div className="w-64 shrink-0 border-l border-border pl-6">
+            <h2 className="text-heading text-base mb-3">Recently Resolved</h2>
+            <div className="space-y-3">
+              {RECENTLY_RESOLVED.map((r,i)=>(
+                <div key={i} className="text-xs">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
+                    <span className="text-[10px] font-mono text-muted-foreground">{r.resolvedDate}</span>
+                    <Badge label={r.type} variant="info"/>
+                  </div>
+                  <div className="leading-snug">{r.label}</div>
                 </div>
               ))}
             </div>
