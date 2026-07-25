@@ -130,7 +130,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
             <div className="p-6 space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-semibold">Try <DvureSignature size={18}/></div>
+                  <div className="text-heading text-lg">Try <DvureSignature size={18}/></div>
                   <div className="text-sm text-muted-foreground mt-0.5">Start a 14-day free trial — no credit card required.</div>
                 </div>
                 <button onClick={closeSignup} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={16}/></button>
@@ -173,7 +173,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
                   <button onClick={()=>{ setSignupError(null); setSignup("role"); }} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mb-2 cursor-pointer">
                     <ChevronLeft size={12}/> Back
                   </button>
-                  <div className="text-lg font-semibold">Create your {signupRole==="brand"?"brand":"agency"} account</div>
+                  <div className="text-heading text-lg">Create your {signupRole==="brand"?"brand":"agency"} account</div>
                 </div>
                 <button onClick={closeSignup} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={16}/></button>
               </div>
@@ -209,7 +209,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
                     <AlertCircle size={20}/>
                   </div>
                   <div>
-                    <div className="text-lg font-semibold">Almost there</div>
+                    <div className="text-heading text-lg">Almost there</div>
                     <div className="text-sm text-muted-foreground mt-1">Your account was created, but setting up your organization failed: {signupError}</div>
                   </div>
                   <Btn variant="primary" fullWidth onClick={runProvisioning}>Retry</Btn>
@@ -226,7 +226,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
                 <Check size={20}/>
               </div>
               <div>
-                <div className="text-lg font-semibold">You're all set</div>
+                <div className="text-heading text-lg">You're all set</div>
                 <div className="text-sm text-muted-foreground mt-1">
                   Your 14-day trial of <DvureWordmark size={11}/> {signupRole==="brand"?"Brand":"Agency"} has started for {companyName || (signupRole==="brand"?"your brand":"your agency")}. Explore the platform below — no setup required.
                 </div>

@@ -93,7 +93,7 @@ function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
     <Modal onClose={onClose} maxWidth="max-w-2xl">
       <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
         <div>
-          <div className="text-sm font-semibold">Choose a Model</div>
+          <div className="text-heading text-sm">Choose a Model</div>
           <div className="text-[10px] text-muted-foreground font-mono mt-0.5">From your roster, A–Z</div>
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
@@ -272,7 +272,7 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
       {showForm && pickedModel && (
         <Modal onClose={()=>setShowForm(false)}>
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-            <div className="text-sm font-semibold">Submit Talent</div>
+            <div className="text-heading text-sm">Submit Talent</div>
             <button onClick={()=>setShowForm(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
           </div>
           <div className="p-5 space-y-3">
@@ -336,7 +336,7 @@ function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omi
   return (
     <Modal onClose={onClose}>
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <div className="text-sm font-semibold">Add Model to Roster</div>
+        <div className="text-heading text-sm">Add Model to Roster</div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
       </div>
       <div className="p-5 space-y-3">
@@ -422,7 +422,7 @@ function InviteModelModal({ model, onClose }: { model: RosterModel; onClose: () 
   return (
     <Modal onClose={onClose}>
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <div className="text-sm font-semibold">Invite {model.name} to <DvureSignature size={13}/></div>
+        <div className="text-heading text-sm">Invite {model.name} to <DvureSignature size={13}/></div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
       </div>
       {!link ? (

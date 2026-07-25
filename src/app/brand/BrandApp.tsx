@@ -32,7 +32,7 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="glass-strong border rounded-md w-full max-w-md mx-4 overflow-hidden shadow-xl">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <div className="text-sm font-semibold">Contract Generated</div>
+          <div className="text-heading text-sm">Contract Generated</div>
           <button onClick={onLater} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
         </div>
         <div className="p-5 space-y-4">
@@ -578,7 +578,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="glass-strong border rounded-md w-80 overflow-hidden shadow-xl">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Reject — {declineModal.name}</div>
+              <div className="text-heading text-sm">Reject — {declineModal.name}</div>
               <button onClick={()=>{setDeclineModal(null);setDeclineReason("");}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="p-5 space-y-3">
@@ -739,7 +739,7 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="glass-strong border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
-              <div className="text-sm font-semibold">Look {drawer.number}</div>
+              <div className="text-heading text-sm">Look {drawer.number}</div>
               <button onClick={()=>setDrawerId(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="flex-1 overflow-auto p-5 space-y-4">
@@ -839,7 +839,7 @@ function ExtendSubmissionModal({ campaign, onClose, onGrant }: {
   return (
     <Modal onClose={onClose} maxWidth="max-w-sm">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-        <div className="text-sm font-semibold">Extend Submission Window</div>
+        <div className="text-heading text-sm">Extend Submission Window</div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
       </div>
       <div className="p-5 space-y-4">
@@ -898,7 +898,7 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
             <span className="text-sm font-bold">{agencyName.split(" ").map(w=>w[0]).slice(0,2).join("")}</span>
           </div>
           <div>
-            <div className="text-lg font-semibold leading-tight flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-base"/></div>
+            <div className="text-heading text-lg leading-tight flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-base"/></div>
             <Badge label={isDistributed ? "Distributed on this campaign" : "Not distributed on this campaign"} variant={isDistributed ? "active" : "draft"}/>
           </div>
         </div>
@@ -1086,7 +1086,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div className="flex-1 overflow-auto p-6">
               <div className="max-w-2xl space-y-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-sm font-semibold">Requirements</h2>
+                  <h2 className="text-heading text-sm">Requirements</h2>
                   <Badge label="Editable" variant="info"/>
                 </div>
                 <div className="glass-subtle border rounded-md p-5 space-y-4">
@@ -1113,7 +1113,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div className="flex-1 overflow-auto p-6">
               <div className="max-w-2xl space-y-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-sm font-semibold">Deliverables</h2>
+                  <h2 className="text-heading text-sm">Deliverables</h2>
                   <Badge label="Editable" variant="info"/>
                 </div>
                 <div className="glass-subtle border rounded-md p-5 space-y-4">
@@ -1142,7 +1142,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div className="flex-1 overflow-auto p-6">
               <div className="max-w-2xl space-y-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-sm font-semibold">Contracts</h2>
+                  <h2 className="text-heading text-sm">Contracts</h2>
                   <Btn variant="primary" size="sm" icon={<Plus size={13}/>}>Generate Contract</Btn>
                 </div>
                 {[["CF-2025-0841","James Whitfield","Fully Executed","$2,850","06/14/2025"],
@@ -1220,7 +1220,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div className="flex-1 overflow-auto p-6">
               <div className="max-w-2xl">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold">Campaign Users</h2>
+                  <h2 className="text-heading text-sm">Campaign Users</h2>
                   <Btn variant="outline" size="sm" icon={<Plus size={12}/>}>Add / Remove</Btn>
                 </div>
                 <div className="space-y-2 mb-5">
@@ -1398,7 +1398,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
       {showBroadcast && (
         <Modal onClose={()=>setShowBroadcast(false)} maxWidth="max-w-md">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="text-sm font-semibold">Send Update to All Agencies</div>
+            <div className="text-heading text-sm">Send Update to All Agencies</div>
             <button onClick={()=>setShowBroadcast(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
           </div>
           <div className="p-5 space-y-3">
@@ -1688,7 +1688,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       </div>
       <div className="flex-1 overflow-auto">
         <div className="max-w-xl mx-auto px-6 py-8 space-y-5">
-          {step===1&&(<><div><h2 className="text-base font-semibold mb-0.5">Campaign Basics</h2><p className="text-sm text-muted-foreground">Define the campaign and its timeline.</p></div>
+          {step===1&&(<><div><h2 className="text-heading text-base mb-0.5">Campaign Basics</h2><p className="text-sm text-muted-foreground">Define the campaign and its timeline.</p></div>
             <div className="border-t border-border"/>
             <TextInput label="Campaign Name" placeholder="e.g. AW25 Womenswear Campaign" value={name} onChange={e=>setName(e.target.value)}/>
             <div className="grid grid-cols-2 gap-4">
@@ -1721,7 +1721,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               </div>
             </div>
           </>)}
-          {step===2&&(<><div><h2 className="text-base font-semibold mb-0.5">Talent Requirements</h2><p className="text-sm text-muted-foreground">Agencies match their roster to these requirements.</p></div>
+          {step===2&&(<><div><h2 className="text-heading text-base mb-0.5">Talent Requirements</h2><p className="text-sm text-muted-foreground">Agencies match their roster to these requirements.</p></div>
             <div className="border-t border-border"/>
             {/* Runway-specific show planning — other types keep the generic
                 fields below for now; extend this pattern per type as those
@@ -1743,7 +1743,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
             <div className="grid grid-cols-2 gap-4"><FSelect label="Min Age" options={["18","20","22","25"]}/><FSelect label="Max Age" options={["No max","25","30","35","40"]}/></div>
             <div><FieldLabel>Categories</FieldLabel><div className="flex flex-wrap gap-2">{["Editorial","Runway","Beauty","Fitness","E-commerce","Luxury"].map(t=><Chip key={t} active={cats.includes(t)} onClick={()=>toggle(cats,t,setCats)}>{t}</Chip>)}</div></div>
           </>)}
-          {step===3&&(<><div><h2 className="text-base font-semibold mb-0.5">Creative Brief</h2><p className="text-sm text-muted-foreground">Shared with agencies and their talent.</p></div>
+          {step===3&&(<><div><h2 className="text-heading text-base mb-0.5">Creative Brief</h2><p className="text-sm text-muted-foreground">Shared with agencies and their talent.</p></div>
             <div className="border-t border-border"/>
             <Textarea label="Campaign Brief" placeholder="Describe the creative concept, mood, and aesthetic direction…" rows={5}/>
             <div className="grid grid-cols-2 gap-4">
@@ -1751,7 +1751,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               <FSelect label="Duration" options={["6 months","1 year","2 years","Unlimited"]}/>
             </div>
           </>)}
-          {step===4&&(<><div><h2 className="text-base font-semibold mb-0.5">Review & Publish</h2><p className="text-sm text-muted-foreground">Distribute to agencies and open for submissions.</p></div>
+          {step===4&&(<><div><h2 className="text-heading text-base mb-0.5">Review & Publish</h2><p className="text-sm text-muted-foreground">Distribute to agencies and open for submissions.</p></div>
             <div className="border-t border-border"/>
             <div className="bg-secondary border border-border rounded-md p-4">
               <div className="flex items-center justify-between mb-1">
@@ -1868,13 +1868,13 @@ function PaymentSuccessOverlay({ campaign, amount, onClose }: { campaign: string
     <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-6 rounded-xl z-50">
       {phase === "processing" && (<>
         <div className="w-14 h-14 border-2 border-border border-t-foreground rounded-full animate-spin"/>
-        <div className="text-base font-semibold text-foreground">Processing payment…</div>
+        <div className="text-heading text-base text-foreground">Processing payment…</div>
         <div className="text-xs text-muted-foreground font-mono">{campaign}</div>
       </>)}
       {(phase === "stamp" || phase === "done") && (<>
         <div className={cx("transition-all duration-500", phase === "stamp" ? "scale-150 opacity-0" : "scale-100 opacity-100")}><PaidStamp size={140}/></div>
         <div className="text-center space-y-1">
-          <div className="text-base font-semibold text-foreground">Payment Authorized</div>
+          <div className="text-heading text-base text-foreground">Payment Authorized</div>
           <div className="text-sm text-[#16a34a] font-semibold">{amount} — Paid in Full</div>
           <div className="text-xs text-muted-foreground font-mono">{campaign}</div>
         </div>
@@ -2205,7 +2205,7 @@ function GlobalPayments() {
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
           <div className="bg-card border border-border rounded-md w-96 overflow-hidden shadow-xl">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Create E-Signature</div>
+              <div className="text-heading text-sm">Create E-Signature</div>
               <button onClick={()=>setShowSigModal(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="p-5 space-y-4">
@@ -2227,7 +2227,7 @@ function GlobalPayments() {
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
           <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Add Payment Card</div>
+              <div className="text-heading text-sm">Add Payment Card</div>
               <button onClick={()=>setShowAddCard(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="p-6 space-y-4">
@@ -2260,7 +2260,7 @@ function GlobalPayments() {
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
           <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Add Bank Account</div>
+              <div className="text-heading text-sm">Add Bank Account</div>
               <button onClick={()=>setShowAddBank(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="p-6 space-y-4">
@@ -2596,7 +2596,7 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-6 py-4 border-b border-border flex items-center gap-2 shrink-0">
         <Edit3 size={14} className="text-muted-foreground"/>
-        <div className="text-sm font-semibold">New Message</div>
+        <div className="text-heading text-sm">New Message</div>
       </div>
       <div key={`${formKey}-${replyTo?.id ?? "new"}`} className="flex-1 overflow-auto p-6 space-y-4 max-w-xl">
         <div>
@@ -2677,7 +2677,7 @@ function DirectoryScreen() {
           {/* Left: Member roster */}
           <div>
             <div className="flex items-center justify-between mb-3 gap-3">
-              <h2 className="text-sm font-semibold shrink-0">Members</h2>
+              <h2 className="text-heading text-sm shrink-0">Members</h2>
               <div className="flex items-center gap-2">
                 <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden w-40">
                   <Search size={13} className="text-muted-foreground ml-2.5 shrink-0"/>
@@ -2733,7 +2733,7 @@ function DirectoryScreen() {
           {/* Right: Groups */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold">Groups</h2>
+              <h2 className="text-heading text-sm">Groups</h2>
               <button onClick={()=>setShowMakeGroup(true)}
                 className="text-xs font-medium bg-secondary border border-border text-muted-foreground rounded-md px-3 py-1.5 hover:border-foreground hover:text-foreground cursor-pointer flex items-center gap-1 transition-colors">
                 <Plus size={11}/> Make Group
@@ -2765,7 +2765,7 @@ function DirectoryScreen() {
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Add New User</div>
+              <div className="text-heading text-sm">Add New User</div>
               <button onClick={()=>setShowAddUser(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
             </div>
             <div className="p-5 space-y-3">
@@ -2791,7 +2791,7 @@ function DirectoryScreen() {
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold">Create Group</div>
+              <div className="text-heading text-sm">Create Group</div>
               <button onClick={()=>setShowMakeGroup(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
             </div>
             <div className="p-5 space-y-4">
@@ -2995,7 +2995,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
           <div className="max-w-xl">
             {tab === "profile" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Profile</h2><p className="text-sm text-muted-foreground">Your personal account details.</p></div>
+                <div><h2 className="text-heading text-base mb-0.5">Profile</h2><p className="text-sm text-muted-foreground">Your personal account details.</p></div>
                 {!isAdmin && (
                   <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
                     Your title is set by your organization's administrator and can't be changed here.
@@ -3024,7 +3024,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             )}
             {tab === "subscription" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your <DvureWordmark size={11}/> Brand subscription.</p></div>
+                <div><h2 className="text-heading text-base mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your <DvureWordmark size={11}/> Brand subscription.</p></div>
                 <div className="glass-subtle border rounded-md overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                     <div><div className="text-sm font-semibold"><DvureWordmark size={11}/> Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
@@ -3040,13 +3040,13 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             )}
             {tab === "billing" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Billing</h2><p className="text-sm text-muted-foreground">Payment methods and billing history.</p></div>
+                <div><h2 className="text-heading text-base mb-0.5">Billing</h2><p className="text-sm text-muted-foreground">Payment methods and billing history.</p></div>
                 <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">Billing is processed securely by Stripe — wired in Milestone C.</div>
               </div>
             )}
             {tab === "security" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Security</h2><p className="text-sm text-muted-foreground">Manage access and authentication settings.</p></div>
+                <div><h2 className="text-heading text-base mb-0.5">Security</h2><p className="text-sm text-muted-foreground">Manage access and authentication settings.</p></div>
                 {[{label:"Change password",action:"Update"},{label:"Two-factor authentication",action:"Enable"}].map(item=>(
                   <div key={item.label} className="glass-subtle border rounded-md px-4 py-3 flex items-center justify-between">
                     <div className="text-sm font-medium">{item.label}</div>
@@ -3057,7 +3057,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             )}
             {tab === "org" && (
               <div className="space-y-5">
-                <div><h2 className="text-base font-semibold mb-0.5">Organization</h2><p className="text-sm text-muted-foreground">Manage your brand profile.</p></div>
+                <div><h2 className="text-heading text-base mb-0.5">Organization</h2><p className="text-sm text-muted-foreground">Manage your brand profile.</p></div>
                 <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
                   Organization names can't be changed here once set — contact <span className="text-foreground font-medium">support@dvure.com</span> for a rename.
                 </div>
@@ -3071,7 +3071,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             )}
             {tab === "notifications" && (
               <div className="space-y-6">
-                <div><h2 className="text-base font-semibold mb-0.5">Notifications</h2><p className="text-sm text-muted-foreground">Choose how and when you're notified about upcoming payment due dates. Check as many as you'd like.</p></div>
+                <div><h2 className="text-heading text-base mb-0.5">Notifications</h2><p className="text-sm text-muted-foreground">Choose how and when you're notified about upcoming payment due dates. Check as many as you'd like.</p></div>
                 <div className="space-y-2">
                   <FieldLabel>Delivery method</FieldLabel>
                   <div className="space-y-1.5">

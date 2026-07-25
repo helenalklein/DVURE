@@ -49,7 +49,7 @@ export default function AcceptInvitePage() {
     return (
       <div className="h-screen flex items-center justify-center bg-background px-6">
         <div className="glass-strong border rounded-xl p-6 max-w-sm text-center space-y-2">
-          <div className="text-lg font-semibold">
+          <div className="text-heading text-lg">
             {!invite ? "Invite not found" : invite.status === "accepted" ? "This invite has already been used" : invite.status === "revoked" ? "This invite was revoked" : "This invite has expired"}
           </div>
           <div className="text-sm text-muted-foreground">Ask your agency to send you a new invite link.</div>
@@ -65,7 +65,7 @@ export default function AcceptInvitePage() {
     return (
       <div className="h-screen flex items-center justify-center bg-background px-6">
         <div className="glass-strong border rounded-xl p-6 max-w-sm text-center space-y-3">
-          <div className="text-lg font-semibold">You're already signed in</div>
+          <div className="text-heading text-lg">You're already signed in</div>
           <div className="text-sm text-muted-foreground">Sign out first to accept this invite as {invite.email}.</div>
           <Btn variant="primary" fullWidth onClick={signOut}>Sign out</Btn>
         </div>
@@ -81,7 +81,7 @@ export default function AcceptInvitePage() {
         </div>
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">
           <div>
-            <div className="text-sm font-semibold">
+            <div className="text-heading text-sm">
               {invite.orgName ? <>{invite.orgName} invited you to <DvureSignature size={13}/></> : <>You've been invited to <DvureSignature size={13}/></>}
             </div>
             {invite.modelFullName && (
