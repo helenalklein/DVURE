@@ -2508,7 +2508,7 @@ function MessagingScreen() {
       <TopBar title="Messaging" sub="Organization and agency communications"
         actions={<Btn variant="primary" size="sm" icon={<Edit3 size={13}/>} onClick={startNewMessage}>New Message</Btn>}/>
       <div className="flex-1 flex min-h-0">
-        <div className="w-80 shrink-0 border-r border-border flex flex-col min-h-0">
+        <div className="w-1/3 min-w-[260px] shrink-0 border-r border-border flex flex-col min-h-0">
           <div className="px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <div className="text-xs font-semibold">Inbox</div>
