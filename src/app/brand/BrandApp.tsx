@@ -2458,15 +2458,25 @@ const INBOX_MSGS = [
 ];
 
 // Split view — an inbox list on the left, a persistent compose/detail pane
-// on the right. Defaults straight into a blank New Message so there's zero
-// clicks between landing on Messaging and starting to type, per the ask.
+// on the right. Lands blank (no compose, no message) until the user picks
+// something, then remembers that exact selection — even across sign-out/
+// sign-in — the same way Gmail/Slack drop you back where you left off.
+// There's no real messages backend yet, so this can't sync across devices;
+// it's a per-browser localStorage entry keyed to the signed-in profile id,
+// which is the honest version of "remembered" available at this stage.
 // Send/Reply are mocked (no recipients, no delivery) until there's a real
 // backend to send through — that's expected at this stage.
-type MessagingMode = "compose" | "view";
+type MessagingMode = "empty" | "compose" | "view";
+type MessagingSelection = { mode: "compose" } | { mode: "view"; messageId: number };
+
+function messagingSelectionKey(profileId: string) {
+  return `dvure:messaging:lastSelection:${profileId}`;
+}
 
 function MessagingScreen() {
+  const { profile } = useAuth();
   const [messages, setMessages] = useState(INBOX_MSGS);
-  const [mode, setMode] = useState<MessagingMode>("compose");
+  const [mode, setMode] = useState<MessagingMode>("empty");
   const [selectedId, setSelectedId] = useState<number|null>(null);
   const [checked, setChecked] = useState<number[]>([]);
   const allChecked = messages.length>0 && checked.length===messages.length;
@@ -2475,14 +2485,43 @@ function MessagingScreen() {
   // moment openMessage flips it.
   const selectedMsg = messages.find(m=>m.id===selectedId) ?? null;
 
+  // Restore whatever this profile last had open — including across a
+  // sign-out/sign-in, since it reads from localStorage rather than
+  // component state.
+  useEffect(() => {
+    if (!profile?.id) return;
+    const raw = localStorage.getItem(messagingSelectionKey(profile.id));
+    if (!raw) return;
+    try {
+      const saved: MessagingSelection = JSON.parse(raw);
+      if (saved.mode === "compose") {
+        setMode("compose");
+      } else if (saved.mode === "view" && INBOX_MSGS.some(m=>m.id===saved.messageId)) {
+        setSelectedId(saved.messageId);
+        setMode("view");
+      }
+    } catch {
+      // Corrupt/old-shape entry — ignore and stay on the blank default.
+    }
+  }, [profile?.id]);
+
+  function persistSelection(selection: MessagingSelection | null) {
+    if (!profile?.id) return;
+    const key = messagingSelectionKey(profile.id);
+    if (selection) localStorage.setItem(key, JSON.stringify(selection));
+    else localStorage.removeItem(key);
+  }
+
   function openMessage(m: typeof INBOX_MSGS[number]) {
     setSelectedId(m.id);
     setMode("view");
     setMessages(prev => prev.map(x => x.id===m.id ? { ...x, read:true } : x));
+    persistSelection({ mode:"view", messageId: m.id });
   }
   function startNewMessage() {
     setSelectedId(null);
     setMode("compose");
+    persistSelection({ mode:"compose" });
   }
   function toggleChecked(id: number) {
     setChecked(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
@@ -2499,7 +2538,11 @@ function MessagingScreen() {
   }
   function archiveChecked() {
     setMessages(prev => prev.filter(m=>!checked.includes(m.id)));
-    if (selectedId!==null && checked.includes(selectedId)) { setSelectedId(null); setMode("compose"); }
+    if (selectedId!==null && checked.includes(selectedId)) {
+      setSelectedId(null);
+      setMode("empty");
+      persistSelection(null);
+    }
     setChecked([]);
   }
 
@@ -2556,9 +2599,20 @@ function MessagingScreen() {
           </div>
         </div>
         <div className="flex-1 flex flex-col min-h-0">
-          {mode==="compose"
-            ? <ComposePane replyTo={selectedMsg}/>
-            : selectedMsg && <MessageDetailPane msg={selectedMsg} onReply={()=>setMode("compose")} onToggleRead={()=>toggleRead(selectedMsg.id)}/>}
+          {mode==="empty" && (
+            <div className="flex-1 flex items-center justify-center text-center px-6">
+              <div>
+                <div className="text-sm text-muted-foreground mb-3">Select a message to read, or start a new one.</div>
+                <Btn variant="outline" size="sm" icon={<Edit3 size={13}/>} onClick={startNewMessage}>New Message</Btn>
+              </div>
+            </div>
+          )}
+          {mode==="compose" && <ComposePane replyTo={selectedMsg}/>}
+          {mode==="view" && selectedMsg && (
+            <MessageDetailPane msg={selectedMsg}
+              onReply={()=>{ setMode("compose"); persistSelection({ mode:"compose" }); }}
+              onToggleRead={()=>toggleRead(selectedMsg.id)}/>
+          )}
         </div>
       </div>
     </div>
