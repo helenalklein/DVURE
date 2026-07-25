@@ -2032,12 +2032,9 @@ function GlobalPayments() {
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#27AE60] inline-block"/>On track</span>
               </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer" onClick={() => setPaymentsTab("invoices")}>
-                See all →
-              </button>
-              <Btn variant="primary" size="sm" onClick={()=>setShowPayModal(true)}>Authorize Payment</Btn>
-            </div>
+            <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer shrink-0" onClick={() => setPaymentsTab("invoices")}>
+              See all invoices →
+            </button>
           </div>
           {/* 2-wide grid — unpaid invoices only */}
           <div className="flex-1 overflow-auto">
@@ -2054,6 +2051,14 @@ function GlobalPayments() {
               ))}
             </div>
           </div>
+
+          {/* Authorize Payment — gold with white text, back to its original weight */}
+          <button
+            onClick={()=>setShowPayModal(true)}
+            className={`w-full py-10 mt-4 rounded-md ${goldBtn} text-lg`}
+          >
+            Authorize Payment
+          </button>
         </div>
 
         {/* RIGHT — Recent Activity, small quiet column */}
@@ -2630,9 +2635,10 @@ function MessagingScreen() {
           )}
           {mode==="compose" && <ComposePane replyTo={selectedMsg}/>}
           {mode==="view" && selectedMsg && (
-            <MessageDetailPane msg={selectedMsg}
+            <MessageDetailPane msg={selectedMsg} allMessages={messages}
               onReply={()=>{ setMode("compose"); persistSelection({ mode:"compose" }); }}
-              onToggleRead={()=>toggleRead(selectedMsg.id)}/>
+              onToggleRead={()=>toggleRead(selectedMsg.id)}
+              onOpenRelated={openMessage}/>
           )}
         </div>
       </div>
@@ -2693,18 +2699,56 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
   );
 }
 
-function MessageDetailPane({ msg, onReply, onToggleRead }: { msg: typeof INBOX_MSGS[number]; onReply: () => void; onToggleRead: () => void }) {
+// Header reads like a plain old mail client (mutt/Pine/early Outlook) —
+// labeled fields in a monospace block — rather than a single condensed
+// byline. A short one-sentence body used to leave the whole pane looking
+// mostly blank; the "Related" thread below (same campaign, grouped from
+// the same inbox data, not fabricated) gives it real content to fill
+// with instead of empty space.
+function MessageDetailPane({ msg, allMessages, onReply, onToggleRead, onOpenRelated }: {
+  msg: typeof INBOX_MSGS[number]; allMessages: typeof INBOX_MSGS[number][];
+  onReply: () => void; onToggleRead: () => void; onOpenRelated: (m: typeof INBOX_MSGS[number]) => void;
+}) {
+  const currentUser = useCurrentUser();
+  const related = allMessages.filter(m => m.campaign===msg.campaign && m.id!==msg.id);
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-6 py-4 border-b border-border shrink-0">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-3">
           {msg.urgent && <span className="text-[8px] font-mono border border-urgent text-urgent px-1.5 py-0.5 rounded-sm tracking-wider">URGENT</span>}
-          <div className="text-sm font-semibold">{msg.subject}</div>
+          <div className="text-heading text-lg">{msg.subject}</div>
         </div>
-        <div className="text-xs text-muted-foreground">{msg.sender} · {msg.org} · {msg.title} · {msg.date}</div>
+        <div className="border border-border rounded-md divide-y divide-border font-mono text-[11px] overflow-hidden">
+          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">From</span><span className="px-2.5 py-1">{msg.sender} — {msg.title}, {msg.org}</span></div>
+          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">To</span><span className="px-2.5 py-1">{currentUser?.name ?? ""} — {currentUser?.org ?? ""}</span></div>
+          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Date</span><span className="px-2.5 py-1">{msg.date}</span></div>
+          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Campaign</span><span className="px-2.5 py-1">{msg.campaign}</span></div>
+        </div>
       </div>
-      <div className="flex-1 overflow-auto p-6">
-        <p className="text-sm leading-relaxed">{msg.body}</p>
+      <div className="flex-1 overflow-auto">
+        <div className="p-6">
+          <p className="text-sm leading-relaxed">{msg.body}</p>
+        </div>
+        {related.length>0 && (
+          <div className="border-t border-border">
+            <div className="px-6 py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-muted/20">
+              Related — {msg.campaign} ({related.length})
+            </div>
+            <div className="divide-y divide-border">
+              {related.map(m=>(
+                <button key={m.id} onClick={()=>onOpenRelated(m)}
+                  className="w-full text-left px-6 py-2.5 hover:bg-secondary transition-colors flex items-center justify-between gap-3 cursor-pointer">
+                  <div className="min-w-0">
+                    <div className={cx("text-xs truncate", !m.read&&"font-semibold")}>{m.subject}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{m.sender} · {m.org}</div>
+                  </div>
+                  <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       <div className="border-t border-border px-6 py-3 flex items-center gap-2 shrink-0">
         <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={onReply}>Reply</Btn>
