@@ -2,10 +2,13 @@
    cropped reference PNG) far more closely than Fraunces did: thin
    hairline serifs, sharp vertical stress, tall condensed proportions.
    This is the platform's one "big text" / signature-brand-mention face;
-   Inter (below) handles everything else. Requesting the full variable
+   Instrument Sans (below) handles everything else. Requesting the full variable
    optical-size range so it self-adjusts between display and text sizes. */
 @import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap');
 
-/* Inter for body copy and free-text fields — DVURE's brand-specified
-   secondary typeface. Replaces Outfit. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Instrument Sans for body copy, UI chrome, and free-text fields —
+   picked over Inter for having actual character in its letterforms
+   (the 'g', 'a') that gives body text some warmth without competing
+   with the Bodoni Moda headings — Inter read as too flat/generic next
+   to them. Replaces Inter. */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');

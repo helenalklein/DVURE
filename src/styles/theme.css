@@ -40,7 +40,7 @@
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
   --font-display: "Bodoni Moda", ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans: "Inter", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
   /* Soft gold accent — DVURE's signature brand color, reserved for the
      wordmark's "D" and primary CTAs (Btn variant="primary"). Kept rare
      deliberately: the brand reference itself uses gold sparingly, not as
@@ -286,7 +286,7 @@
   /* ── Repeatable type system ────────────────────────────────────────────
      Three tiers, applied consistently instead of ad-hoc text-sm/text-lg:
      .text-heading  — "bigger text": page/section titles, modal headers.
-     .text-subtext  — supporting copy under a heading (Inter, muted).
+     .text-subtext  — supporting copy under a heading (Instrument Sans, muted).
      .text-meta     — small labels/timestamps/ids (already this app's
                       existing font-mono uppercase tracking-wider
                       convention — named here so it's reused, not
