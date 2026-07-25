@@ -1911,6 +1911,15 @@ function GlobalPayments() {
     { campaign:"Beauty Campaign Q1",       amount:"$1,450", due:"07/10/2025", urgency:"green"  },
   ];
 
+  // Quiet history column, not another call to action — most recent first.
+  const recentActivity = [
+    { campaign:"AW26 Runway Presentation", amount:"$3,200", paidDate:"Jun 18" },
+    { campaign:"Holiday 2026 Lookbook",    amount:"$1,850", paidDate:"Jun 14" },
+    { campaign:"AW25 Womenswear Campaign", amount:"$2,300", paidDate:"Jun 09" },
+    { campaign:"SS25 Fragrance Launch",    amount:"$1,100", paidDate:"Jun 02" },
+    { campaign:"Resort Lookbook 2025",     amount:"$980",   paidDate:"May 27" },
+  ];
+
   const urgencyDot = (u: string) => {
     if (u === "red")    return "w-2.5 h-2.5 rounded-full bg-[#C0392B] shrink-0";
     if (u === "yellow") return "w-2.5 h-2.5 rounded-full bg-[#D4A017] shrink-0";
@@ -2011,25 +2020,28 @@ function GlobalPayments() {
           </div>
         </div>
 
-        {/* RIGHT 2/3 — Invoices flex-1, button pinned bottom */}
+        {/* MIDDLE — Invoices, flex-1 */}
         <div className="flex-1 flex flex-col min-h-0">
-          {/* Header row: legend left, see all right */}
-          <div className="flex items-center justify-between mb-3 shrink-0">
-            <div className="flex items-center gap-1">
-              <h2 className="text-heading text-base mr-3">Outstanding Invoices</h2>
-              <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
+          {/* Header row: legend left, actions right */}
+          <div className="flex items-center justify-between mb-3 shrink-0 gap-3">
+            <div className="flex items-center gap-1 min-w-0">
+              <h2 className="text-heading text-base mr-3 shrink-0">Outstanding Invoices</h2>
+              <div className="hidden lg:flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#C0392B] inline-block"/>Overdue</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#D4A017] inline-block"/>Due soon</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#27AE60] inline-block"/>On track</span>
               </div>
             </div>
-            <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer" onClick={() => setPaymentsTab("invoices")}>
-              See all invoices →
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer" onClick={() => setPaymentsTab("invoices")}>
+                See all →
+              </button>
+              <Btn variant="primary" size="sm" onClick={()=>setShowPayModal(true)}>Authorize Payment</Btn>
+            </div>
           </div>
-          {/* 3×3 grid — unpaid invoices only, taller cards */}
+          {/* 2-wide grid — unpaid invoices only */}
           <div className="flex-1 overflow-auto">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {invoices.slice(0,9).map((inv,i)=>(
                 <div key={i} className={cx("glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 transition-all flex flex-col gap-3", inv.urgency==="red"&&"border-[#C0392B]/30 bg-[#C0392B]/5")}>
                   <div className="flex items-center justify-between">
@@ -2042,14 +2054,23 @@ function GlobalPayments() {
               ))}
             </div>
           </div>
+        </div>
 
-          {/* Authorize Payment — gold with white text, inevitably tall */}
-          <button
-            onClick={()=>setShowPayModal(true)}
-            className={`w-full py-10 mt-4 rounded-md ${goldBtn} text-lg`}
-          >
-            Authorize Payment
-          </button>
+        {/* RIGHT — Recent Activity, small quiet column */}
+        <div className="w-56 shrink-0 flex flex-col min-h-0 border-l border-border pl-5">
+          <h2 className="text-heading text-base mb-3 shrink-0">Recent Activity</h2>
+          <div className="flex-1 overflow-y-auto space-y-3">
+            {recentActivity.map((a,i)=>(
+              <div key={i} className="text-xs">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
+                  <span className="text-[10px] font-mono text-muted-foreground">{a.paidDate}</span>
+                </div>
+                <div className="leading-snug">{a.campaign}</div>
+                <div className="font-mono text-muted-foreground">{a.amount} paid</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>{/* end payments flex */}
       </div>}{/* end paymentsTab==="payments" */}
@@ -2551,7 +2572,7 @@ function MessagingScreen() {
       <TopBar title="Messaging" sub="Organization and agency communications"
         actions={<Btn variant="primary" size="sm" icon={<Edit3 size={13}/>} onClick={startNewMessage}>New Message</Btn>}/>
       <div className="flex-1 flex min-h-0">
-        <div className="w-1/3 min-w-[260px] shrink-0 border-r border-border flex flex-col min-h-0">
+        <div className="w-80 shrink-0 border-r border-border flex flex-col min-h-0">
           <div className="px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <div className="text-xs font-semibold">Inbox</div>
