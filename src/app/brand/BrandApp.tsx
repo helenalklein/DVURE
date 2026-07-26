@@ -2178,9 +2178,8 @@ function GlobalPayments() {
                 </div>
                 <div className="leading-snug">{a.campaign}</div>
                 <div className="flex items-center justify-between gap-1">
-                  <div className={cx("flex items-center gap-1.5", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
-                    {a.status==="paid" && <PaidStamp size={30} animate={false}/>}
-                    <span className="font-mono">{a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}</span>
+                  <div className={cx("font-mono", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
+                    {a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}
                   </div>
                   {a.refundable && (
                     <button onClick={()=>{ setRefundDone(false); setRefundTarget({ campaign: a.campaign, amount: a.amount }); }}
@@ -2579,7 +2578,7 @@ function InvoicesPanel() {
                 onClick={() => setSelected(inv)}
                 className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group relative overflow-hidden"
               >
-                <div className="absolute -top-1 -right-1 opacity-90"><PaidStamp size={44} animate={false}/></div>
+                <div className="absolute inset-0 flex items-center justify-center opacity-[0.16] pointer-events-none"><PaidStamp size={190} animate={false}/></div>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#27AE60] shrink-0"/>
