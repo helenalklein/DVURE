@@ -1871,9 +1871,9 @@ function GlobalContracts() {
 
 // ─── GLOBAL PAYMENTS ──────────────────────────────────────────────────────────
 
-function PaidStamp({ size = 120 }: { size?: number }) {
+function PaidStamp({ size = 120, animate = true }: { size?: number; animate?: boolean }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="animate-bounce">
+    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className={animate ? "animate-bounce" : ""}>
       <circle cx="60" cy="60" r="56" stroke="#16a34a" strokeWidth="4" fill="none"/>
       <circle cx="60" cy="60" r="48" stroke="#16a34a" strokeWidth="2" fill="none"/>
       <rect x="4" y="42" width="112" height="14" fill="#16a34a" opacity="0.15"/>
@@ -2178,8 +2178,9 @@ function GlobalPayments() {
                 </div>
                 <div className="leading-snug">{a.campaign}</div>
                 <div className="flex items-center justify-between gap-1">
-                  <div className={cx("font-mono", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
-                    {a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}
+                  <div className={cx("flex items-center gap-1.5", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
+                    {a.status==="paid" && <PaidStamp size={30} animate={false}/>}
+                    <span className="font-mono">{a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}</span>
                   </div>
                   {a.refundable && (
                     <button onClick={()=>{ setRefundDone(false); setRefundTarget({ campaign: a.campaign, amount: a.amount }); }}
