@@ -2493,10 +2493,20 @@ const INVOICE_DATA = [
   { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Next Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
 ];
 
+// Already-authorized invoices — same shape as an outstanding one, plus
+// when it was paid, so the fee breakdown modal keeps working unchanged.
+const PAID_INVOICE_DATA = [
+  { id:"INV-0729", campaign:"AW26 Runway Presentation", agency:"Wilhelmina",   talent:"Priya Anand",     dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
+  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    agency:"Next Models",  talent:"Chiara Russo",    dayRate:900,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
+  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"James Whitfield", dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
+  { id:"INV-0655", campaign:"Resort Lookbook 2025",     agency:"Storm Models", talent:"Ines Ferreira",   dayRate:460,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
+];
+
 function InvoicesPanel() {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
-  const [selected, setSelected] = useState<typeof INVOICE_DATA[number]|null>(null);
+  const [selected, setSelected] = useState<typeof INVOICE_DATA[number] | typeof PAID_INVOICE_DATA[number] | null>(null);
+  const isPaid = (inv: { paidDate?: string }): inv is typeof PAID_INVOICE_DATA[number] => "paidDate" in inv;
 
   const urgencyDot = (u: string) => {
     if (u === "red")    return "w-2 h-2 rounded-full bg-[#C0392B] shrink-0";
@@ -2504,7 +2514,7 @@ function InvoicesPanel() {
     return "w-2 h-2 rounded-full bg-[#27AE60] shrink-0";
   };
 
-  function calcBreakdown(inv: typeof INVOICE_DATA[number]) {
+  function calcBreakdown(inv: { dayRate: number; days: number; agencyPct: number; dvurePct: number; taxPct: number }) {
     const modelFee      = inv.dayRate * inv.days;
     const agencyFee     = Math.round(modelFee * (inv.agencyPct / 100));
     const base          = modelFee + agencyFee;
@@ -2559,6 +2569,39 @@ function InvoicesPanel() {
             );
           })}
         </div>
+
+        <h2 className="text-heading text-base mt-8 mb-4">Paid</h2>
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+          {PAID_INVOICE_DATA.map(inv => {
+            const bd = calcBreakdown(inv);
+            return (
+              <div key={inv.id}
+                onClick={() => setSelected(inv)}
+                className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group relative overflow-hidden"
+              >
+                <div className="absolute -top-1 -right-1 opacity-90"><PaidStamp size={44} animate={false}/></div>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#27AE60] shrink-0"/>
+                    <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <div className="text-sm font-semibold leading-snug mb-0.5">{inv.campaign}</div>
+                  <div className="text-xs text-muted-foreground">{inv.agency}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{inv.talent}</div>
+                </div>
+                <div className="border-t border-border pt-3 flex items-end justify-between">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground font-mono">Total Paid · {inv.paidDate}</div>
+                    <div className="text-xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-mono">View →</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Invoice Detail Modal */}
@@ -2568,7 +2611,7 @@ function InvoicesPanel() {
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className={urgencyDot(selected.urgency)}/>
+                  <span className={isPaid(selected) ? "w-2 h-2 rounded-full bg-[#27AE60] shrink-0" : urgencyDot(selected.urgency)}/>
                   <div className="text-sm font-semibold">{selected.id}</div>
                 </div>
                 <div className="text-xs text-muted-foreground">{selected.campaign} · {selected.agency}</div>
@@ -2613,17 +2656,25 @@ function InvoicesPanel() {
                       <div className="text-sm font-semibold">Invoice Total</div>
                       <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
                     </div>
-                    <div className="text-[10px] text-muted-foreground font-mono text-right">Due {selected.due}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono text-right">
+                      {isPaid(selected) ? `Paid ${selected.paidDate}` : `Due ${selected.due}`}
+                    </div>
                   </div>
                 );
               })()}
             </div>
             <div className="px-6 pb-5 flex gap-2">
-              <button
-                onClick={()=>setSelected(null)}
-                className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
-                Authorize Payment
-              </button>
+              {isPaid(selected) ? (
+                <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
+                  <PaidStamp size={18} animate={false}/> Paid in Full — {selected.paidDate}
+                </div>
+              ) : (
+                <button
+                  onClick={()=>setSelected(null)}
+                  className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
+                  Authorize Payment
+                </button>
+              )}
               <Btn variant="outline" onClick={()=>setSelected(null)}>Message Agency →</Btn>
             </div>
           </div>
