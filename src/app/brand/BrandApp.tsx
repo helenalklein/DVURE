@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
   X, Check, Star, Search, Briefcase,
-  AlertCircle, Camera,
+  AlertCircle, Camera, XCircle, Clock, RotateCcw,
   MessageSquare, Download, CreditCard, MapPin,
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
@@ -1885,13 +1885,65 @@ function PaidStamp({ size = 120 }: { size?: number }) {
   );
 }
 
-function PaymentSuccessOverlay({ campaign, amount, onClose }: { campaign: string; amount: string; onClose: () => void }) {
+// Every real outcome a card/bank authorization can land on — designed as
+// its own state rather than "declined" being an afterthought bolted onto
+// the success path. Each has its own color, icon, and a next step that
+// actually gets someone unblocked, not just an apology.
+type PaymentOutcome = "success" | "declined" | "failed" | "subscription-expired";
+
+function PaymentOutcomeOverlay({ outcome, campaign, amount, onClose, onAddCard }: {
+  outcome: PaymentOutcome; campaign: string; amount: string; onClose: () => void; onAddCard: () => void;
+}) {
   const [phase, setPhase] = useState<"processing"|"stamp"|"done">("processing");
   useState(() => {
     setTimeout(() => setPhase("stamp"), 800);
     setTimeout(() => setPhase("done"), 2000);
-    setTimeout(() => onClose(), 5000);
+    if (outcome === "success") setTimeout(() => onClose(), 5000);
   });
+
+  if (outcome !== "success") {
+    const copy = {
+      declined: {
+        Icon: XCircle, color: "#C0392B",
+        title: "Card Declined",
+        detail: `Your card ending 4242 was declined for ${amount} on ${campaign}. No charge was made.`,
+        primary: { label: "Try a Different Card", onClick: onAddCard },
+      },
+      failed: {
+        Icon: AlertCircle, color: "#C0392B",
+        title: "Payment Failed",
+        detail: `${amount} for ${campaign} couldn't be processed — your bank returned an error. Nothing was charged.`,
+        primary: { label: "Try Again", onClick: onClose },
+      },
+      "subscription-expired": {
+        Icon: Lock, color: "#D4A017",
+        title: "Subscription Expired",
+        detail: `Your DVURE Brand subscription lapsed on Jul 3, 2026. Renew to keep authorizing payments.`,
+        primary: { label: "Renew Subscription", onClick: onClose },
+      },
+    }[outcome];
+    const CopyIcon = copy.Icon;
+    return (
+      <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-5 rounded-xl z-50 px-8">
+        {phase === "processing" ? (<>
+          <div className="w-14 h-14 border-2 border-border border-t-foreground rounded-full animate-spin"/>
+          <div className="text-heading text-base text-foreground">Processing payment…</div>
+          <div className="text-xs text-muted-foreground font-mono">{campaign}</div>
+        </>) : (<>
+          <CopyIcon size={48} style={{ color: copy.color }}/>
+          <div className="text-center space-y-1.5 max-w-sm">
+            <div className="text-heading text-base text-foreground">{copy.title}</div>
+            <div className="text-sm text-muted-foreground leading-relaxed">{copy.detail}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Btn variant="primary" size="sm" onClick={copy.primary.onClick}>{copy.primary.label}</Btn>
+            <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer">Close</button>
+          </div>
+        </>)}
+      </div>
+    );
+  }
+
   return (
     <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-6 rounded-xl z-50">
       {phase === "processing" && (<>
@@ -1929,6 +1981,10 @@ function GlobalPayments() {
   const [payState, setPayState] = useState<PaymentState>("idle");
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [payAmount, setPayAmount] = useState("");
+  // Demo-only — there's no real processor behind this yet to actually
+  // fail a card, so this lets every outcome (not just the happy path)
+  // be previewed on demand instead of only ever being described.
+  const [simulateOutcome, setSimulateOutcome] = useState<PaymentOutcome>("success");
 
   // Sorted: red (overdue) first, yellow (≤3 days) second, green last
   const invoices = [
@@ -1940,13 +1996,18 @@ function GlobalPayments() {
   ];
 
   // Quiet history column, not another call to action — most recent first.
-  const recentActivity = [
-    { campaign:"AW26 Runway Presentation", amount:"$3,200", paidDate:"Jun 18" },
-    { campaign:"Holiday 2026 Lookbook",    amount:"$1,850", paidDate:"Jun 14" },
-    { campaign:"AW25 Womenswear Campaign", amount:"$2,300", paidDate:"Jun 09" },
-    { campaign:"SS25 Fragrance Launch",    amount:"$1,100", paidDate:"Jun 02" },
-    { campaign:"Resort Lookbook 2025",     amount:"$980",   paidDate:"May 27" },
+  // "delayed" reflects money already authorized on the brand's side —
+  // the payout to the agency is what's held up, not the brand's payment.
+  const recentActivity: { campaign: string; amount: string; paidDate: string; status: "paid" | "delayed"; refundable?: boolean }[] = [
+    { campaign:"AW26 Runway Presentation", amount:"$3,200", paidDate:"Jun 18", status:"paid", refundable:true },
+    { campaign:"Holiday 2026 Lookbook",    amount:"$1,850", paidDate:"Jun 14", status:"paid" },
+    { campaign:"AW25 Womenswear Campaign", amount:"$2,300", paidDate:"Jun 09", status:"paid", refundable:true },
+    { campaign:"SS25 Fragrance Launch",    amount:"$1,100", paidDate:"Jun 02", status:"delayed" },
+    { campaign:"Resort Lookbook 2025",     amount:"$980",   paidDate:"May 27", status:"paid" },
   ];
+  const [refundTarget, setRefundTarget] = useState<{ campaign: string; amount: string } | null>(null);
+  const [refundDone, setRefundDone] = useState(false);
+  const [pendingBankAdded, setPendingBankAdded] = useState(false);
 
   const urgencyDot = (u: string) => {
     if (u === "red")    return "w-2.5 h-2.5 rounded-full bg-[#C0392B] shrink-0";
@@ -1960,7 +2021,12 @@ function GlobalPayments() {
   function handleComplete() {
     setPayState("processing");
     setTimeout(()=>setPayState("complete"), 2500);
-    setTimeout(()=>{ setPayState("idle"); setShowPayModal(false); }, 5000);
+    // Only the success path auto-dismisses — a declined/failed/expired
+    // outcome needs to stay on screen until the user acts on it (retry,
+    // add a new card, etc.), not vanish on a timer underneath them.
+    if (simulateOutcome === "success") {
+      setTimeout(()=>{ setPayState("idle"); setShowPayModal(false); }, 5000);
+    }
   }
 
   function attemptClose() {
@@ -2042,6 +2108,15 @@ function GlobalPayments() {
                 <div className="text-[10px] text-muted-foreground font-mono mb-1.5">Savings</div>
                 <div className="flex justify-between text-xs"><span className="text-muted-foreground">Account</span><span className="font-mono">••••8834</span></div>
               </div>
+              {pendingBankAdded && (
+                <div className="glass-subtle border border-[#D4A017]/30 bg-[#D4A017]/5 rounded-md p-3">
+                  <div className="flex items-start justify-between mb-1.5">
+                    <div className="text-xs font-semibold">New Account</div>
+                    <span className="flex items-center gap-1 text-[9px] font-mono text-[#D4A017] uppercase tracking-wider"><Shield size={10}/> Pending Verification</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground leading-relaxed">Micro-deposits sent — usually settles in 1–2 business days. This account can't be used to authorize payments until verified.</div>
+                </div>
+              )}
               <button className="text-xs text-muted-foreground hover:text-foreground w-full text-center border border-dashed border-border rounded-md px-4 py-2 hover:border-foreground transition-colors">See all accounts</button>
               <button onClick={()=>setShowAddBank(true)} className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 flex items-center justify-center gap-1 hover:border-foreground w-full transition-colors"><Plus size={12}/> Add account</button>
             </div>
@@ -2094,13 +2169,26 @@ function GlobalPayments() {
           <h2 className="text-heading text-base mb-3 shrink-0">Recent Activity</h2>
           <div className="flex-1 overflow-y-auto space-y-3">
             {recentActivity.map((a,i)=>(
-              <div key={i} className="text-xs">
+              <div key={i} className="text-xs group">
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
+                  <span className={cx("w-1.5 h-1.5 rounded-full inline-block shrink-0", a.status==="delayed" ? "bg-[#D4A017]" : "bg-[#27AE60]")}/>
                   <span className="text-[10px] font-mono text-muted-foreground">{a.paidDate}</span>
                 </div>
                 <div className="leading-snug">{a.campaign}</div>
-                <div className="font-mono text-muted-foreground">{a.amount} paid</div>
+                <div className="flex items-center justify-between gap-1">
+                  <div className={cx("font-mono", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
+                    {a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}
+                  </div>
+                  {a.refundable && (
+                    <button onClick={()=>{ setRefundDone(false); setRefundTarget({ campaign: a.campaign, amount: a.amount }); }}
+                      className="opacity-0 group-hover:opacity-100 text-[9px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0 transition-opacity cursor-pointer">
+                      Refund
+                    </button>
+                  )}
+                </div>
+                {a.status==="delayed" && (
+                  <div className="text-[9px] text-muted-foreground/70 leading-snug mt-0.5">Agency payout held — bank processing, ~2 days</div>
+                )}
               </div>
             ))}
           </div>
@@ -2197,6 +2285,26 @@ function GlobalPayments() {
                   )}
                 </div>
               </div>
+
+              {/* Demo-only outcome preview — no real processor sits behind
+                  this yet, so every failure state is a deliberate choice
+                  here rather than something only the happy path shows. */}
+              <div className="border border-dashed border-border rounded-md px-3 py-2.5">
+                <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Demo — simulate outcome</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { id:"success" as const,               label:"Success" },
+                    { id:"declined" as const,               label:"Card Declined" },
+                    { id:"failed" as const,                 label:"Payment Failed" },
+                    { id:"subscription-expired" as const,   label:"Subscription Expired" },
+                  ]).map(o=>(
+                    <button key={o.id} onClick={()=>setSimulateOutcome(o.id)}
+                      className={cx("text-[10px] font-mono px-2 py-1 rounded-sm border cursor-pointer capitalize transition-colors",
+                        simulateOutcome===o.id?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
+                      )}>{o.label}</button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
@@ -2215,7 +2323,7 @@ function GlobalPayments() {
                   className={cx("w-full py-3.5 rounded-md text-sm tracking-widest uppercase transition-all",
                     canAuthorize
                       ? `${goldBtn} cursor-pointer`
-                      : "bg-[#C4A84A]/30 text-white/40 cursor-not-allowed"
+                      : "bg-gold/30 text-foreground/40 cursor-not-allowed"
                   )}
                 >
                   Authorize
@@ -2228,12 +2336,14 @@ function GlobalPayments() {
               </div>
             </div>
 
-            {/* Processing overlay */}
+            {/* Processing / outcome overlay */}
             {payState !== "idle" && (
-              <PaymentSuccessOverlay
+              <PaymentOutcomeOverlay
+                outcome={simulateOutcome}
                 campaign={selectedCampaign || "AW25 Womenswear Campaign"}
                 amount={payAmount ? `$${Number(payAmount).toLocaleString()}` : "$2,850"}
                 onClose={()=>{ setPayState("idle"); setShowPayModal(false); }}
+                onAddCard={()=>{ setPayState("idle"); setShowPayModal(false); setShowAddCard(true); }}
               />
             )}
           </div>
@@ -2333,9 +2443,35 @@ function GlobalPayments() {
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-2">
-              <button className={`flex-1 py-3 rounded-md text-sm ${goldBtn}`} onClick={()=>setShowAddBank(false)}>Save Account</button>
+              <button className={`flex-1 py-3 rounded-md text-sm ${goldBtn}`} onClick={()=>{ setShowAddBank(false); setPendingBankAdded(true); }}>Save Account</button>
               <Btn variant="outline" onClick={()=>setShowAddBank(false)}>Cancel</Btn>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund confirm / initiated */}
+      {refundTarget && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-sm shadow-2xl p-6 flex flex-col items-center text-center gap-4">
+            {!refundDone ? (<>
+              <RotateCcw size={36} className="text-muted-foreground"/>
+              <div className="space-y-1">
+                <div className="text-heading text-base">Refund {refundTarget.amount}?</div>
+                <div className="text-xs text-muted-foreground leading-relaxed">This reverses the payment for {refundTarget.campaign} back to the original card. The agency will be notified.</div>
+              </div>
+              <div className="flex items-center gap-2 w-full mt-1">
+                <Btn variant="outline" fullWidth onClick={()=>setRefundTarget(null)}>Cancel</Btn>
+                <Btn variant="primary" fullWidth onClick={()=>setRefundDone(true)}>Confirm Refund</Btn>
+              </div>
+            </>) : (<>
+              <RotateCcw size={36} className="text-[#27AE60]"/>
+              <div className="space-y-1">
+                <div className="text-heading text-base">Refund Initiated</div>
+                <div className="text-xs text-muted-foreground leading-relaxed">{refundTarget.amount} for {refundTarget.campaign} is being returned — it'll appear on the original card in 5–10 business days.</div>
+              </div>
+              <button onClick={()=>setRefundTarget(null)} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer">Close</button>
+            </>)}
           </div>
         </div>
       )}
@@ -2482,7 +2618,7 @@ function InvoicesPanel() {
             <div className="px-6 pb-5 flex gap-2">
               <button
                 onClick={()=>setSelected(null)}
-                className="flex-1 py-3 rounded-md text-sm font-semibold tracking-widest uppercase bg-[#C4A84A] hover:bg-[#B8962E] text-white transition-all cursor-pointer">
+                className="flex-1 py-3 rounded-md text-sm font-semibold tracking-widest uppercase bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
                 Authorize Payment
               </button>
               <Btn variant="outline" onClick={()=>setSelected(null)}>Message Agency →</Btn>
