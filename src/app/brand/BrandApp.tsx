@@ -2035,8 +2035,10 @@ function GlobalPayments() {
 
   const canAuthorize = !!(selectedCampaign && payAmount && signature);
 
-  // Gold button style for Authorize Payment + Authorize
-  const goldBtn = "bg-gold hover:bg-gold/90 text-gold-foreground font-semibold tracking-widest uppercase transition-all shadow-md hover:shadow-lg";
+  // Gold button style for Authorize Payment + Authorize — plain sentence
+  // case, matching every other button's Instrument Sans treatment rather
+  // than the bespoke uppercase/tracking-widest look these used to have.
+  const goldBtn = "bg-gold hover:bg-gold/90 text-gold-foreground font-semibold transition-all shadow-md hover:shadow-lg";
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -2320,7 +2322,7 @@ function GlobalPayments() {
               <div className="px-6 py-4">
                 <button
                   onClick={canAuthorize ? handleComplete : undefined}
-                  className={cx("w-full py-3.5 rounded-md text-sm tracking-widest uppercase transition-all",
+                  className={cx("w-full py-3.5 rounded-md text-sm transition-all",
                     canAuthorize
                       ? `${goldBtn} cursor-pointer`
                       : "bg-gold/30 text-foreground/40 cursor-not-allowed"
@@ -2618,7 +2620,7 @@ function InvoicesPanel() {
             <div className="px-6 pb-5 flex gap-2">
               <button
                 onClick={()=>setSelected(null)}
-                className="flex-1 py-3 rounded-md text-sm font-semibold tracking-widest uppercase bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
+                className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
                 Authorize Payment
               </button>
               <Btn variant="outline" onClick={()=>setSelected(null)}>Message Agency →</Btn>
