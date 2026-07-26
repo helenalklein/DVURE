@@ -1439,7 +1439,7 @@ const OVERDUE_ACTIONS = [
 
 // Quiet history column for Tasks — same idea as Payments' Recent
 // Activity: real completed items, not another queue to act on.
-const RECENTLY_RESOLVED = [
+const RECENTLY_COMPLETED = [
   { type:"Payment",  label:"Payment sent — James Whitfield booking",      resolvedDate:"Jul 08" },
   { type:"Contract", label:"Contract signed — Amara Diallo",              resolvedDate:"Jul 06" },
   { type:"Review",   label:"SS25 Fragrance — 9 submissions reviewed",     resolvedDate:"Jul 04" },
@@ -1596,13 +1596,13 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
               ))}
             </div>
           </div>
-          {/* Recently Resolved — quiet history column, same idea as
+          {/* Recently Completed — quiet history column, same idea as
               Payments' Recent Activity: real completed items, not
               another queue demanding action. */}
           <div className="w-64 shrink-0 border-l border-border pl-6">
-            <h2 className="text-heading text-base mb-3">Recently Resolved</h2>
+            <h2 className="text-heading text-base mb-3">Recently Completed</h2>
             <div className="space-y-3">
-              {RECENTLY_RESOLVED.map((r,i)=>(
+              {RECENTLY_COMPLETED.map((r,i)=>(
                 <div key={i} className="text-xs">
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
@@ -1970,7 +1970,7 @@ function GlobalPayments() {
   const canAuthorize = !!(selectedCampaign && payAmount && signature);
 
   // Gold button style for Authorize Payment + Authorize
-  const goldBtn = "bg-[#C4A84A] hover:bg-[#B8962E] text-white font-semibold tracking-widest uppercase transition-all shadow-md hover:shadow-lg";
+  const goldBtn = "bg-gold hover:bg-gold/90 text-gold-foreground font-semibold tracking-widest uppercase transition-all shadow-md hover:shadow-lg";
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -1995,16 +1995,16 @@ function GlobalPayments() {
             <h2 className="text-heading text-base mb-3">Payment Cards</h2>
             {hasCard ? (
               <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#C9961A] via-[#E2B84A] to-[#9A7015] p-5 flex flex-col justify-between select-none cursor-pointer hover:shadow-lg transition-shadow">
+                <div className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#B8A36A] via-[#CBB989] to-[#8C7A4C] p-5 flex flex-col justify-between select-none cursor-pointer hover:shadow-lg transition-shadow">
                   <div className="flex items-start justify-between">
-                    <div><div className="text-[10px] font-mono text-yellow-100/80 uppercase tracking-widest">Primary</div><div className="text-base font-bold text-white tracking-widest mt-1">AMEX</div></div>
-                    <div className="text-right"><div className="text-[10px] text-yellow-100/70">American Express</div><div className="text-xs text-yellow-100/90 mt-1">Gold</div></div>
+                    <div><div className="text-[10px] font-mono text-white/80 uppercase tracking-widest">Primary</div><div className="text-base font-bold text-white tracking-widest mt-1">AMEX</div></div>
+                    <div className="text-right"><div className="text-[10px] text-white/70">American Express</div><div className="text-xs text-white/90 mt-1">Gold</div></div>
                   </div>
                   <div>
                     <div className="text-white font-mono text-lg tracking-widest mb-2">•••• •••• •••• 4242</div>
                     <div className="flex items-end justify-between">
-                      <div><div className="text-[9px] text-yellow-100/60 uppercase">Card Holder</div><div className="text-xs text-white font-medium">{meName.toUpperCase()}</div></div>
-                      <div className="text-right"><div className="text-[9px] text-yellow-100/60 uppercase">Expires</div><div className="text-xs text-white font-mono">09/27</div></div>
+                      <div><div className="text-[9px] text-white/60 uppercase">Card Holder</div><div className="text-xs text-white font-medium">{meName.toUpperCase()}</div></div>
+                      <div className="text-right"><div className="text-[9px] text-white/60 uppercase">Expires</div><div className="text-xs text-white font-mono">09/27</div></div>
                     </div>
                   </div>
                 </div>
@@ -2639,13 +2639,14 @@ function MessagingScreen() {
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className={cx("text-xs truncate", !m.read&&"font-semibold")}>{m.sender}</span>
+                    <span className={cx("text-xs truncate", !m.read&&"font-semibold")}>
+                      {m.sender} <span className="text-muted-foreground font-normal">· {m.org}</span>
+                    </span>
                     <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
                   </div>
-                  <div className={cx("text-sm truncate mb-1", !m.read&&"font-semibold")}>{m.subject}</div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-muted-foreground truncate">{m.org}</span>
+                  <div className={cx("text-sm flex items-center gap-1.5", !m.read&&"font-semibold")}>
                     {m.urgent && <span className="text-[8px] font-mono border border-urgent text-urgent px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
+                    <span className="truncate">{m.subject}</span>
                   </div>
                 </div>
               </div>
