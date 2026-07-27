@@ -4,6 +4,23 @@ import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 import dvureMarkD from "../../assets/dvure-mark-d.png";
 import dvureMarkWordmark from "../../assets/dvure-mark-wordmark.png";
 import dvureMarkSignature from "../../assets/dvure-mark-signature.png";
+import headingCampaigns from "../../assets/heading-campaigns.png";
+import headingOverview from "../../assets/heading-overview.png";
+import headingMessaging from "../../assets/heading-messaging.png";
+
+// Cropped directly from the reference mockups (src/assets/, added
+// 2026-07-27) the same way the DVURE wordmark was — real pixels, not a
+// font match. Only covers the exact screen titles that actually appear
+// in those images; every other TopBar title (Payments, Tasks, Contracts,
+// campaign names, ...) has no source photo to crop from, so it falls
+// back to live text in the display font. That fallback is permanent,
+// not temporary — dynamic titles (a campaign name someone types in
+// tomorrow) can never be a cropped image, only ever live text.
+const HEADING_IMAGES: Record<string, { src: string; w: number; h: number }> = {
+  "Campaigns": { src: headingCampaigns, w: 308, h: 73 },
+  "Overview":  { src: headingOverview,  w: 97,  h: 25 },
+  "Messaging": { src: headingMessaging, w: 119, h: 27 },
+};
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
 
@@ -340,10 +357,15 @@ function RefreshButton() {
 }
 
 export function TopBar({ title, sub, actions }: { title: string; sub?: string; actions?: JSX.Element }) {
+  const heading = HEADING_IMAGES[title];
   return (
     <div className="min-h-24 border-b glass flex items-center px-6 py-3 gap-4 shrink-0 z-20 relative">
       <div className="flex-1 min-w-0">
-        <div className="text-heading text-5xl leading-tight tracking-wide truncate">{title}</div>
+        {heading ? (
+          <img src={heading.src} alt={title} height={48} style={{ height: 48, width: "auto" }}/>
+        ) : (
+          <div className="text-heading text-5xl leading-tight tracking-wide truncate">{title}</div>
+        )}
         {sub && <div className="text-subtext text-xs mt-1">{sub}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">{actions}<RefreshButton/><UserMenuButton/><BellButton/></div>
