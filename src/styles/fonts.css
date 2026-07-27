@@ -1,14 +1,17 @@
-/* High-contrast Didone serif — matches the actual DVURE wordmark (the
-   cropped reference PNG) far more closely than Fraunces did: thin
-   hairline serifs, sharp vertical stress, tall condensed proportions.
-   This is the platform's one "big text" / signature-brand-mention face;
-   Instrument Sans (below) handles everything else. Requesting the full variable
-   optical-size range so it self-adjusts between display and text sizes. */
-@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap');
+/* High-contrast fashion-editorial serif for headings. Swapped from Bodoni
+   Moda per the 5 concept mockups added to src/assets/ on 2026-07-27
+   (D83A2F13/F5C766F6/57E0E180/50326455/AA8A6381) — those are AI-generated
+   moodboards, not a real exported typeface, so there's no exact file to
+   pull from the way the DVURE wordmark PNG was cropped; this is the
+   closest real, freely-licensed match to what they show: elongated,
+   high-contrast, delicate hairlines, generous letterspacing at display
+   size. Requesting the full variable weight range so it still holds up
+   at smaller heading sizes, not just 48px. */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
 
 /* Instrument Sans for body copy, UI chrome, and free-text fields —
    picked over Inter for having actual character in its letterforms
    (the 'g', 'a') that gives body text some warmth without competing
-   with the Bodoni Moda headings — Inter read as too flat/generic next
+   with the display headings — Inter read as too flat/generic next
    to them. Replaces Inter. */
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
