@@ -29,38 +29,71 @@ function submissionIsClosed(inv: { submissionClose: string }) {
   return MOCK_NOW > new Date(inv.submissionClose);
 }
 
+// Deterministic tile color per brand name — no logo assets exist (or
+// should exist here, real trademarks aren't ours to reproduce), so this
+// stands in for "the brand's own mark" the same way the sidebar's
+// single-letter avatar does elsewhere in the app.
+const LOGO_TILE_COLORS = ["#1E1C1A", "#3D3A35", "#5B5650", "#2A2E35", "#33241F"];
+function brandTileColor(brand: string) {
+  let hash = 0;
+  for (let i = 0; i < brand.length; i++) hash = (hash * 31 + brand.charCodeAt(i)) >>> 0;
+  return LOGO_TILE_COLORS[hash % LOGO_TILE_COLORS.length];
+}
+function BrandLogoBadge({ brand }: { brand: string }) {
+  const initials = brand.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  return (
+    <div className="w-full h-full flex items-center justify-center" style={{ background: brandTileColor(brand) }}>
+      <div className="text-center">
+        <div className="text-heading text-3xl text-white tracking-wide">{initials}</div>
+        <div className="text-[9px] font-mono text-white/60 uppercase tracking-[0.2em] mt-1">{brand}</div>
+      </div>
+    </div>
+  );
+}
+
+// Mirrors BrandApp's campaign card structure exactly — same layout, same
+// stat/footer treatment — but the cover slot shows the brand's own mark
+// instead of mood/editorial stock. An agency or model cares who's
+// hiring first; the brand doesn't need to be told its own campaign is
+// its own campaign, so it gets the photo instead. Same data, two reads.
 function InvitationsView({ onSubmitTalent }: { onSubmitTalent: (campaign: string) => void }) {
   return (
-    <div className="max-w-2xl space-y-3">
-      <p className="text-sm text-muted-foreground mb-4">Brand campaign invitations requiring talent submissions.</p>
-      {INVITATIONS.map(inv=>{
-        const closed = submissionIsClosed(inv);
-        return (
-          <div key={inv.campaign} className="glass-subtle border rounded-md p-4">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div>
-                <div className="text-sm font-semibold">{inv.campaign}</div>
-                <div className="text-xs text-muted-foreground">{inv.brand} · {inv.type} · Due {inv.due}</div>
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Brand campaign invitations requiring talent submissions.</p>
+      <div className="grid grid-cols-3 gap-4">
+        {INVITATIONS.map(inv=>{
+          const closed = submissionIsClosed(inv);
+          return (
+            <div key={inv.campaign} className="glass-subtle border rounded-lg overflow-hidden">
+              <div className="relative aspect-[4/3]">
+                <BrandLogoBadge brand={inv.brand}/>
+                <div className="absolute top-2.5 left-2.5">
+                  <Badge label={`${inv.models} needed`} variant="info"/>
+                </div>
               </div>
-              <Badge label={`${inv.models} needed`} variant="info"/>
+              <div className="p-4">
+                <div className="text-sm font-semibold leading-snug">{inv.campaign}</div>
+                <div className="text-xs text-muted-foreground font-mono mt-0.5">{inv.type}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{inv.brand}</div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-3 pt-3 border-t border-border flex items-center gap-1.5">
+                  <span>Submissions {inv.submissionOpen} – {inv.submissionClose}</span>
+                  {closed
+                    ? <span className="text-urgent font-semibold">Closed</span>
+                    : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
+                </div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-1">Budget {inv.budget} · Due {inv.due}</div>
+                <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                  <Btn variant="primary" size="sm" disabled={closed} onClick={()=>onSubmitTalent(inv.campaign)}>
+                    {closed ? "Closed" : "Submit Talent"}
+                  </Btn>
+                  <Btn variant="outline" size="sm">Brief</Btn>
+                  <Btn variant="ghost" size="sm">Decline</Btn>
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground mb-1">Budget: {inv.budget}</div>
-            <div className="text-[10px] font-mono text-muted-foreground mb-3 flex items-center gap-1.5">
-              <span>Submissions {inv.submissionOpen} – {inv.submissionClose}</span>
-              {closed
-                ? <span className="text-urgent font-semibold">Closed</span>
-                : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
-            </div>
-            <div className="flex gap-2">
-              <Btn variant="primary" size="sm" disabled={closed} onClick={()=>onSubmitTalent(inv.campaign)}>
-                {closed ? "Submission Closed" : "Submit Talent"}
-              </Btn>
-              <Btn variant="outline" size="sm">View Brief</Btn>
-              <Btn variant="ghost" size="sm">Decline</Btn>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

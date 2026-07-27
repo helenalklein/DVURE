@@ -1485,22 +1485,38 @@ function CampaignsList({ campaigns, openCampaign }: { campaigns: Campaign[]; ope
         ) : (
           <div className="grid grid-cols-3 gap-4">
             {filtered.map(c=>(
-              <div key={c.id} className="glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all flex gap-3" onClick={()=>openCampaign(c.id)}>
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
+              <div key={c.id} className="glass-subtle border rounded-lg overflow-hidden cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group" onClick={()=>openCampaign(c.id)}>
+                {/* Cover — the brand's own view gets mood/editorial stock;
+                    agencies/models see this brand's logo instead (see
+                    BrandLogoBadge in AgencyApp's invitations list) so the
+                    same campaign reads differently depending on who's
+                    looking at it. */}
+                <div className="relative aspect-[4/3] bg-secondary overflow-hidden">
+                  {c.coverPhoto ? (
+                    <img src={c.coverPhoto} alt="" className="w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-500"/>
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-secondary to-muted"/>
+                  )}
+                  <div className="absolute top-2.5 left-2.5">
                     <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
-                    <div className="text-sm font-semibold leading-snug mt-2">{c.name}</div>
-                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
                   </div>
-                  <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
                 </div>
-                <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
-                  {([["Talent",c.submitted],["Selections",c.approved],["Confirmed",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
-                    <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-offwhite":"")}>
-                      <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-offwhite-foreground":"")}>{v}</div>
-                      <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-offwhite-foreground/70":"text-muted-foreground")}>{l}</div>
-                    </div>
-                  ))}
+                <div className="p-4">
+                  <div className="text-sm font-semibold leading-snug">{c.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono mt-0.5">{c.type}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{currentUser?.org ?? ""}</div>
+                  <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-border">
+                    {([["Talent",c.submitted],["Selections",c.approved],["Confirmed",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
+                      <div key={l} className={cx("text-center rounded-sm py-1.5", i===arr.length-1&&v>0?"bg-offwhite":"")}>
+                        <div className={cx("text-base font-semibold tabular-nums", i===arr.length-1&&v>0?"text-offwhite-foreground":"")}>{v}</div>
+                        <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-offwhite-foreground/70":"text-muted-foreground")}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                    <div className="text-[10px] text-muted-foreground font-mono">{c.due ? `Due ${c.due}` : "Due —"}</div>
+                    <ChevronRight size={13} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"/>
+                  </div>
                 </div>
               </div>
             ))}

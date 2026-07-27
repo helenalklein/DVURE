@@ -108,6 +108,11 @@ export interface Campaign {
   // walking the same physical show". Multiple campaigns (different
   // brands) can point at the same RunwayShow id.
   runwayShowId?: number;
+  // Card cover art shown to the brand itself (mood/editorial stock,
+  // black & white) — mock-only placeholder for the real photo-picker
+  // this stands in for. Agencies/models see the brand's own logo
+  // instead of this photo; see BrandLogoBadge in BrandApp.tsx.
+  coverPhoto?: string;
 }
 
 // A physical runway show — the shared event. Not owned by any one
