@@ -1,13 +1,12 @@
-/* High-contrast fashion-editorial serif for headings. Swapped from Bodoni
-   Moda per the 5 concept mockups added to src/assets/ on 2026-07-27
-   (D83A2F13/F5C766F6/57E0E180/50326455/AA8A6381) — those are AI-generated
-   moodboards, not a real exported typeface, so there's no exact file to
-   pull from the way the DVURE wordmark PNG was cropped; this is the
-   closest real, freely-licensed match to what they show: elongated,
-   high-contrast, delicate hairlines, generous letterspacing at display
-   size. Requesting the full variable weight range so it still holds up
-   at smaller heading sizes, not just 48px. */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+/* High-contrast Didone display serif for headings. Second swap, off
+   Playfair Display — closer letterform diagnosis of the AA8A6381/
+   F5C766F6 mockups (src/assets/, added 2026-07-27): unbracketed
+   hairline serifs, extreme thick/thin contrast, sharp pointed W apex —
+   that's classic Didot-era Didone, not Playfair's warmer transitional
+   curves. Antic Didone is a Google Font built specifically as an
+   authentic revival of that style for editorial/fashion headlines.
+   Single weight only (no variable range) — Google doesn't offer one. */
+@import url('https://fonts.googleapis.com/css2?family=Antic+Didone&display=swap');
 
 /* Instrument Sans for body copy, UI chrome, and free-text fields —
    picked over Inter for having actual character in its letterforms

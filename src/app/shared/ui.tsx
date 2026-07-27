@@ -343,7 +343,7 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
   return (
     <div className="min-h-24 border-b glass flex items-center px-6 py-3 gap-4 shrink-0 z-20 relative">
       <div className="flex-1 min-w-0">
-        <div className="text-heading text-5xl leading-tight truncate">{title}</div>
+        <div className="text-heading text-5xl leading-tight tracking-wide truncate">{title}</div>
         {sub && <div className="text-subtext text-xs mt-1">{sub}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">{actions}<RefreshButton/><UserMenuButton/><BellButton/></div>
