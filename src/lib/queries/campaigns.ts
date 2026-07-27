@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { formatCampaignDue } from "../formatDue";
 import type { Campaign, CampaignType, CampaignStatus } from "../../app/shared/types";
 
 // Still used by AgencyApp.tsx's submission flow, which has no merged
@@ -19,11 +20,6 @@ export async function findCampaignIdByName(name: string): Promise<string | null>
 // clear of submissions.ts's 100_000 range — same shim pattern, so
 // Campaign.id never has to become a string across the whole app.
 const CAMPAIGN_SHIM_BASE = 500_000;
-
-function formatDateShort(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit" });
-}
 
 function formatDateLong(iso: string | null): string {
   if (!iso) return "";
@@ -88,7 +84,7 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
       name: r.name,
       type: r.type as CampaignType,
       status: r.status as CampaignStatus,
-      due: formatDateShort(r.due_date),
+      due: formatCampaignDue(r.due_date),
       dueLabel,
       dueUrgency,
       submissionOpen: formatDateLong(r.submission_open),

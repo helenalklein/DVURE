@@ -1,4 +1,11 @@
 import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CastingStageId, CastingEntry, Look, CrewMember, CampaignThreadMessage } from "./types";
+import { formatCampaignDue } from "../../lib/formatDue";
+
+// Fixed "today" for demo purposes — drives talent-submission-window open/
+// closed state (see Campaign.submissionOpen/submissionClose) and the
+// due-date formatting below, without the demo silently drifting as real
+// wall-clock time passes.
+export const MOCK_NOW = new Date("2026-07-21");
 
 // ─── TALENT / SUBMISSIONS ──────────────────────────────────────────────────
 // Simplified pipeline vs. the original prototype: Submitted -> Approved/Rejected -> Booked.
@@ -119,11 +126,11 @@ export const NOTIFS = [
 // campaigns are now individually addressable by id.
 
 export const CAMPAIGNS: Campaign[] = [
-  { id:1, name:"AW25 Womenswear Campaign", type:"Editorial",    status:"active",   due:"06/20", dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850, submissionOpen:"May 1, 2026",  submissionClose:"Aug 15, 2026" },
-  { id:2, name:"SS25 Fragrance Launch",    type:"Advertising",  status:"active",   due:"06/24", dueLabel:"5 days remaining", dueUrgency:"medium", submitted:9,  approved:4,  booked:0, talentNeeded:2, budget:10000, committed:0,     remaining:10000, submissionOpen:"May 15, 2026", submissionClose:"Jul 25, 2026" },
-  { id:3, name:"Resort Lookbook 2025",     type:"E-commerce",   status:"active",   due:"07/03", dueLabel:"14 days",          dueUrgency:"low",    submitted:21, approved:7,  booked:0, talentNeeded:3, budget:7000,  committed:0,     remaining:7000,  submissionOpen:"Jun 1, 2026",  submissionClose:"Aug 10, 2026" },
-  { id:4, name:"FW24 Campaign",            type:"Editorial",    status:"archived", due:"01/15", dueLabel:"Archived",         dueUrgency:"low",    submitted:41, approved:11, booked:3, talentNeeded:4, budget:15000, committed:15000, remaining:0,     submissionOpen:"Nov 1, 2025",  submissionClose:"Dec 15, 2025" },
-  { id:5, name:"AW26 Runway Presentation", type:"Runway",       status:"active",   due:"02/14", dueLabel:"5 weeks out",      dueUrgency:"medium", submitted:12, approved:8,  booked:6, talentNeeded:6, budget:42000, committed:26000, remaining:16000, submissionOpen:"Jun 1, 2026",  submissionClose:"Sep 30, 2026", runwayShowId:1 },
+  { id:1, name:"AW25 Womenswear Campaign", type:"Editorial",    status:"active",   due:formatCampaignDue("2026-07-22", MOCK_NOW), dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850, submissionOpen:"May 1, 2026",  submissionClose:"Aug 15, 2026" },
+  { id:2, name:"SS25 Fragrance Launch",    type:"Advertising",  status:"active",   due:formatCampaignDue("2026-07-26", MOCK_NOW), dueLabel:"5 days remaining", dueUrgency:"medium", submitted:9,  approved:4,  booked:0, talentNeeded:2, budget:10000, committed:0,     remaining:10000, submissionOpen:"May 15, 2026", submissionClose:"Jul 25, 2026" },
+  { id:3, name:"Resort Lookbook 2025",     type:"E-commerce",   status:"active",   due:formatCampaignDue("2026-08-04", MOCK_NOW), dueLabel:"14 days",          dueUrgency:"low",    submitted:21, approved:7,  booked:0, talentNeeded:3, budget:7000,  committed:0,     remaining:7000,  submissionOpen:"Jun 1, 2026",  submissionClose:"Aug 10, 2026" },
+  { id:4, name:"FW24 Campaign",            type:"Editorial",    status:"archived", due:formatCampaignDue("2025-12-20", MOCK_NOW), dueLabel:"Archived",         dueUrgency:"low",    submitted:41, approved:11, booked:3, talentNeeded:4, budget:15000, committed:15000, remaining:0,     submissionOpen:"Nov 1, 2025",  submissionClose:"Dec 15, 2025" },
+  { id:5, name:"AW26 Runway Presentation", type:"Runway",       status:"active",   due:formatCampaignDue("2026-08-25", MOCK_NOW), dueLabel:"5 weeks out",      dueUrgency:"medium", submitted:12, approved:8,  booked:6, talentNeeded:6, budget:42000, committed:26000, remaining:16000, submissionOpen:"Jun 1, 2026",  submissionClose:"Sep 30, 2026", runwayShowId:1 },
 ];
 
 // One organization = one team = one home country, per the "Prada Berlin
@@ -173,11 +180,6 @@ export const CAMPAIGN_AGENCY_THREADS: Record<number, Record<string, CampaignThre
     "Next Models": [],
   },
 };
-
-// Fixed "today" for demo purposes — drives talent-submission-window open/
-// closed state (see Campaign.submissionOpen/submissionClose) without the
-// demo silently drifting as real wall-clock time passes.
-export const MOCK_NOW = new Date("2026-07-21");
 
 // ─── RUNWAY ─────────────────────────────────────────────────────────────────
 

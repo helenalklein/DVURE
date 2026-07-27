@@ -2,20 +2,20 @@
 
 :root {
   --font-size: 14px;
-  --background: #F7F5F1;
-  --foreground: #0B0B0C;
+  --background: #F8F6F2;
+  --foreground: #1E1C1A;
   --card: #FFFFFF;
-  --card-foreground: #0B0B0C;
+  --card-foreground: #1E1C1A;
   --popover: #FFFFFF;
-  --popover-foreground: #0B0B0C;
-  --primary: #0B0B0C;
+  --popover-foreground: #1E1C1A;
+  --primary: #1E1C1A;
   --primary-foreground: #FFFFFF;
   --secondary: #ECE9E3;
   --secondary-foreground: #1C1C1E;
   --muted: #F0EEE8;
   --muted-foreground: #6E675D;
   --accent: #E6E2D9;
-  --accent-foreground: #0B0B0C;
+  --accent-foreground: #1E1C1A;
   --destructive: #C0392B;
   --destructive-foreground: #FFFFFF;
   --border: #E3DFD5;
@@ -46,7 +46,7 @@
      deliberately: the brand reference itself uses gold sparingly, not as
      a blanket UI color, so it should read as premium, not decorative. */
   --gold: #B8A36A;
-  --gold-foreground: #0B0B0C;
+  --gold-foreground: #1E1C1A;
   /* Urgent/overdue accent — the raw DVURE red, unmodified. (A brightened
      variant lives in .dark, where it's needed for legibility against
      much darker backgrounds — not needed here.) */
@@ -59,7 +59,7 @@
      now" black (e.g. the Overdue metric). Apply deliberately, not as a
      blanket replacement for the black accent. */
   --offwhite: #DAD7CF;
-  --offwhite-foreground: #0B0B0C;
+  --offwhite-foreground: #1E1C1A;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;

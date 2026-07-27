@@ -100,8 +100,8 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
           <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
-          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
+          <div className="text-base font-medium truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
         <button onClick={()=>onNav("campaigns")} title="Campaigns"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
@@ -179,8 +179,8 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
-          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
+          <div className="text-base font-medium truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
         <button onClick={onHome} title="Campaigns"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
@@ -1027,10 +1027,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div className="h-full overflow-auto p-6">
               <div className="max-w-3xl space-y-5">
                 <div className="grid grid-cols-3 gap-3">
-                  {[["Submitted",counts.submitted],["Approved",counts.approved],["Booked",counts.booked]].map(([l,v])=>(
-                    <div key={String(l)} className={cx("border rounded-md p-3 text-center cursor-pointer hover:border-foreground/40", String(l)==="Booked"&&Number(v)>0?"bg-foreground border-foreground":"glass-subtle")} onClick={()=>onSection("moodboard")}>
-                      <div className={cx("text-xl font-semibold tabular-nums", String(l)==="Booked"&&Number(v)>0?"text-primary-foreground":"")}>{String(v)}</div>
-                      <div className={cx("text-[10px] font-mono mt-0.5", String(l)==="Booked"&&Number(v)>0?"text-primary-foreground/70":"text-muted-foreground")}>{String(l)}</div>
+                  {[["Talent",counts.submitted],["Selections",counts.approved],["Confirmed",counts.booked]].map(([l,v])=>(
+                    <div key={String(l)} className={cx("border rounded-md p-3 text-center cursor-pointer hover:border-foreground/40", String(l)==="Confirmed"&&Number(v)>0?"bg-foreground border-foreground":"glass-subtle")} onClick={()=>onSection("moodboard")}>
+                      <div className={cx("text-xl font-semibold tabular-nums", String(l)==="Confirmed"&&Number(v)>0?"text-primary-foreground":"")}>{String(v)}</div>
+                      <div className={cx("text-[10px] font-mono mt-0.5", String(l)==="Confirmed"&&Number(v)>0?"text-primary-foreground/70":"text-muted-foreground")}>{String(l)}</div>
                     </div>
                   ))}
                 </div>
@@ -1495,7 +1495,7 @@ function CampaignsList({ campaigns, openCampaign }: { campaigns: Campaign[]; ope
                   <div className="text-[10px] text-muted-foreground font-mono mt-3">Due {c.due}</div>
                 </div>
                 <div className="w-16 shrink-0 flex flex-col justify-center gap-2 border-l border-border pl-3">
-                  {([["Submitted",c.submitted],["Approved",c.approved],["Booked",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
+                  {([["Talent",c.submitted],["Selections",c.approved],["Confirmed",c.booked]] as [string,number][]).map(([l,v],i,arr)=>(
                     <div key={l} className={cx("text-center rounded-sm py-1", i===arr.length-1&&v>0?"bg-offwhite":"")}>
                       <div className={cx("text-sm font-semibold tabular-nums", i===arr.length-1&&v>0?"text-offwhite-foreground":"")}>{v}</div>
                       <div className={cx("text-[8px] font-mono uppercase tracking-wide leading-tight", i===arr.length-1&&v>0?"text-offwhite-foreground/70":"text-muted-foreground")}>{l}</div>
