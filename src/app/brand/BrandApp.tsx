@@ -2701,23 +2701,14 @@ const INBOX_MSGS = [
 ];
 
 // Split view — an inbox list on the left, a persistent compose/detail pane
-// on the right. Lands blank (no compose, no message) until the user picks
-// something, then remembers that exact selection — even across sign-out/
-// sign-in — the same way Gmail/Slack drop you back where you left off.
-// There's no real messages backend yet, so this can't sync across devices;
-// it's a per-browser localStorage entry keyed to the signed-in profile id,
-// which is the honest version of "remembered" available at this stage.
+// on the right. Always lands blank (no compose, no message open) — every
+// time this screen mounts, including after signing back in — rather than
+// jumping back to whatever was last open.
 // Send/Reply are mocked (no recipients, no delivery) until there's a real
 // backend to send through — that's expected at this stage.
 type MessagingMode = "empty" | "compose" | "view";
-type MessagingSelection = { mode: "compose" } | { mode: "view"; messageId: number };
-
-function messagingSelectionKey(profileId: string) {
-  return `dvure:messaging:lastSelection:${profileId}`;
-}
 
 function MessagingScreen() {
-  const { profile } = useAuth();
   const [messages, setMessages] = useState(INBOX_MSGS);
   const [mode, setMode] = useState<MessagingMode>("empty");
   const [selectedId, setSelectedId] = useState<number|null>(null);
@@ -2728,43 +2719,14 @@ function MessagingScreen() {
   // moment openMessage flips it.
   const selectedMsg = messages.find(m=>m.id===selectedId) ?? null;
 
-  // Restore whatever this profile last had open — including across a
-  // sign-out/sign-in, since it reads from localStorage rather than
-  // component state.
-  useEffect(() => {
-    if (!profile?.id) return;
-    const raw = localStorage.getItem(messagingSelectionKey(profile.id));
-    if (!raw) return;
-    try {
-      const saved: MessagingSelection = JSON.parse(raw);
-      if (saved.mode === "compose") {
-        setMode("compose");
-      } else if (saved.mode === "view" && INBOX_MSGS.some(m=>m.id===saved.messageId)) {
-        setSelectedId(saved.messageId);
-        setMode("view");
-      }
-    } catch {
-      // Corrupt/old-shape entry — ignore and stay on the blank default.
-    }
-  }, [profile?.id]);
-
-  function persistSelection(selection: MessagingSelection | null) {
-    if (!profile?.id) return;
-    const key = messagingSelectionKey(profile.id);
-    if (selection) localStorage.setItem(key, JSON.stringify(selection));
-    else localStorage.removeItem(key);
-  }
-
   function openMessage(m: typeof INBOX_MSGS[number]) {
     setSelectedId(m.id);
     setMode("view");
     setMessages(prev => prev.map(x => x.id===m.id ? { ...x, read:true } : x));
-    persistSelection({ mode:"view", messageId: m.id });
   }
   function startNewMessage() {
     setSelectedId(null);
     setMode("compose");
-    persistSelection({ mode:"compose" });
   }
   function toggleChecked(id: number) {
     setChecked(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev, id]);
@@ -2784,7 +2746,6 @@ function MessagingScreen() {
     if (selectedId!==null && checked.includes(selectedId)) {
       setSelectedId(null);
       setMode("empty");
-      persistSelection(null);
     }
     setChecked([]);
   }
@@ -2817,21 +2778,21 @@ function MessagingScreen() {
           <div className="flex-1 overflow-auto divide-y divide-border">
             {messages.map(m=>(
               <div key={m.id} onClick={()=>openMessage(m)}
-                className={cx("px-4 py-3 cursor-pointer hover:bg-secondary transition-colors flex items-start gap-2.5",
+                className={cx("px-5 py-4 cursor-pointer hover:bg-secondary transition-colors flex items-start gap-3",
                   mode==="view" && selectedId===m.id ? "bg-secondary" : !m.read && "bg-muted/20"
                 )}>
                 <button onClick={(e)=>{ e.stopPropagation(); toggleChecked(m.id); }}
-                  className={cx("w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer transition-colors",
+                  className={cx("w-[18px] h-[18px] rounded-sm border flex items-center justify-center shrink-0 mt-0.5 cursor-pointer transition-colors",
                     checked.includes(m.id) ? "bg-foreground border-foreground" : "border-border hover:border-foreground/40"
                   )}>
-                  {checked.includes(m.id) && <Check size={10} strokeWidth={3} className="text-primary-foreground"/>}
+                  {checked.includes(m.id) && <Check size={11} strokeWidth={3} className="text-primary-foreground"/>}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className={cx("text-xs truncate", !m.read&&"font-semibold")}>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className={cx("text-sm truncate", !m.read&&"font-semibold")}>
                       {m.sender} <span className="text-muted-foreground font-normal">· {m.org}</span>
                     </span>
-                    <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">{m.date}</span>
                   </div>
                   <div className={cx("text-sm flex items-center gap-1.5", !m.read&&"font-semibold")}>
                     {m.urgent && <span className="text-[8px] font-mono border border-urgent text-urgent px-1 py-0.5 rounded-sm tracking-wider shrink-0">URGENT</span>}
@@ -2854,7 +2815,7 @@ function MessagingScreen() {
           {mode==="compose" && <ComposePane replyTo={selectedMsg}/>}
           {mode==="view" && selectedMsg && (
             <MessageDetailPane msg={selectedMsg} allMessages={messages}
-              onReply={()=>{ setMode("compose"); persistSelection({ mode:"compose" }); }}
+              onReply={()=>setMode("compose")}
               onToggleRead={()=>toggleRead(selectedMsg.id)}
               onOpenRelated={openMessage}/>
           )}
@@ -2909,7 +2870,7 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
         <Textarea label="Message" placeholder="Write your message…" rows={12}/>
         <UrgentToggle defaultUrgent={replyTo?.urgent ?? false}/>
       </div>
-      <div className="border-t border-border px-6 py-3 flex items-center gap-3 shrink-0">
+      <div className="border-t border-border px-6 py-4 flex items-center gap-3 shrink-0">
         <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={handleSend}>Send</Btn>
         {sent && <span className="text-xs text-muted-foreground">Message sent</span>}
       </div>
@@ -2937,38 +2898,38 @@ function MessageDetailPane({ msg, allMessages, onReply, onToggleRead, onOpenRela
           {msg.urgent && <span className="text-[8px] font-mono border border-urgent text-urgent px-1.5 py-0.5 rounded-sm tracking-wider">URGENT</span>}
           <div className="text-heading text-lg">{msg.subject}</div>
         </div>
-        <div className="border border-border rounded-md divide-y divide-border font-mono text-[11px] overflow-hidden">
-          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">From</span><span className="px-2.5 py-1">{msg.sender} — {msg.title}, {msg.org}</span></div>
-          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">To</span><span className="px-2.5 py-1">{currentUser?.name ?? ""} — {currentUser?.org ?? ""}</span></div>
-          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Date</span><span className="px-2.5 py-1">{msg.date}</span></div>
-          <div className="flex"><span className="w-16 shrink-0 px-2.5 py-1 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Campaign</span><span className="px-2.5 py-1">{msg.campaign}</span></div>
+        <div className="border border-border rounded-md divide-y divide-border font-mono text-xs overflow-hidden">
+          <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">From</span><span className="px-3 py-1.5">{msg.sender} — {msg.title}, {msg.org}</span></div>
+          <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">To</span><span className="px-3 py-1.5">{currentUser?.name ?? ""} — {currentUser?.org ?? ""}</span></div>
+          <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Date</span><span className="px-3 py-1.5">{msg.date}</span></div>
+          <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Campaign</span><span className="px-3 py-1.5">{msg.campaign}</span></div>
         </div>
       </div>
       <div className="flex-1 overflow-auto">
         <div className="p-6">
-          <p className="text-sm leading-relaxed">{msg.body}</p>
+          <p className="text-base leading-relaxed">{msg.body}</p>
         </div>
         {related.length>0 && (
           <div className="border-t border-border">
-            <div className="px-6 py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-muted/20">
+            <div className="px-6 py-2.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-muted/20">
               Related — {msg.campaign} ({related.length})
             </div>
             <div className="divide-y divide-border">
               {related.map(m=>(
                 <button key={m.id} onClick={()=>onOpenRelated(m)}
-                  className="w-full text-left px-6 py-2.5 hover:bg-secondary transition-colors flex items-center justify-between gap-3 cursor-pointer">
+                  className="w-full text-left px-6 py-4 hover:bg-secondary transition-colors flex items-center justify-between gap-3 cursor-pointer">
                   <div className="min-w-0">
-                    <div className={cx("text-xs truncate", !m.read&&"font-semibold")}>{m.subject}</div>
-                    <div className="text-[10px] text-muted-foreground truncate">{m.sender} · {m.org}</div>
+                    <div className={cx("text-sm truncate", !m.read&&"font-semibold")}>{m.subject}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">{m.sender} · {m.org}</div>
                   </div>
-                  <span className="text-[9px] font-mono text-muted-foreground shrink-0">{m.date}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">{m.date}</span>
                 </button>
               ))}
             </div>
           </div>
         )}
       </div>
-      <div className="border-t border-border px-6 py-3 flex items-center gap-2 shrink-0">
+      <div className="border-t border-border px-6 py-4 flex items-center gap-2 shrink-0">
         <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={onReply}>Reply</Btn>
         <Btn variant="ghost" size="sm" onClick={onToggleRead}>{msg.read ? "Mark as unread" : "Mark as read"}</Btn>
       </div>
