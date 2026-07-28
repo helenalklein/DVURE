@@ -140,8 +140,8 @@ const UNSPLASH = (id: string) => `https://images.unsplash.com/${id}?w=800&q=80&f
 // from a curated gallery like this or uploads their own shoot photography,
 // with the gallery as the fallback so a fresh campaign never looks bare.
 const CAMPAIGN_COVER_GALLERY: string[] = [
-  "photo-1707968052131-42fa32a6f46e", "photo-1648839621444-8f547efb00d7", "photo-1457732815361-daa98277e9c8",
-  "photo-1750586255416-eae44af9dd81", "photo-1520529890308-f503006340b4",
+  "photo-1707968052131-42fa32a6f46e", "photo-1652284955303-321c3ba8e3a7", "photo-1701233425415-39f326fb6107",
+  "photo-1747317337922-b20743f71d90", "photo-1540700012777-9f73b0e49543",
   "photo-1755375551130-cf278d391d99", "photo-1771100065000-62bc31315aca", "photo-1769775418610-c99d3fdcd442",
   "photo-1765033670214-e2d95c451fe5", "photo-1773473453379-0b2606e94a3f", "photo-1704972391839-66fa4f02e163",
   "photo-1780291012242-5a8dc7d39edb", "photo-1765788897202-9a9c971a29a1", "photo-1781458148566-a01b50e668b7",

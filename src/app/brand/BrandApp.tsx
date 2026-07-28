@@ -1223,22 +1223,14 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                   <h2 className="text-heading text-sm">Campaign Users</h2>
                   <Btn variant="outline" size="sm" icon={<Plus size={12}/>}>Add / Remove</Btn>
                 </div>
-                <div className="space-y-2 mb-5">
-                  <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Brand</div>
+                {/* Brand's own team only — who's on the agency side of a
+                    campaign is that agency's own roster to manage, not
+                    something a brand has (or should have) access to edit. */}
+                <div className="space-y-2">
                   {ORG_USERS.filter(u=>u.org===(org?.name ?? "")).slice(0,4).map(u=>(
                     <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
                       <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
                       <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title}</div></div>
-                      <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2">
-                  <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency</div>
-                  {ORG_USERS.filter(u=>u.org!==(org?.name ?? "")).map(u=>(
-                    <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
-                      <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
-                      <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title} · {u.org}</div></div>
                       <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
                     </div>
                   ))}
@@ -1447,36 +1439,27 @@ const RECENTLY_COMPLETED = [
   { type:"Contract", label:"Contract signed — James Whitfield",          resolvedDate:"Jun 27" },
 ];
 
-function CampaignsList({ campaigns, openCampaign }: { campaigns: Campaign[]; openCampaign: (id: number) => void }) {
+function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: Campaign[]; openCampaign: (id: number) => void; onNewCampaign: () => void }) {
   const currentUser = useCurrentUser();
   const [tab, setTab] = useState("active");
-  const [attentionOpen, setAttentionOpen] = useState(false);
-  const attentionRef = useRef<HTMLDivElement>(null);
   const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
-
-  // Document listener, not a fixed-position click-catcher — a fixed overlay
-  // gets clipped to the nearest backdrop-filter ancestor's box (TopBar's
-  // .glass) instead of covering the viewport, which is what silently broke
-  // the bell popover's outside-click before it was fixed the same way.
-  useEffect(() => {
-    if (!attentionOpen) return;
-    function handlePointerDown(e: MouseEvent) {
-      if (attentionRef.current && !attentionRef.current.contains(e.target as Node)) setAttentionOpen(false);
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [attentionOpen]);
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub={`${currentUser?.org ?? ""} · Brand`}/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
-        <div className="flex items-center gap-1 mb-4 border-b border-border">
-          {["active","drafts","archived"].map(t=>(
-            <button key={t} onClick={()=>setTab(t)}
-              className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
-                tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
-              )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
-          ))}
+        <div className="flex items-center justify-between gap-1 mb-4 border-b border-border">
+          <div className="flex items-center gap-1">
+            {["active","drafts","archived"].map(t=>(
+              <button key={t} onClick={()=>setTab(t)}
+                className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
+                  tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
+                )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+            ))}
+          </div>
+          <button onClick={onNewCampaign}
+            className="mb-2 flex items-center gap-2 px-4 py-2 bg-foreground text-primary-foreground text-sm font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
+            <Plus size={14}/> New Campaign
+          </button>
         </div>
         {filtered.length===0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
@@ -1517,42 +1500,6 @@ function CampaignsList({ campaigns, openCampaign }: { campaigns: Campaign[]; ope
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Needs Attention — stacked directly above the Activity widget in
-          the same bottom-right corner rather than the opposite corner. */}
-      <div ref={attentionRef} className="fixed bottom-20 right-6 z-40">
-        {attentionOpen ? (
-          <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
-            <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={13} className="text-foreground shrink-0"/>
-                <span className="text-xs font-semibold">Needs Attention</span>
-                <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
-              </div>
-              <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
-                <span className="text-sm font-bold leading-none">−</span>
-              </button>
-            </div>
-            <div className="divide-y divide-border">
-              {CAMPAIGNS_ATTENTION.map((a,i)=>(
-                <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
-                  <a.Icon size={14} className="text-foreground shrink-0"/>
-                  <span className="flex-1 text-sm">{a.msg}</span>
-                  <button onClick={()=>{ openCampaign(a.campaignId); setAttentionOpen(false); }}
-                    className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors cursor-pointer",
-                      a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-foreground/90":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                    )}>{a.action}</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <button onClick={()=>setAttentionOpen(true)}
-            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
-            <AlertCircle size={16}/>
-          </button>
         )}
       </div>
     </div>
@@ -3389,6 +3336,8 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [campaignSection, setCampaignSection] = useState<CampaignSection>("moodboard");
   const [activityOpen, setActivityOpen] = useState(false);
   const activityRef = useRef<HTMLDivElement>(null);
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  const attentionRef = useRef<HTMLDivElement>(null);
 
   const [realCampaigns, setRealCampaigns] = useState<Campaign[]>([]);
   const [realIdShim, setRealIdShim] = useState<Map<number, string>>(new Map());
@@ -3416,6 +3365,19 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [activityOpen]);
+
+  // Hoisted above the campaigns-list/workspace split (not owned by
+  // CampaignsList) so it stays visible everywhere in the brand app,
+  // including inside a campaign — attention items are cross-campaign by
+  // nature, so the widget shouldn't disappear just because you opened one.
+  useEffect(() => {
+    if (!attentionOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (attentionRef.current && !attentionRef.current.contains(e.target as Node)) setAttentionOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [attentionOpen]);
 
   function openCampaign(id: number) {
     const campaign = allCampaigns.find(c=>c.id===id);
@@ -3451,7 +3413,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
             <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign}/>}
+              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }}/>}
               {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
               {view==="contracts-global" && <GlobalContracts/>}
@@ -3471,6 +3433,43 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           ) : (
             <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
               <List size={16}/>
+            </button>
+          )}
+        </div>
+
+        {/* Needs Attention — stacked directly above the Activity widget in
+            the same bottom-right corner. Lives here (not in CampaignsList)
+            so it stays visible inside a campaign too. */}
+        <div ref={attentionRef} className="fixed bottom-20 right-6 z-40">
+          {attentionOpen ? (
+            <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
+              <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={13} className="text-foreground shrink-0"/>
+                  <span className="text-xs font-semibold">Needs Attention</span>
+                  <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
+                </div>
+                <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
+                  <span className="text-sm font-bold leading-none">−</span>
+                </button>
+              </div>
+              <div className="divide-y divide-border">
+                {CAMPAIGNS_ATTENTION.map((a,i)=>(
+                  <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
+                    <a.Icon size={14} className="text-foreground shrink-0"/>
+                    <span className="flex-1 text-sm">{a.msg}</span>
+                    <button onClick={()=>{ openCampaign(a.campaignId); setAttentionOpen(false); }}
+                      className={cx("text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors cursor-pointer",
+                        a.urgent?"bg-foreground text-primary-foreground border-foreground hover:bg-foreground/90":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                      )}>{a.action}</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <button onClick={()=>setAttentionOpen(true)}
+              className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
+              <AlertCircle size={16}/>
             </button>
           )}
         </div>
