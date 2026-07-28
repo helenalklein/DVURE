@@ -1,12 +1,12 @@
-/* High-contrast Didone display serif for headings. Second swap, off
-   Playfair Display — closer letterform diagnosis of the AA8A6381/
-   F5C766F6 mockups (src/assets/, added 2026-07-27): unbracketed
-   hairline serifs, extreme thick/thin contrast, sharp pointed W apex —
-   that's classic Didot-era Didone, not Playfair's warmer transitional
-   curves. Antic Didone is a Google Font built specifically as an
-   authentic revival of that style for editorial/fashion headlines.
-   Single weight only (no variable range) — Google doesn't offer one. */
-@import url('https://fonts.googleapis.com/css2?family=Antic+Didone&display=swap');
+/* High-contrast Didone serif — matches the actual DVURE wordmark (the
+   cropped reference PNG) far more closely than Fraunces did: thin
+   hairline serifs, sharp vertical stress, tall condensed proportions.
+   This is the platform's one "big text" / signature-brand-mention face;
+   Instrument Sans (below) handles everything else. Requesting the full variable
+   optical-size range so it self-adjusts between display and text sizes.
+   (Playfair Display and Antic Didone were both tried and reverted —
+   this is the font actually live on dvure.com; back to it.) */
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&display=swap');
 
 /* Instrument Sans for body copy, UI chrome, and free-text fields —
    picked over Inter for having actual character in its letterforms

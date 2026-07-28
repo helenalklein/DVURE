@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
   X, Check, Star, Search, Briefcase,
-  AlertCircle, Camera, XCircle, Clock, RotateCcw,
+  AlertCircle, Camera, XCircle,
   MessageSquare, Download, CreditCard, MapPin,
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
@@ -2010,15 +2010,17 @@ function GlobalPayments() {
   // Quiet history column, not another call to action — most recent first.
   // "delayed" reflects money already authorized on the brand's side —
   // the payout to the agency is what's held up, not the brand's payment.
-  const recentActivity: { campaign: string; amount: string; paidDate: string; status: "paid" | "delayed"; refundable?: boolean }[] = [
-    { campaign:"AW26 Runway Presentation", amount:"$3,200", paidDate:"Jun 18", status:"paid", refundable:true },
+  // No refund action here deliberately — the brand paid the agency, so
+  // the agency (who's actually holding the funds) is the one who'd
+  // initiate returning them, not the brand unilaterally reversing its
+  // own completed payment from this dashboard.
+  const recentActivity: { campaign: string; amount: string; paidDate: string; status: "paid" | "delayed" }[] = [
+    { campaign:"AW26 Runway Presentation", amount:"$3,200", paidDate:"Jun 18", status:"paid" },
     { campaign:"Holiday 2026 Lookbook",    amount:"$1,850", paidDate:"Jun 14", status:"paid" },
-    { campaign:"AW25 Womenswear Campaign", amount:"$2,300", paidDate:"Jun 09", status:"paid", refundable:true },
+    { campaign:"AW25 Womenswear Campaign", amount:"$2,300", paidDate:"Jun 09", status:"paid" },
     { campaign:"SS25 Fragrance Launch",    amount:"$1,100", paidDate:"Jun 02", status:"delayed" },
     { campaign:"Resort Lookbook 2025",     amount:"$980",   paidDate:"May 27", status:"paid" },
   ];
-  const [refundTarget, setRefundTarget] = useState<{ campaign: string; amount: string } | null>(null);
-  const [refundDone, setRefundDone] = useState(false);
   const [pendingBankAdded, setPendingBankAdded] = useState(false);
 
   const urgencyDot = (u: string) => {
@@ -2189,16 +2191,8 @@ function GlobalPayments() {
                   <span className="text-[10px] font-mono text-muted-foreground">{a.paidDate}</span>
                 </div>
                 <div className="leading-snug">{a.campaign}</div>
-                <div className="flex items-center justify-between gap-1">
-                  <div className={cx("font-mono", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
-                    {a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}
-                  </div>
-                  {a.refundable && (
-                    <button onClick={()=>{ setRefundDone(false); setRefundTarget({ campaign: a.campaign, amount: a.amount }); }}
-                      className="opacity-0 group-hover:opacity-100 text-[9px] font-mono text-muted-foreground hover:text-foreground underline underline-offset-2 shrink-0 transition-opacity cursor-pointer">
-                      Refund
-                    </button>
-                  )}
+                <div className={cx("font-mono", a.status==="delayed" ? "text-[#D4A017]" : "text-muted-foreground")}>
+                  {a.status==="delayed" ? `${a.amount} — payout delayed` : `${a.amount} paid`}
                 </div>
                 {a.status==="delayed" && (
                   <div className="text-[9px] text-muted-foreground/70 leading-snug mt-0.5">Agency payout held — bank processing, ~2 days</div>
@@ -2464,31 +2458,6 @@ function GlobalPayments() {
         </div>
       )}
 
-      {/* Refund confirm / initiated */}
-      {refundTarget && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-sm shadow-2xl p-6 flex flex-col items-center text-center gap-4">
-            {!refundDone ? (<>
-              <RotateCcw size={36} className="text-muted-foreground"/>
-              <div className="space-y-1">
-                <div className="text-heading text-base">Refund {refundTarget.amount}?</div>
-                <div className="text-xs text-muted-foreground leading-relaxed">This reverses the payment for {refundTarget.campaign} back to the original card. The agency will be notified.</div>
-              </div>
-              <div className="flex items-center gap-2 w-full mt-1">
-                <Btn variant="outline" fullWidth onClick={()=>setRefundTarget(null)}>Cancel</Btn>
-                <Btn variant="primary" fullWidth onClick={()=>setRefundDone(true)}>Confirm Refund</Btn>
-              </div>
-            </>) : (<>
-              <RotateCcw size={36} className="text-[#27AE60]"/>
-              <div className="space-y-1">
-                <div className="text-heading text-base">Refund Initiated</div>
-                <div className="text-xs text-muted-foreground leading-relaxed">{refundTarget.amount} for {refundTarget.campaign} is being returned — it'll appear on the original card in 5–10 business days.</div>
-              </div>
-              <button onClick={()=>setRefundTarget(null)} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer">Close</button>
-            </>)}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
