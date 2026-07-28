@@ -125,46 +125,50 @@ export const NOTIFS = [
 // read the same records instead of each keeping their own inline copy, and
 // campaigns are now individually addressable by id.
 
-// Free Unsplash stock (real photographers — this stands in for the real
-// photo-picker/brand-asset system; see coverPhoto's doc comment on the
-// Campaign type) standing in for the eventual real photo gallery a brand
-// would pick from. Picked for restraint, not drama: turned away,
-// obscured, or no person at all (an empty doorway, fabric in motion,
-// architecture, texture) — the campaign's own name and numbers stay the
-// focal point of the card, never competing with a model's face.
+// Free Unsplash stock (real photographers) standing in for the eventual
+// real photo gallery/upload system a brand would use — see coverPhoto's
+// doc comment on the Campaign type. Every entry here is a WIDE shot: a
+// small subject (or no subject at all) inside a lot of quiet negative
+// space — a person on a hillside, a doorway against an empty ocean, a
+// figure against a big blank wall. Not tight macro crops of a texture or
+// a face filling the frame — that reads as "centering one subject" just
+// as much as a close-up portrait does, regardless of the subject's pose.
 const UNSPLASH = (id: string) => `https://images.unsplash.com/${id}?w=800&q=80&fit=crop&auto=format`;
 
-// ~50-image pool a new campaign draws from at "creation" (deterministically,
-// by id — see pickCampaignCover) rather than every campaign being hand-
-// assigned one photo. Stands in for the real flow: a brand either picks
-// from a curated gallery like this or uploads their own shoot photography,
-// with the gallery as the fallback so a fresh campaign never looks bare.
 const CAMPAIGN_COVER_GALLERY: string[] = [
-  "photo-1707968052131-42fa32a6f46e", "photo-1652284955303-321c3ba8e3a7", "photo-1701233425415-39f326fb6107",
-  "photo-1747317337922-b20743f71d90", "photo-1540700012777-9f73b0e49543",
-  "photo-1755375551130-cf278d391d99", "photo-1771100065000-62bc31315aca", "photo-1769775418610-c99d3fdcd442",
-  "photo-1765033670214-e2d95c451fe5", "photo-1773473453379-0b2606e94a3f", "photo-1704972391839-66fa4f02e163",
-  "photo-1780291012242-5a8dc7d39edb", "photo-1765788897202-9a9c971a29a1", "photo-1781458148566-a01b50e668b7",
-  "photo-1769095433984-6abf8111560c",
-  "photo-1624708593528-383fdb07eda5", "photo-1775740396835-fc41def5fd7e", "photo-1764161229555-13f730bb126e",
-  "photo-1628318470370-3772c38451a0", "photo-1776347637885-291bf3d6e9a4", "photo-1774535826989-f1553a447b1e",
-  "photo-1760920248606-4a151ef75cce", "photo-1605211525729-1622a47b95a9",
-  "photo-1622396481322-3b83d186701b", "photo-1619857121838-997e82345250", "photo-1542753172-bcd7253a78a1",
-  "photo-1704495463767-59118eccf4ac", "photo-1665779736808-047a6bbf43a0", "photo-1552821773-37cbce3a7965",
-  "photo-1554075098-1f70689a3f51", "photo-1675830028194-02f405ff664b", "photo-1490093158370-1a6be674437b",
-  "photo-1711919165384-0cc8b7b297ae",
-  "photo-1653858381366-7d1ec0b6b2d0", "photo-1641901960200-1e878f0cbf63", "photo-1518611540400-6b85a0704342",
-  "photo-1632435645786-29c478a68675", "photo-1561291386-badeff42f28d", "photo-1531518326825-96490ddf2a89",
-  "photo-1695039222941-3b70aa24786f", "photo-1633355263308-21a7c2a604c9", "photo-1661643532265-8a55a4de0247",
-  "photo-1536180931879-fd2d652efddc", "photo-1605083608390-a397bb302853", "photo-1587115924362-622c3fa065bd",
+  "photo-1706649135276-058768cbea4d", "photo-1652284955303-321c3ba8e3a7", "photo-1518972734183-c5b490a7c637",
+  "photo-1602765835989-b021fe3ed4f8", "photo-1708114664956-00578b82b360", "photo-1621507179507-0d69a5066f59",
+  "photo-1784043319518-8426f2ed473b", "photo-1705435896415-933b94be4ea5", "photo-1472566316349-bce77aa2a778",
+  "photo-1684682025585-1d77e17ec2f0", "photo-1469050624972-f03b8678e363", "photo-1743432650832-42ad149244a1",
+  "photo-1725633525933-54b524854450", "photo-1589653768999-3b08ec128b34", "photo-1698366898446-53eed39cd0c7",
+  "photo-1651589259121-cecabfcaa2b1", "photo-1744406216919-435256839717", "photo-1747317337922-b20743f71d90",
+  "photo-1718251806661-5e122f215349", "photo-1629511565591-a1d494ad6c58", "photo-1662532577856-e8ee8b138a8b",
+  "photo-1552393700-42696fb89bfa",   "photo-1698915583082-ae18c41f50c0", "photo-1641502143639-6e3ee24808f0",
+  "photo-1701233425415-39f326fb6107", "photo-1613915617430-8ab0fd7c6baf", "photo-1773910041083-21d31b054ec9",
+  "photo-1540700012777-9f73b0e49543", "photo-1653040321630-698cfc09254e", "photo-1774379456435-92a4e16de961",
+  "photo-1769775418610-c99d3fdcd442", "photo-1765033670214-e2d95c451fe5", "photo-1765788897202-9a9c971a29a1",
+  "photo-1781458148566-a01b50e668b7", "photo-1771100065000-62bc31315aca", "photo-1780291012242-5a8dc7d39edb",
+  "photo-1704972391839-66fa4f02e163", "photo-1622396481322-3b83d186701b", "photo-1619857121838-997e82345250",
+  "photo-1704495463767-59118eccf4ac",
 ];
 
-// Deterministic, not `Math.random()` — the same campaign must show the
-// same cover on every render/reload, not reshuffle every time the list
-// re-renders. A real backend would store the chosen photo id instead of
-// re-deriving it, but the derivation needs to be stable either way.
-export function pickCampaignCover(id: number): string {
-  return UNSPLASH(CAMPAIGN_COVER_GALLERY[id % CAMPAIGN_COVER_GALLERY.length]);
+// Assigns every campaign in one rendered list a DISTINCT photo — not just
+// "deterministic by id" (the earlier version), which let two different
+// ids collide on the same modulo bucket and show the identical photo on
+// two cards at once. Walks forward to the next free slot on a collision.
+// Still deterministic given a stable campaign order, still no
+// Math.random() reshuffling on re-render.
+export function assignCampaignCovers(ids: number[]): Map<number, string> {
+  const n = CAMPAIGN_COVER_GALLERY.length;
+  const used = new Set<number>();
+  const result = new Map<number, string>();
+  for (const id of ids) {
+    let idx = ((id % n) + n) % n;
+    while (used.has(idx)) idx = (idx + 1) % n;
+    used.add(idx);
+    result.set(id, UNSPLASH(CAMPAIGN_COVER_GALLERY[idx]));
+  }
+  return result;
 }
 
 export const CAMPAIGNS: Campaign[] = [

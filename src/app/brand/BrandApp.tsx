@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark } from "../shared/ui";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, pickCampaignCover } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
@@ -1443,6 +1443,9 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
   const currentUser = useCurrentUser();
   const [tab, setTab] = useState("active");
   const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
+  // Assigned per the currently-visible set, not per campaign in isolation —
+  // guarantees no two cards on screen at once ever show the same photo.
+  const covers = assignCampaignCovers(filtered.map(c=>c.id));
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Campaigns" sub={`${currentUser?.org ?? ""} · Brand`}/>
@@ -1475,7 +1478,7 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
                     same campaign reads differently depending on who's
                     looking at it. */}
                 <div className="relative aspect-[4/3] bg-secondary overflow-hidden">
-                  <img src={c.coverPhoto ?? pickCampaignCover(c.id)} alt="" className="w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-500"/>
+                  <img src={c.coverPhoto ?? covers.get(c.id)} alt="" className="w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-500"/>
                   <div className="absolute top-2.5 left-2.5">
                     <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
                   </div>
