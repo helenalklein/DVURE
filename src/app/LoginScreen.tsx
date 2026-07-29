@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles, AlertCircle } from "lucide-react";
-import { FieldLabel, Modal, Btn, TextInput, DvureWordmark } from "./shared/ui";
+import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
 import { useAuth } from "./shared/auth";
 import dvureLogo from "../assets/dvure-logo-dark.png";
 
@@ -28,6 +28,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   const [workEmail, setWorkEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupError, setSignupError] = useState<string | null>(null);
+  const [modelInfoOpen, setModelInfoOpen] = useState(false);
 
   useEffect(() => {
     onModalOpenChange(signup !== null);
@@ -119,7 +120,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
         </div>
 
         <div className="text-center mt-5 text-xs text-muted-foreground">
-          New to <DvureWordmark size={10}/>?{" "}
+          New to DVURE?{" "}
           <button onClick={()=>setSignup("role")} className="text-foreground font-medium cursor-pointer hover:underline">Try Demo</button>
         </div>
       </div>
@@ -130,13 +131,13 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
             <div className="p-6 space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-heading text-lg">Try <DvureWordmark size={15}/></div>
+                  <div className="text-heading text-lg">Experience DVURE</div>
                   <div className="text-sm text-muted-foreground mt-0.5">Start a 14-day free trial — no credit card required.</div>
                 </div>
                 <button onClick={closeSignup} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={16}/></button>
               </div>
               <div className="space-y-2">
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">I'm an authorized representative for a</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Choose your workspace</div>
                 {([
                   { id:"brand" as SignupRole,  label:"Brand",  desc:"Book and manage talent for your campaigns",           Icon:Building },
                   { id:"agency" as SignupRole, label:"Agency", desc:"Submit talent and manage bookings for your roster",   Icon:Users    },
@@ -157,11 +158,11 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
                   );
                 })}
               </div>
-              <div className="pt-3 border-t border-border flex items-start gap-2.5">
-                <User size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
-                <div className="text-xs text-muted-foreground leading-relaxed">
-                  Are you a model? Models are added to <DvureWordmark size={10}/> by their agency — contact your agency directly to get connected.
-                </div>
+              <div className="pt-3 border-t border-border flex items-center gap-2.5">
+                <User size={13} className="text-muted-foreground shrink-0"/>
+                <button onClick={()=>setModelInfoOpen(true)} className="text-xs text-foreground font-medium hover:underline cursor-pointer">
+                  Looking for model/artist access?
+                </button>
               </div>
             </div>
           )}
@@ -228,12 +229,27 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
               <div>
                 <div className="text-heading text-lg">You're all set</div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  Your 14-day trial of <DvureWordmark size={11}/> {signupRole==="brand"?"Brand":"Agency"} has started for {companyName || (signupRole==="brand"?"your brand":"your agency")}. Explore the platform below — no setup required.
+                  Your 14-day trial of DVURE {signupRole==="brand"?"Brand":"Agency"} has started for {companyName || (signupRole==="brand"?"your brand":"your agency")}. Explore the platform below — no setup required.
                 </div>
               </div>
-              <Btn variant="primary" fullWidth onClick={closeSignup}>Enter <DvureWordmark size={12}/></Btn>
+              <Btn variant="primary" fullWidth onClick={closeSignup}>Enter DVURE</Btn>
             </div>
           )}
+        </Modal>
+      )}
+
+      {modelInfoOpen && (
+        <Modal onClose={()=>setModelInfoOpen(false)} maxWidth="max-w-xs">
+          <div className="p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-heading text-base">Looking for model/artist access?</div>
+              <button onClick={()=>setModelInfoOpen(false)} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={14}/></button>
+            </div>
+            <div className="text-xs text-muted-foreground leading-relaxed space-y-2">
+              <div>Models are added to DVURE by their agency — contact your agency directly to get connected.</div>
+              <div>Artists will receive a one-time login access code from the production team.</div>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
