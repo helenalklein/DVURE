@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles, AlertCircle } from "lucide-react";
-import { FieldLabel, Modal, Btn, TextInput, DvureSignature, DvureWordmark } from "./shared/ui";
+import { FieldLabel, Modal, Btn, TextInput, DvureWordmark } from "./shared/ui";
 import { useAuth } from "./shared/auth";
 import dvureLogo from "../assets/dvure-logo-dark.png";
 
@@ -119,7 +119,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
         </div>
 
         <div className="text-center mt-5 text-xs text-muted-foreground">
-          New to <DvureSignature size={11}/>?{" "}
+          New to <DvureWordmark size={10}/>?{" "}
           <button onClick={()=>setSignup("role")} className="text-foreground font-medium cursor-pointer hover:underline">Try Demo</button>
         </div>
       </div>
@@ -130,7 +130,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
             <div className="p-6 space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-heading text-lg">Try <DvureSignature size={18}/></div>
+                  <div className="text-heading text-lg">Try <DvureWordmark size={15}/></div>
                   <div className="text-sm text-muted-foreground mt-0.5">Start a 14-day free trial — no credit card required.</div>
                 </div>
                 <button onClick={closeSignup} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={16}/></button>
@@ -160,7 +160,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
               <div className="pt-3 border-t border-border flex items-start gap-2.5">
                 <User size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
                 <div className="text-xs text-muted-foreground leading-relaxed">
-                  Are you a model? Models are added to <DvureSignature size={11}/> by their agency — contact your agency directly to get connected.
+                  Are you a model? Models are added to <DvureWordmark size={10}/> by their agency — contact your agency directly to get connected.
                 </div>
               </div>
             </div>
@@ -231,7 +231,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
                   Your 14-day trial of <DvureWordmark size={11}/> {signupRole==="brand"?"Brand":"Agency"} has started for {companyName || (signupRole==="brand"?"your brand":"your agency")}. Explore the platform below — no setup required.
                 </div>
               </div>
-              <Btn variant="primary" fullWidth onClick={closeSignup}>Enter <DvureSignature size={14}/></Btn>
+              <Btn variant="primary" fullWidth onClick={closeSignup}>Enter <DvureWordmark size={12}/></Btn>
             </div>
           )}
         </Modal>

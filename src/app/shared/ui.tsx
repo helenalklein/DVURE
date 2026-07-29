@@ -355,8 +355,8 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
 // surfaces; existing bespoke modals keep their own markup for now.
 export function Modal({ onClose, maxWidth = "max-w-md", children }: { onClose: () => void; maxWidth?: string; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className={cx("glass-strong border rounded-xl w-full shadow-2xl overflow-hidden", maxWidth)} onClick={e=>e.stopPropagation()}>
+    <div className="fixed inset-0 bg-foreground/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className={cx("glass-strong border rounded-xl w-full overflow-hidden shadow-[0_30px_90px_-15px_rgba(30,28,26,0.65)]", maxWidth)} onClick={e=>e.stopPropagation()}>
         {children}
       </div>
     </div>
