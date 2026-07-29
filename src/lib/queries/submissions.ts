@@ -8,7 +8,7 @@ import type { Talent, SubmissionStage } from "../../app/shared/types";
 // range, with a reverse map back to the real uuids for writes.
 const SHIM_ID_BASE = 100_000;
 
-export interface SubmissionShimEntry { submissionId: string; modelId: string; }
+export interface SubmissionShimEntry { submissionId: string; modelId: string; agencyOrgId: string; }
 export type SubmissionShim = Map<number, SubmissionShimEntry>;
 
 interface ModelRow {
@@ -32,6 +32,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
     .from("submissions")
     .select(`
       id, model_id, stage, availability, rate_quoted, notes, brand_score,
+      submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
       model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience)
     `)
@@ -57,7 +58,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
   const shim: SubmissionShim = new Map();
   const talent: Talent[] = subs.map((s: any, i: number) => {
     const id = SHIM_ID_BASE + i;
-    shim.set(id, { submissionId: s.id, modelId: s.model_id });
+    shim.set(id, { submissionId: s.id, modelId: s.model_id, agencyOrgId: s.submitting_agency_id });
     const m: ModelRow = s.model_profiles;
     return {
       id,

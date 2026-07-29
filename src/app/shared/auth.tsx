@@ -7,12 +7,18 @@ type ProfileRole = "brand_staff" | "agency_staff" | "model";
 type OrgType = "brand" | "agency";
 type AccessLevel = "administrator" | "enhanced" | "basic";
 
+export type VerificationStatus = "unverified" | "pending" | "verified" | "failed";
+export type SubscriptionStatus = "trialing" | "active" | "past_due" | "canceled";
+
 export interface OrgInfo {
   id: string;
   name: string;
   orgType: OrgType;
   accessLevel: AccessLevel;
   title: string | null;
+  verificationStatus: VerificationStatus;
+  subscriptionStatus: SubscriptionStatus;
+  trialEndsAt: string | null;
 }
 
 export interface ModelAgencyInfo {
@@ -103,6 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgType: orgRow.org_type,
         accessLevel: membership.access_level,
         title: membership.title,
+        verificationStatus: orgRow.verification_status,
+        subscriptionStatus: orgRow.subscription_status,
+        trialEndsAt: orgRow.trial_ends_at,
       },
     });
   }, []);

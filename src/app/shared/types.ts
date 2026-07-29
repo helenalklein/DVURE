@@ -80,7 +80,7 @@ export interface CampaignThreadMessage {
 
 // ─── CAMPAIGNS (shared record, individually addressable) ──────────────────
 
-export type CampaignType = "Runway" | "Editorial" | "Advertising" | "E-commerce" | "TV Commercial" | "Beauty" | "Other";
+export type CampaignType = "Campaign" | "Runway" | "Event" | "Other";
 export type CampaignStatus = "active" | "drafts" | "archived";
 
 export interface Campaign {

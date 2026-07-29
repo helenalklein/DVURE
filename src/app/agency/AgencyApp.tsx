@@ -20,9 +20,9 @@ const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
 ];
 
 const INVITATIONS = [
-  { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Editorial", due:"06/20/2025", budget:"$800–$1,200/day", models:3, submissionOpen:"May 1, 2026", submissionClose:"Aug 15, 2026" },
-  { brand:"Nike",         campaign:"Run Global SS25",          type:"Fitness",   due:"07/01/2025", budget:"$600–$900/day",   models:5, submissionOpen:"Jul 1, 2026", submissionClose:"Aug 5, 2026"  },
-  { brand:"Chanel",       campaign:"Beauty Editorial AW25",    type:"Beauty",    due:"06/28/2025", budget:"$1,200–$2,000/day", models:2, submissionOpen:"Jul 10, 2026", submissionClose:"Jul 24, 2026" },
+  { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Campaign", due:"06/20/2025", budget:"$800–$1,200/day", models:3, submissionOpen:"May 1, 2026", submissionClose:"Aug 15, 2026" },
+  { brand:"Nike",         campaign:"Run Global SS25",          type:"Campaign", due:"07/01/2025", budget:"$600–$900/day",   models:5, submissionOpen:"Jul 1, 2026", submissionClose:"Aug 5, 2026"  },
+  { brand:"Chanel",       campaign:"Beauty Editorial AW25",    type:"Campaign", due:"06/28/2025", budget:"$1,200–$2,000/day", models:2, submissionOpen:"Jul 10, 2026", submissionClose:"Jul 24, 2026" },
 ];
 
 function submissionIsClosed(inv: { submissionClose: string }) {

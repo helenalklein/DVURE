@@ -346,7 +346,7 @@ function SettingsPage() {
 
 // ─── SHELL ────────────────────────────────────────────────────────────────────
 
-function RelaySidebar({ page, setPage, onExit }: { page: RelayPage; setPage: (p: RelayPage) => void; onExit: () => void }) {
+function RelaySidebar({ page, setPage, onExit, mode }: { page: RelayPage; setPage: (p: RelayPage) => void; onExit: () => void; mode: RelayMode }) {
   return (
     <aside className="w-56 shrink-0 bg-card border-r border-border flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
@@ -355,7 +355,7 @@ function RelaySidebar({ page, setPage, onExit }: { page: RelayPage; setPage: (p:
         </div>
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate">Relay</div>
-          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Runway Relay</div>
+          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{mode==="event" ? "Event Relay" : "Runway Relay"}</div>
         </div>
       </div>
       <nav className="flex-1 px-2 py-3 space-y-0.5">
@@ -380,7 +380,14 @@ function RelaySidebar({ page, setPage, onExit }: { page: RelayPage; setPage: (p:
   );
 }
 
-export default function RelayConsole({ onExit }: { onExit: () => void }) {
+// "Event" is a light differentiation for now — the sidebar label and
+// header framing change, but the underlying mock data (RELAY_SHOW,
+// stations/bands/devices) is still runway-flavored throughout. Extend
+// this once the actual event-specific behavior (different metrics,
+// different station/band terminology, etc.) is defined.
+type RelayMode = "runway" | "event";
+
+export default function RelayConsole({ onExit, mode = "runway" }: { onExit: () => void; mode?: RelayMode }) {
   const [page, setPage] = useState<RelayPage>("dashboard");
   const [events, setEvents] = useState<RelayEvent[]>([...RELAY_INITIAL_EVENTS].reverse());
 
@@ -393,11 +400,11 @@ export default function RelayConsole({ onExit }: { onExit: () => void }) {
 
   return (
     <div className="dark h-screen flex bg-background text-foreground overflow-hidden">
-      <RelaySidebar page={page} setPage={setPage} onExit={onExit}/>
+      <RelaySidebar page={page} setPage={setPage} onExit={onExit} mode={mode}/>
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="h-14 border-b border-border flex items-center px-6 gap-3 shrink-0">
           <div className="text-sm font-semibold">{RELAY_NAV.find(n=>n.id===page)?.label}</div>
-          <div className="text-xs text-muted-foreground font-mono">· {RELAY_SHOW}</div>
+          <div className="text-xs text-muted-foreground font-mono">· {mode==="event" ? "Event Day" : "Runway Day"} · {RELAY_SHOW}</div>
         </div>
         <div className="flex-1 overflow-auto p-6">
           {page==="dashboard"   && <DashboardPage events={events}/>}

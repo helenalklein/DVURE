@@ -11,12 +11,14 @@ import {
   User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
+import { getAccessGate } from "../shared/accessGate";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
+import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import RelayConsole from "./relay/RelayConsole";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
@@ -155,13 +157,20 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"users",         label:"Users",         Icon:User            },
 ];
 
-// Runway campaigns swap the generic Submissions board for a day-of
-// Casting Board and gain a Looks tab — everything else (Requirements,
-// Deliverables, Contracts, ...) stays the same for now.
+// Casting Board is a universal companion tool now — every type gets it
+// as its own tab alongside Submissions, not a swap-in that only certain
+// types receive. Runway additionally gets a Looks tab, since that's
+// specifically a fashion-show concern the others don't share.
 function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: string; Icon: IconFn }[] {
-  if (type !== "Runway") return CAMPAIGN_NAV_BASE;
-  return CAMPAIGN_NAV_BASE.map(item => item.id==="moodboard" ? { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check } : item)
-    .flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
+  const withCasting = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [item, { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check }] : [item]);
+  if (type !== "Runway") return withCasting;
+  return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
+}
+
+// Runway and Event both get the Relay day-of console; every other type
+// doesn't have a "show day" to run.
+function hasRelay(type: Campaign["type"]): boolean {
+  return type === "Runway" || type === "Event";
 }
 
 function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, counts, fullExtensionUntil }: {
@@ -216,7 +225,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           );
         })}
       </nav>
-      {campaign.type==="Runway" && (
+      {hasRelay(campaign.type) && (
         <div className="px-3 pt-3 border-t border-border">
           <button onClick={onOpenRelay}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer">
@@ -246,8 +255,8 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
 
-function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency }: {
-  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void;
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook }: {
+  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [dragging, setDragging] = useState<number|null>(null);
@@ -287,6 +296,10 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
       if (t) setDeclineModal(t);
       return;
     }
+    if (newStage === "booked") {
+      onBook([id]);
+      return;
+    }
     const prev = talent.find(t => t.id === id);
     if (!prev) return;
     const prevStage = prev.stage;
@@ -296,6 +309,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   }
 
   function bulkMove(ids: number[], newStage: SubmissionStage, label: string) {
+    if (newStage === "booked") {
+      onBook(ids);
+      setSelected([]);
+      return;
+    }
     const prevMap = ids.map(id => ({ id, stage: talent.find(x => x.id === id)?.stage ?? "submitted" as SubmissionStage }));
     ids.forEach(id => moveTo(id, newStage));
     setSelected([]);
@@ -936,6 +954,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [viewingAgency, setViewingAgency] = useState<string|null>(null);
   const [focusAgency, setFocusAgency] = useState<string|null>(null);
+  const [bookModal, setBookModal] = useState<{ ids: number[] } | null>(null);
+  const [bookForm, setBookForm] = useState<Record<number, { dayRate: string; days: string; shootDate: string }>>({});
+  const [bookSaving, setBookSaving] = useState(false);
+  const [bookError, setBookError] = useState<string | null>(null);
 
   const campaign = campaigns.find(c=>c.id===campaignId);
 
@@ -979,6 +1001,63 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
       }
       return next;
     });
+  }
+
+  function parseRateDefault(rate: string): string {
+    const n = parseInt(rate.replace(/[^0-9]/g, ""), 10);
+    return Number.isFinite(n) && n > 0 ? String(n) : "";
+  }
+
+  function openBookModal(ids: number[]) {
+    const today = new Date().toISOString().slice(0, 10);
+    const form: Record<number, { dayRate: string; days: string; shootDate: string }> = {};
+    for (const id of ids) {
+      const t = talent.find(x => x.id === id);
+      form[id] = { dayRate: parseRateDefault(t?.rate ?? ""), days: "1", shootDate: today };
+    }
+    setBookForm(form);
+    setBookError(null);
+    setBookModal({ ids });
+  }
+
+  async function confirmBook() {
+    if (!bookModal) return;
+    setBookSaving(true);
+    setBookError(null);
+
+    if (realCampaignId && org) {
+      for (const id of bookModal.ids) {
+        const entry = shim.get(id);
+        const f = bookForm[id];
+        if (!entry || !f) continue;
+        const dayRate = Number(f.dayRate);
+        const days = Number(f.days);
+        if (!dayRate || !days || !f.shootDate) {
+          setBookSaving(false);
+          setBookError("Every model needs a day rate, days, and shoot date.");
+          return;
+        }
+        const { error } = await createBooking({
+          campaignId: realCampaignId,
+          submissionId: entry.submissionId,
+          brandOrgId: org.id,
+          agencyOrgId: entry.agencyOrgId,
+          modelId: entry.modelId,
+          dayRate, days,
+          shootDate: f.shootDate,
+        });
+        if (error) {
+          setBookSaving(false);
+          setBookError(error);
+          return;
+        }
+      }
+    }
+
+    const ids = bookModal.ids;
+    persistingSetTalent(prev => prev.map(t => ids.includes(t.id) ? { ...t, stage: "booked" as SubmissionStage } : t));
+    setBookSaving(false);
+    setBookModal(null);
   }
 
   function handlePostComment(talentId: number, text: string) {
@@ -1076,7 +1155,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
 
           {section==="casting" && <CastingBoard campaign={campaign}/>}
 
@@ -1243,6 +1322,51 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
       </div>
 
       {contractModal && <ContractModal talent={contractModal} onSend={()=>setContractModal(null)} onLater={()=>setContractModal(null)}/>}
+      {bookModal && (
+        <Modal onClose={()=>{ if (!bookSaving) setBookModal(null); }} maxWidth="max-w-md">
+          <div className="p-6 space-y-4">
+            <div>
+              <div className="text-heading text-lg">Confirm booking</div>
+              <div className="text-sm text-muted-foreground mt-0.5">
+                Day rate, days, and shoot date for {bookModal.ids.length === 1 ? "this model" : `these ${bookModal.ids.length} models`}. Agency and platform fees use DVURE's standard split ({DEFAULT_AGENCY_PCT}% / {DEFAULT_PLATFORM_PCT}%).
+              </div>
+            </div>
+            <div className="space-y-3 max-h-72 overflow-y-auto">
+              {bookModal.ids.map(id => {
+                const t = talent.find(x => x.id === id);
+                const f = bookForm[id] ?? { dayRate: "", days: "1", shootDate: "" };
+                return (
+                  <div key={id} className="border border-border rounded-md p-3 space-y-2">
+                    <div className="text-sm font-medium">{t?.name ?? "Model"}</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <FieldLabel>Day rate</FieldLabel>
+                        <input type="number" value={f.dayRate} onChange={e=>setBookForm(prev=>({ ...prev, [id]: { ...f, dayRate: e.target.value } }))}
+                          placeholder="950" className="w-full bg-input-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-foreground"/>
+                      </div>
+                      <div>
+                        <FieldLabel>Days</FieldLabel>
+                        <input type="number" value={f.days} onChange={e=>setBookForm(prev=>({ ...prev, [id]: { ...f, days: e.target.value } }))}
+                          placeholder="1" className="w-full bg-input-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-foreground"/>
+                      </div>
+                      <div>
+                        <FieldLabel>Shoot date</FieldLabel>
+                        <input type="date" value={f.shootDate} onChange={e=>setBookForm(prev=>({ ...prev, [id]: { ...f, shootDate: e.target.value } }))}
+                          className="w-full bg-input-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-foreground"/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {bookError && <div className="flex items-center gap-1.5 text-xs text-red-500"><AlertCircle size={12}/> {bookError}</div>}
+            <div className="flex items-center gap-2">
+              <Btn variant="secondary" onClick={()=>setBookModal(null)} disabled={bookSaving}>Cancel</Btn>
+              <Btn variant="primary" fullWidth onClick={confirmBook} disabled={bookSaving}>{bookSaving ? "Booking…" : "Confirm booking"}</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
       {showExtendModal && (
         <ExtendSubmissionModal campaign={campaign} onClose={()=>setShowExtendModal(false)}
           onGrant={ext=>{ setExtensions(prev=>[...prev, ext]); setShowExtendModal(false); }}/>
@@ -1584,14 +1708,14 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
 
 // ─── CREATE CAMPAIGN ──────────────────────────────────────────────────────────
 
-const CAMPAIGN_TYPES = ["Runway","Editorial","Advertising","E-commerce","TV Commercial","Beauty","Other"];
+const CAMPAIGN_TYPES = ["Campaign","Runway","Event","Other"];
 
 function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: (realId: string) => void }) {
   const { profile, org } = useAuth();
   const [step, setStep] = useState(1);
   const [genders, setGenders] = useState(["Female"]);
   const [cats, setCats] = useState(["Editorial"]);
-  const [campaignType, setCampaignType] = useState("Editorial");
+  const [campaignType, setCampaignType] = useState("Campaign");
   const [customType, setCustomType] = useState("");
   const [name, setName] = useState("");
   const [shootStart, setShootStart] = useState("");
@@ -1932,6 +2056,8 @@ function GlobalPayments() {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
   const meName = currentUser?.name ?? "";
+  const { org: accountOrg } = useAuth();
+  const accessGate = getAccessGate(accountOrg);
   const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices">("payments");
   const [showPayModal, setShowPayModal] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -1997,7 +2123,7 @@ function GlobalPayments() {
     if (payAmount || selectedCampaign) { setShowDiscardConfirm(true); } else { setShowPayModal(false); }
   }
 
-  const canAuthorize = !!(selectedCampaign && payAmount && signature);
+  const canAuthorize = !!(selectedCampaign && payAmount && signature) && !accessGate.gated;
 
   // Gold button style for Authorize Payment + Authorize — plain sentence
   // case, matching every other button's Instrument Sans treatment rather
@@ -2007,6 +2133,7 @@ function GlobalPayments() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Payments" sub={`${org} · Payment methods and invoices`}/>
+      <GateBanner org={accountOrg}/>
       {/* Tab bar: Payments | Invoices */}
       <div className="bg-card border-b border-border px-6 flex items-center shrink-0">
         {(["payments","invoices"] as const).map(t=>(
@@ -2124,7 +2251,8 @@ function GlobalPayments() {
           {/* Authorize Payment — gold with white text, back to its original weight */}
           <button
             onClick={()=>setShowPayModal(true)}
-            className={`w-full py-10 mt-4 rounded-md ${goldBtn} text-lg`}
+            disabled={accessGate.gated}
+            className={`w-full py-10 mt-4 rounded-md ${goldBtn} text-lg disabled:opacity-40 disabled:cursor-not-allowed`}
           >
             Authorize Payment
           </button>
@@ -3383,8 +3511,9 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   }, [attentionOpen]);
 
   function openCampaign(id: number) {
-    const campaign = allCampaigns.find(c=>c.id===id);
-    setCampaignSection(campaign?.type==="Runway" ? "casting" : "moodboard");
+    // Casting Board is now just one tab among several for every type —
+    // always land on Submissions first, same as everyone else.
+    setCampaignSection("moodboard");
     navigate(`/brand/campaigns/${id}`);
   }
   function backToCampaigns() { setGlobalNav("campaigns"); navigate("/brand"); }
@@ -3401,7 +3530,10 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   // full-bleed console (own sidebar, dark-mode scoped), not nested inside
   // the normal light-mode chrome. Exiting it lands back on the same
   // campaign, since the URL never changed while relay was open.
-  if (view === "relay") return <RelayConsole onExit={()=>setView("campaigns")}/>;
+  if (view === "relay") {
+    const relayCampaign = allCampaigns.find(c=>c.id===activeCampaignId);
+    return <RelayConsole mode={relayCampaign?.type==="Event" ? "event" : "runway"} onExit={()=>setView("campaigns")}/>;
+  }
 
   if (activeCampaignId != null && campaignsLoading) {
     return <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;

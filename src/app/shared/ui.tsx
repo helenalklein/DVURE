@@ -1,5 +1,7 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings } from "lucide-react";
+import { Bell, X, ChevronDown, Settings, Lock } from "lucide-react";
+import type { OrgInfo } from "./auth";
+import { getAccessGate } from "./accessGate";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
 import dvureMarkD from "../../assets/dvure-mark-d.png";
 import dvureMarkWordmark from "../../assets/dvure-mark-wordmark.png";
@@ -347,6 +349,25 @@ export function TopBar({ title, sub, actions }: { title: string; sub?: string; a
         {sub && <div className="text-subtext text-xs">{sub}</div>}
       </div>
       <div className="flex items-center gap-2 shrink-0">{actions}<RefreshButton/><UserMenuButton/><BellButton/></div>
+    </div>
+  );
+}
+
+// Drop into any screen that gates on verification/payment (Authorize
+// Payment, sending an invite, adding a teammate, etc.) — reads the same
+// getAccessGate() every gated action-handler checks before running, so
+// the explanation shown here always matches why the action was
+// actually blocked. Renders nothing once the org clears the gate.
+export function GateBanner({ org }: { org: OrgInfo | undefined }) {
+  const gate = getAccessGate(org);
+  if (!gate.gated) return null;
+  const copy = gate.reason === "unverified"
+    ? "This account isn't verified yet — payments, invites, and adding teammates are locked until verification completes."
+    : "Your trial has ended — payments, invites, and adding teammates are locked until you add a payment method.";
+  return (
+    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-secondary border-b border-border text-xs">
+      <Lock size={13} className="text-muted-foreground shrink-0"/>
+      <span className="text-foreground">{copy}</span>
     </div>
   );
 }
