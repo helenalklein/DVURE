@@ -1,5 +1,6 @@
 import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CastingStageId, CastingEntry, Look, CrewMember, CampaignThreadMessage } from "./types";
 import { formatCampaignDue } from "../../lib/formatDue";
+import coverCrystalPalaceTransept from "../../assets/cover-crystal-palace-transept.jpg";
 
 // Fixed "today" for demo purposes — drives talent-submission-window open/
 // closed state (see Campaign.submissionOpen/submissionClose) and the
@@ -125,31 +126,31 @@ export const NOTIFS = [
 // read the same records instead of each keeping their own inline copy, and
 // campaigns are now individually addressable by id.
 
-// Free Unsplash stock (real photographers) standing in for the eventual
-// real photo gallery/upload system a brand would use — see coverPhoto's
-// doc comment on the Campaign type. Every entry here is a WIDE shot: a
-// small subject (or no subject at all) inside a lot of quiet negative
-// space — a person on a hillside, a doorway against an empty ocean, a
-// figure against a big blank wall. Not tight macro crops of a texture or
-// a face filling the frame — that reads as "centering one subject" just
-// as much as a close-up portrait does, regardless of the subject's pose.
-const UNSPLASH = (id: string) => `https://images.unsplash.com/${id}?w=800&q=80&fit=crop&auto=format`;
-
+// Real, public-domain photographs from The Met's Open Access collection —
+// Pictorialism/Photo-Secession era (1850-1922). Replaces an earlier
+// Unsplash color-stock gallery entirely: DVURE's demo covers are now all
+// genuine black-and-white photography, not a placeholder color library.
+// Anything printed in a warm/sepia tone in the original (typical of
+// period albumen/salt prints) was converted to neutral black-and-white
+// before selection, so the whole pool reads as true B&W, not sepia.
 const CAMPAIGN_COVER_GALLERY: string[] = [
-  "photo-1706649135276-058768cbea4d", "photo-1652284955303-321c3ba8e3a7", "photo-1518972734183-c5b490a7c637",
-  "photo-1602765835989-b021fe3ed4f8", "photo-1708114664956-00578b82b360", "photo-1621507179507-0d69a5066f59",
-  "photo-1784043319518-8426f2ed473b", "photo-1705435896415-933b94be4ea5", "photo-1472566316349-bce77aa2a778",
-  "photo-1684682025585-1d77e17ec2f0", "photo-1469050624972-f03b8678e363", "photo-1743432650832-42ad149244a1",
-  "photo-1725633525933-54b524854450", "photo-1589653768999-3b08ec128b34", "photo-1698366898446-53eed39cd0c7",
-  "photo-1651589259121-cecabfcaa2b1", "photo-1744406216919-435256839717", "photo-1747317337922-b20743f71d90",
-  "photo-1718251806661-5e122f215349", "photo-1629511565591-a1d494ad6c58", "photo-1662532577856-e8ee8b138a8b",
-  "photo-1552393700-42696fb89bfa",   "photo-1698915583082-ae18c41f50c0", "photo-1641502143639-6e3ee24808f0",
-  "photo-1701233425415-39f326fb6107", "photo-1613915617430-8ab0fd7c6baf", "photo-1773910041083-21d31b054ec9",
-  "photo-1540700012777-9f73b0e49543", "photo-1653040321630-698cfc09254e", "photo-1774379456435-92a4e16de961",
-  "photo-1769775418610-c99d3fdcd442", "photo-1765033670214-e2d95c451fe5", "photo-1765788897202-9a9c971a29a1",
-  "photo-1781458148566-a01b50e668b7", "photo-1771100065000-62bc31315aca", "photo-1780291012242-5a8dc7d39edb",
-  "photo-1704972391839-66fa4f02e163", "photo-1622396481322-3b83d186701b", "photo-1619857121838-997e82345250",
-  "photo-1704495463767-59118eccf4ac",
+  "https://images.metmuseum.org/CRDImages/ph/original/DP232170.jpg", // Pierre-Louis Pierson, "[Study of Legs]", 1861-67
+  "https://images.metmuseum.org/CRDImages/ph/original/DP138588.jpg", // Felix Teynard, "Esneh, Dattiers, Sycomore et Cafe Sur le Bord du Nil", 1851-54
+  "https://images.metmuseum.org/CRDImages/ph/original/DP240624.jpg", // Gustave Le Gray, "Brig on the Water", 1856
+  "https://images.metmuseum.org/CRDImages/ph/original/DP223650.jpg", // Gustave Le Gray, "[The Great Wave, Sete]", 1857
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43768-001.jpg", // Edouard Baldus, "Panorama de la Cite", 1860s
+  coverCrystalPalaceTransept, // Hugh Owen, "View of Transept, Looking South", 1851 — hand-cropped locally (see src/assets) to the vaulted-ceiling/fountain portion; the raw Met scan is a portrait-oriented mounted print with wide cream borders and a caption that a generic center-crop would mangle
+  "https://images.metmuseum.org/CRDImages/ph/original/DP152207.jpg", // Carleton E. Watkins, "South Dome, 6,000 feet", ca. 1872
+  "https://images.metmuseum.org/CRDImages/ph/original/DP273004.jpg", // Charles Marville, "[Cloud Study over Paris]", 1856-57
+  "https://images.metmuseum.org/CRDImages/ph/original/DP113942.jpg", // Alfred Capel Cure, "Haughmond Abbey", 1858
+  "https://images.metmuseum.org/CRDImages/ph/original/DP200352.jpg", // Charles Marville, "La Bievre", ca. 1862
+  "https://images.metmuseum.org/CRDImages/ph/original/DT1165.jpg", // Edouard Baldus, "[Entrance to the Port of Boulogne]", 1855
+  "https://images.metmuseum.org/CRDImages/ph/original/DT4002.jpg", // Gustave Le Gray, "Mediterranean with Mount Agde", 1857
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70292.jpg", // Charles Marville, "Allee bordee d'arbres", 1850-53
+  "https://images.metmuseum.org/CRDImages/ph/original/DT223780.jpg", // Constant Alexandre Famin, "[Man in a Forest Landscape]", ca. 1870
+  "https://images.metmuseum.org/CRDImages/ph/original/DP139275.jpg", // Edmond Bacot, "Vue generale de Rouen", 1852-54
+  "https://images.metmuseum.org/CRDImages/ph/original/DP139298.jpg", // Edmond Bacot, "Rue des Petits Murs, Caen", 1852-54
+  "https://images.metmuseum.org/CRDImages/ph/original/DP221452.jpg", // Joseph Vigier, "Sentier du chaos, St-Sauveur", 1853
 ];
 
 // Assigns every campaign in one rendered list a DISTINCT photo — not just
@@ -166,7 +167,7 @@ export function assignCampaignCovers(ids: number[]): Map<number, string> {
     let idx = ((id % n) + n) % n;
     while (used.has(idx)) idx = (idx + 1) % n;
     used.add(idx);
-    result.set(id, UNSPLASH(CAMPAIGN_COVER_GALLERY[idx]));
+    result.set(id, CAMPAIGN_COVER_GALLERY[idx]);
   }
   return result;
 }
