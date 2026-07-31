@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { logAuditEvent } from "../audit";
 
 // Fee split isn't a per-booking negotiation in the UI yet — every real
 // booking uses the platform's own standard split, the same numbers the
@@ -34,5 +35,16 @@ export async function createBooking(params: {
     .select("id")
     .single();
   if (error || !data) return { id: null, error: error?.message ?? "Couldn't create booking." };
+
+  // Same client-side (skippable) audit tier as submissions — bookings
+  // has no security-definer RPC of its own yet either.
+  logAuditEvent({
+    action: "booking.created",
+    objectType: "booking",
+    objectId: data.id as string,
+    campaignId: params.campaignId,
+    newValue: { modelId: params.modelId, dayRate: params.dayRate, days: params.days, shootDate: params.shootDate },
+  });
+
   return { id: data.id as string, error: null };
 }

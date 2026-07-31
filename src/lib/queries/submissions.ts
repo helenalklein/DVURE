@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { logAuditEvent } from "../audit";
 import type { Talent, SubmissionStage } from "../../app/shared/types";
 
 // Talent.id is `number` throughout the app (mock ids 1-14) — rather than
@@ -88,6 +89,13 @@ export async function updateSubmissionStage(
   stage: SubmissionStage,
   opts?: { reviewedByProfileId?: string; declineReason?: string }
 ) {
+  // Fetched before the write so the audit entry can carry a real
+  // previous_value — this table has no security-definer RPC of its own
+  // yet, so logAuditEvent() here is the client-side (skippable, see
+  // src/lib/audit.ts) half of the audit system, not the guaranteed
+  // transactional kind complete_org_signup/record_payment_attempt get.
+  const { data: prior } = await supabase.from("submissions").select("stage, campaign_id").eq("id", submissionId).maybeSingle();
+
   const patch: Record<string, unknown> = { stage, updated_at: new Date().toISOString() };
   if (opts?.reviewedByProfileId) {
     patch.reviewed_by_profile_id = opts.reviewedByProfileId;
@@ -95,6 +103,18 @@ export async function updateSubmissionStage(
   }
   if (opts?.declineReason) patch.decline_reason = opts.declineReason;
   const { error } = await supabase.from("submissions").update(patch).eq("id", submissionId);
+
+  if (!error) {
+    logAuditEvent({
+      action: "submission.stage_changed",
+      objectType: "submission",
+      objectId: submissionId,
+      campaignId: prior?.campaign_id,
+      previousValue: prior ? { stage: prior.stage } : undefined,
+      newValue: { stage, declineReason: opts?.declineReason },
+    });
+  }
+
   return { error };
 }
 
