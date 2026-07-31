@@ -1408,6 +1408,12 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   const [input, setInput] = useState("");
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastText, setBroadcastText] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
+
+  function flashSent(label: string) {
+    setSent(label);
+    setTimeout(() => setSent(null), 3000);
+  }
 
   useEffect(() => {
     if (focusAgency) {
@@ -1428,6 +1434,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
       setThreads(p=>({ ...p, [selectedAgency]: [...(p[selectedAgency]??[]), { id:Date.now(), from:meName, fromOrg:meOrg, text:input, ts:"Now" }] }));
     }
     setInput("");
+    flashSent("Message sent");
   }
 
   function sendBroadcast() {
@@ -1442,10 +1449,11 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
     });
     setBroadcastText("");
     setShowBroadcast(false);
+    flashSent(`Sent to all ${agencies.length} agenc${agencies.length===1?"y":"ies"}`);
   }
 
   return (
-    <div className="flex-1 flex min-h-0">
+    <div className="flex-1 flex min-h-0 relative">
       <div className="w-48 shrink-0 border-r border-border overflow-y-auto">
         <button onClick={()=>setScope("internal")}
           className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
@@ -1542,6 +1550,17 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
           </div>
         </Modal>
       )}
+      {sent && (
+        <div className="absolute bottom-6 right-6 glass-strong border rounded-lg shadow-xl px-5 py-4 flex items-center gap-3 z-30 animate-in fade-in slide-in-from-bottom-2">
+          <div className="w-9 h-9 rounded-full bg-foreground text-primary-foreground flex items-center justify-center shrink-0">
+            <Check size={16}/>
+          </div>
+          <div>
+            <div className="text-sm font-semibold">{sent}</div>
+            <div className="text-xs text-muted-foreground">Delivered just now</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1615,7 +1634,10 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
                     same campaign reads differently depending on who's
                     looking at it. */}
                 <div className="relative aspect-[4/3] bg-secondary overflow-hidden">
-                  <img src={c.coverPhoto ?? covers.get(c.id)} alt="" className="w-full h-full object-cover grayscale group-hover:scale-105 transition-transform duration-500"/>
+                  {/* Natural color, deliberately — the app's own chrome is
+                      black and white now, so whatever a brand picks for
+                      their own cover is the only color on the page. */}
+                  <img src={c.coverPhoto ?? covers.get(c.id)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
                   <div className="absolute top-2.5 left-2.5">
                     <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
                   </div>
@@ -1671,7 +1693,7 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
                   </div>
                   <div className="text-sm text-muted-foreground">{a.msg}</div>
                 </div>
-                <Btn variant="primary" size="sm" onClick={()=>openCampaign(a.campaignId)}>Review</Btn>
+                <Btn variant="primary" size="md" onClick={()=>openCampaign(a.campaignId)}>View</Btn>
               </div>
             ))}
           </div>
@@ -2167,10 +2189,10 @@ function GlobalPayments() {
             <h2 className="text-heading text-base mb-3">Payment Cards</h2>
             {hasCard ? (
               <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#B8A36A] via-[#CBB989] to-[#8C7A4C] p-5 flex flex-col justify-between select-none cursor-pointer hover:shadow-lg transition-shadow">
+                <div className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#2A2826] via-[#1E1C1A] to-[#0B0B0A] p-5 flex flex-col justify-between select-none cursor-pointer hover:shadow-lg transition-shadow">
                   <div className="flex items-start justify-between">
                     <div><div className="text-[10px] font-mono text-white/80 uppercase tracking-widest">Primary</div><div className="text-base font-bold text-white tracking-widest mt-1">AMEX</div></div>
-                    <div className="text-right"><div className="text-[10px] text-white/70">American Express</div><div className="text-xs text-white/90 mt-1">Gold</div></div>
+                    <div className="text-right"><div className="text-[10px] text-white/70">American Express</div><div className="text-xs text-white/90 mt-1">Centurion</div></div>
                   </div>
                   <div>
                     <div className="text-white font-mono text-lg tracking-widest mb-2">•••• •••• •••• 4242</div>
@@ -2924,11 +2946,11 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
     if (messagingGate.gated) return;
     setSent(true);
     setFormKey(k=>k+1);
-    setTimeout(()=>setSent(false), 2500);
+    setTimeout(()=>setSent(false), 3000);
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 relative">
       <div className="px-6 py-4 border-b border-border flex items-center gap-2 shrink-0">
         <Edit3 size={14} className="text-muted-foreground"/>
         <div className="text-heading text-sm">New Message</div>
@@ -2947,13 +2969,23 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
       </div>
       <div className="border-t border-border px-6 py-4 flex items-center gap-3 shrink-0">
         <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={handleSend} disabled={messagingGate.gated}>Send</Btn>
-        {sent && <span className="text-xs text-muted-foreground">Message sent</span>}
         {messagingGate.gated && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Lock size={12}/> {messagingGate.reason === "unverified" ? "Verification required to send." : "Add a payment method to send."}
           </span>
         )}
       </div>
+      {sent && (
+        <div className="absolute bottom-20 right-6 glass-strong border rounded-lg shadow-xl px-5 py-4 flex items-center gap-3 z-30 animate-in fade-in slide-in-from-bottom-2">
+          <div className="w-9 h-9 rounded-full bg-foreground text-primary-foreground flex items-center justify-center shrink-0">
+            <Check size={16}/>
+          </div>
+          <div>
+            <div className="text-sm font-semibold">Message sent</div>
+            <div className="text-xs text-muted-foreground">Delivered just now</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
