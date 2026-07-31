@@ -1392,6 +1392,8 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   const currentUser = useCurrentUser();
   const meName = currentUser?.name ?? "";
   const meOrg = currentUser?.org ?? "";
+  const { org: accountOrg } = useAuth();
+  const messagingGate = getAccessGate(accountOrg);
   const agencies = CAMPAIGN_AGENCIES[campaign.id] ?? [];
   const [scope, setScope] = useState<CollabScope>("internal");
   const [selectedAgency, setSelectedAgency] = useState(agencies[0] ?? "");
@@ -1419,7 +1421,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   const agencyMsgs = threads[selectedAgency] ?? [];
 
   function send() {
-    if (!input.trim()) return;
+    if (!input.trim() || messagingGate.gated) return;
     if (isInternal) {
       setInternalMsgs(p=>[...p,{ id:Date.now(), from:meName, text:input, ts:"Now" }]);
     } else {
@@ -1429,7 +1431,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   }
 
   function sendBroadcast() {
-    if (!broadcastText.trim()) return;
+    if (!broadcastText.trim() || messagingGate.gated) return;
     setThreads(prev => {
       const next = { ...prev };
       for (const a of agencies) {
@@ -1499,12 +1501,18 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
           })}
         </div>
         <div className="px-6 py-4 border-t glass shrink-0">
+          {messagingGate.gated && (
+            <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+              <Lock size={12}/> {messagingGate.reason === "unverified" ? "Verification required before messages can be sent." : "Add a payment method to send messages."}
+            </div>
+          )}
           <div className="flex gap-3 items-end">
             <textarea value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
               placeholder={isInternal ? "Message your team…" : `Message ${selectedAgency}…`} rows={2}
               className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
-            <button onClick={send} className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0">
+            <button onClick={send} disabled={messagingGate.gated}
+              className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
               <Send size={15}/>
             </button>
           </div>
@@ -1522,9 +1530,14 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
               Sent once, delivered into every agency's private thread on this campaign ({agencies.length} agenc{agencies.length===1?"y":"ies"}). Their models will see it too.
             </div>
             <Textarea label="Message" placeholder="e.g. Call time moved to 8am — please notify your talent." value={broadcastText} onChange={e=>setBroadcastText(e.target.value)} rows={4}/>
+            {messagingGate.gated && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Lock size={12}/> {messagingGate.reason === "unverified" ? "Verification required before messages can be sent." : "Add a payment method to send messages."}
+              </div>
+            )}
           </div>
           <div className="px-5 pb-5 flex gap-2">
-            <Btn variant="primary" disabled={!broadcastText.trim()} onClick={sendBroadcast}>Send to All</Btn>
+            <Btn variant="primary" disabled={!broadcastText.trim() || messagingGate.gated} onClick={sendBroadcast}>Send to All</Btn>
             <Btn variant="outline" onClick={()=>setShowBroadcast(false)}>Cancel</Btn>
           </div>
         </Modal>
@@ -2904,8 +2917,11 @@ function UrgentToggle({ defaultUrgent }: { defaultUrgent: boolean }) {
 function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
   const [formKey, setFormKey] = useState(0);
   const [sent, setSent] = useState(false);
+  const { org: accountOrg } = useAuth();
+  const messagingGate = getAccessGate(accountOrg);
 
   function handleSend() {
+    if (messagingGate.gated) return;
     setSent(true);
     setFormKey(k=>k+1);
     setTimeout(()=>setSent(false), 2500);
@@ -2930,8 +2946,13 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
         <UrgentToggle defaultUrgent={replyTo?.urgent ?? false}/>
       </div>
       <div className="border-t border-border px-6 py-4 flex items-center gap-3 shrink-0">
-        <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={handleSend}>Send</Btn>
+        <Btn variant="primary" size="sm" icon={<Send size={13}/>} onClick={handleSend} disabled={messagingGate.gated}>Send</Btn>
         {sent && <span className="text-xs text-muted-foreground">Message sent</span>}
+        {messagingGate.gated && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Lock size={12}/> {messagingGate.reason === "unverified" ? "Verification required to send." : "Add a payment method to send."}
+          </span>
+        )}
       </div>
     </div>
   );
