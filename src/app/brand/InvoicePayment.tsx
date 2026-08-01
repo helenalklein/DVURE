@@ -74,6 +74,11 @@ function ConfirmStep({ totalCents, onDone, onBack }: { totalCents: number; onDon
 export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId: string; onPaid?: () => void }) {
   const [bookings, setBookings] = useState<UnpaidBooking[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // "full" is the default and stays pre-filled/selected on load — matches
+  // every other booking's own day rate, no editing required to pay the
+  // whole thing. Switching to "select" is the explicit opt-in for paying
+  // only certain people; switching back re-selects everything.
+  const [mode, setMode] = useState<"full" | "select">("full");
   const [loading, setLoading] = useState(true);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -85,18 +90,24 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
       const data = await fetchUnpaidBookings(campaignId);
       if (!active) return;
       setBookings(data);
-      setSelected(new Set(data.map((b) => b.id))); // default: everything selected — "pay only certain people" is opt-out, not opt-in
+      setSelected(new Set(data.map((b) => b.id)));
       setLoading(false);
     })();
     return () => { active = false; };
   }, [campaignId]);
 
   function toggle(id: string) {
+    if (mode !== "select") return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  function setMode_(next: "full" | "select") {
+    setMode(next);
+    if (next === "full") setSelected(new Set(bookings.map((b) => b.id)));
   }
 
   const selectedBookings = bookings.filter((b) => selected.has(b.id));
@@ -124,7 +135,29 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
         <div className="text-xs text-muted-foreground mb-4">
           {selectedBookings.length} {selectedBookings.length === 1 ? "booking" : "bookings"} · {money(totalCents / 100)} total
         </div>
-        <Elements stripe={getStripe()} options={{ clientSecret, appearance: { theme: "stripe" } }}>
+        <Elements stripe={getStripe()} options={{
+          clientSecret,
+          appearance: {
+            theme: "flat",
+            variables: {
+              colorPrimary: "#1E1C1A",
+              colorBackground: "#FBFAF7",
+              colorText: "#1E1C1A",
+              colorTextSecondary: "#6E675D",
+              colorDanger: "#C0392B",
+              fontFamily: "\"Instrument Sans\", ui-sans-serif, sans-serif",
+              borderRadius: "3px",
+              spacingUnit: "4px",
+            },
+            rules: {
+              ".Input": { border: "1px solid #E3DFD5", boxShadow: "none" },
+              ".Input:focus": { border: "1px solid #1E1C1A", boxShadow: "none" },
+              ".Label": { fontSize: "12px", color: "#6E675D" },
+              ".Tab": { border: "1px solid #E3DFD5" },
+              ".Tab--selected": { border: "1px solid #1E1C1A" },
+            },
+          },
+        }}>
           <ConfirmStep totalCents={totalCents} onBack={() => setClientSecret(null)} onDone={() => { onPaid?.(); }} />
         </Elements>
       </div>
@@ -135,15 +168,28 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
     <div className="max-w-md p-6 space-y-4">
       <div>
         <div className="text-heading text-sm mb-1">Pay bookings</div>
-        <div className="text-xs text-muted-foreground">Select which bookings to include in this payment — everything is charged to your card in one invoice, split out to each agency automatically.</div>
+        <div className="text-xs text-muted-foreground">Everything is charged to your card in one invoice, split out to each agency automatically.</div>
+      </div>
+      <div className="flex border border-border rounded-md p-0.5 gap-0.5">
+        <button
+          onClick={() => setMode_("full")}
+          className={cx("flex-1 text-xs font-medium py-1.5 rounded-[3px] transition-colors cursor-pointer",
+            mode === "full" ? "bg-foreground text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+        >Pay in full</button>
+        <button
+          onClick={() => setMode_("select")}
+          className={cx("flex-1 text-xs font-medium py-1.5 rounded-[3px] transition-colors cursor-pointer",
+            mode === "select" ? "bg-foreground text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+        >Select bookings</button>
       </div>
       <div className="space-y-2">
         {bookings.map((b) => (
           <label key={b.id} className={cx(
-            "flex items-center gap-3 border rounded-md px-3 py-2.5 cursor-pointer transition-colors",
+            "flex items-center gap-3 border rounded-md px-3 py-2.5 transition-colors",
+            mode === "select" ? "cursor-pointer" : "cursor-default",
             selected.has(b.id) ? "border-foreground/30 bg-secondary" : "border-border"
           )}>
-            <input type="checkbox" checked={selected.has(b.id)} onChange={() => toggle(b.id)} className="shrink-0" />
+            <input type="checkbox" checked={selected.has(b.id)} onChange={() => toggle(b.id)} disabled={mode === "full"} className="shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{b.modelName}</div>
               <div className="text-xs text-muted-foreground truncate">{b.agencyName} · {b.days} day{b.days === 1 ? "" : "s"} @ {money(b.dayRate)}/day</div>
