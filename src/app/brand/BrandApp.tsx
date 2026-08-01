@@ -2529,7 +2529,7 @@ function GlobalPayments() {
               </div>
               <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground flex items-start gap-2">
                 <Lock size={13} className="shrink-0 mt-0.5"/>
-                <span>Your card information is encrypted and processed securely via Stripe. We never store your full card number.</span>
+                <span>This is a preview of the billing screen — real card processing via Stripe Connect isn&rsquo;t wired in yet, and nothing typed here is saved or transmitted.</span>
               </div>
             </div>
             <div className="px-6 pb-6 flex gap-2">
