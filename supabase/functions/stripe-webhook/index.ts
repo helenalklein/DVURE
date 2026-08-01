@@ -4,20 +4,39 @@
 //
 // Signature verification is not optional: without it, anyone who finds
 // this URL could POST a fake "payment succeeded" event and mark a real
-// invoice as paid for free. STRIPE_WEBHOOK_SECRET comes from this
-// function's own endpoint in the Stripe dashboard (Developers ->
-// Webhooks -> this endpoint -> Signing secret), not the account's
-// general API secret key.
+// invoice as paid for free.
+//
+// Four separate Stripe event destinations all point at this same URL
+// (Your account x Connected accounts, each split into snapshot/thin
+// payload styles by Stripe's own dashboard) — each one has ITS OWN
+// signing secret, not a shared one. STRIPE_WEBHOOK_SECRETS holds all of
+// them, comma-separated; verification tries each in turn since there's
+// no way to know in advance which destination sent a given request.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
-const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!;
+const webhookSecrets = (Deno.env.get("STRIPE_WEBHOOK_SECRETS") ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+async function verifyAgainstAnySecret(body: string, signature: string): Promise<Stripe.Event> {
+  let lastErr: unknown;
+  for (const secret of webhookSecrets) {
+    try {
+      return await stripe.webhooks.constructEventAsync(body, signature, secret);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error("No STRIPE_WEBHOOK_SECRETS configured");
+}
 
 Deno.serve(async (req) => {
   const signature = req.headers.get("Stripe-Signature");
@@ -26,7 +45,8 @@ Deno.serve(async (req) => {
   let event: Stripe.Event;
   try {
     if (!signature) throw new Error("Missing Stripe-Signature header");
-    event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+    if (webhookSecrets.length === 0) throw new Error("STRIPE_WEBHOOK_SECRETS is not set");
+    event = await verifyAgainstAnySecret(body, signature);
   } catch (err) {
     console.error("Webhook signature verification failed:", err);
     return new Response("Invalid signature", { status: 400 });
