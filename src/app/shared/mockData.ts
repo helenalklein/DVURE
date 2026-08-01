@@ -134,7 +134,6 @@ export const NOTIFS = [
 // period albumen/salt prints) was converted to neutral black-and-white
 // before selection, so the whole pool reads as true B&W, not sepia.
 const CAMPAIGN_COVER_GALLERY: string[] = [
-  "https://images.metmuseum.org/CRDImages/ph/original/DP232170.jpg", // Pierre-Louis Pierson, "[Study of Legs]", 1861-67
   "https://images.metmuseum.org/CRDImages/ph/original/DP138588.jpg", // Felix Teynard, "Esneh, Dattiers, Sycomore et Cafe Sur le Bord du Nil", 1851-54
   "https://images.metmuseum.org/CRDImages/ph/original/DP240624.jpg", // Gustave Le Gray, "Brig on the Water", 1856
   "https://images.metmuseum.org/CRDImages/ph/original/DP223650.jpg", // Gustave Le Gray, "[The Great Wave, Sete]", 1857
@@ -151,6 +150,10 @@ const CAMPAIGN_COVER_GALLERY: string[] = [
   "https://images.metmuseum.org/CRDImages/ph/original/DP139275.jpg", // Edmond Bacot, "Vue generale de Rouen", 1852-54
   "https://images.metmuseum.org/CRDImages/ph/original/DP139298.jpg", // Edmond Bacot, "Rue des Petits Murs, Caen", 1852-54
   "https://images.metmuseum.org/CRDImages/ph/original/DP221452.jpg", // Joseph Vigier, "Sentier du chaos, St-Sauveur", 1853
+  "https://images.metmuseum.org/CRDImages/ph/original/DP115235.jpg", // Unknown, "[St. Pierre, Caen]", 1850s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP107953.jpg", // Roger Fenton, "[Landscape with Clouds]", probably 1856
+  "https://images.metmuseum.org/CRDImages/ph/original/DP107961.jpg", // Roger Fenton, "Wharfe and Pool, Below the Strid", 1854
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-17115-001.jpg", // John Beasley Greene, "[The Nile in front of the Theban Hills]", 1853-54
 ];
 
 // Assigns every campaign in one rendered list a DISTINCT photo — not just
