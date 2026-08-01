@@ -11,10 +11,14 @@ export async function startAgencyConnectOnboarding(): Promise<{ url: string | nu
   return { url: data?.url ?? null, error: null };
 }
 
-export async function authorizeBookingPayment(bookingId: string): Promise<{ url: string | null; error: string | null }> {
-  const { data, error } = await supabase.functions.invoke<{ url: string }>("create-checkout-session", {
-    body: { bookingId },
-  });
-  if (error) return { url: null, error: error.message };
-  return { url: data?.url ?? null, error: null };
+export async function createInvoicePayment(
+  bookingIds: string[],
+  campaignId?: string
+): Promise<{ invoiceId: string | null; clientSecret: string | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<{ invoiceId: string; clientSecret: string }>(
+    "create-invoice-payment",
+    { body: { bookingIds, campaignId } }
+  );
+  if (error) return { invoiceId: null, clientSecret: null, error: error.message };
+  return { invoiceId: data?.invoiceId ?? null, clientSecret: data?.clientSecret ?? null, error: null };
 }

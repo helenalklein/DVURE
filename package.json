@@ -8,6 +8,8 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^6.8.0",
+    "@stripe/stripe-js": "^9.12.1",
     "@supabase/supabase-js": "^2.110.8",
     "lucide-react": "0.487.0",
     "react": "18.3.1",

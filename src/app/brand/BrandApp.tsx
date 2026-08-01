@@ -20,6 +20,7 @@ import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } 
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import RelayConsole from "./relay/RelayConsole";
+import InvoicePaymentPanel from "./InvoicePayment";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign" | "relay";
@@ -1249,8 +1250,9 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           )}
 
           {section==="bookings" && (
-            <div className="flex-1 overflow-auto p-6">
-              <div className="max-w-2xl space-y-3">
+            <div className="flex-1 overflow-auto">
+              {realCampaignId && <InvoicePaymentPanel campaignId={realCampaignId} key={realCampaignId}/>}
+              <div className="max-w-2xl space-y-3 p-6">
                 <p className="text-xs text-muted-foreground mb-4">Bookings originate from this campaign's approved submissions.</p>
                 {talent.filter(t=>t.stage==="booked").map(t=>(
                   <div key={t.id} className="glass-subtle border border-foreground/20 rounded-md p-4 flex items-center gap-4">
