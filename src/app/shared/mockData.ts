@@ -154,6 +154,95 @@ const CAMPAIGN_COVER_GALLERY: string[] = [
   "https://images.metmuseum.org/CRDImages/ph/original/DP107953.jpg", // Roger Fenton, "[Landscape with Clouds]", probably 1856
   "https://images.metmuseum.org/CRDImages/ph/original/DP107961.jpg", // Roger Fenton, "Wharfe and Pool, Below the Strid", 1854
   "https://images.metmuseum.org/CRDImages/ph/original/DP-17115-001.jpg", // John Beasley Greene, "[The Nile in front of the Theban Hills]", 1853-54
+  "https://images.metmuseum.org/CRDImages/ph/original/DP112689.jpg", // Francis Bedford, "Clovelly, The New Inn and Street", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116350.jpg", // Francis Frith, "[Six East Indian Men]", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116351.jpg", // Francis Frith, "Rajpoots", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116352.jpg", // Francis Frith, "[Three East Indian Women]", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116353.jpg", // Francis Frith, "[Four East Indian Men]", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116354.jpg", // Francis Frith, "Marwaree Brokers", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116355.jpg", // Francis Frith, "Mehmans", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP295243.jpg", // Julia Margaret Cameron, "[Ceylonese Group by a Tree]", 1878
+  "https://images.metmuseum.org/CRDImages/ph/original/DP295244.jpg", // Julia Margaret Cameron, "[Egeria]", 1874
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116357.jpg", // Francis Frith, "Watermouth", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP228859.jpg", // Andre-Adolphe-Eugene Disderi, "Le deux roses", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235135.jpg", // Pierre-Louis Pierson, "La capuche", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235149.jpg", // Pierre-Louis Pierson, "Le fauteuil", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235151.jpg", // Pierre-Louis Pierson, "La fouriure", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235155.jpg", // Pierre-Louis Pierson, "Le liseur", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235162.jpg", // Pierre-Louis Pierson, "Le montagnard", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235163.jpg", // Pierre-Louis Pierson, "L'Enfant blanc", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP235184.jpg", // Pierre-Louis Pierson, "[La Comtesse in Hat with Veil and Cape with Fringe, Serie a la Ristori]", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43768-001.jpg", // Edouard Baldus, "Panorama de la Cite", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43768-010.jpg", // Edouard Baldus, "Pavillon Sully", 1850s-60s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43768-013.jpg", // Edouard Baldus, "La Madeleine", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43768-020.jpg", // Edouard Baldus, "Pantheon", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43768-021.jpg", // Edouard Baldus, "Corps Legislatif", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP113875.jpg", // Felix Bonfils, "Rue du Caire", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP295245.jpg", // Julia Margaret Cameron, "Sir John Herschel", April 1867
+  "https://images.metmuseum.org/CRDImages/ph/original/DP327313.jpg", // James Wallace Black, "[Boston from a Hot-Air Balloon]", 1860s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116723.jpg", // Frederick Gutekunst, "[Girl with Ringlets, Seated, Three-Quarter Length]", 1890s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP71244.jpg", // E. Taurines, "[A Gypsy Dancing-Girl, Kathiawar]", ca. 1915
+  "https://images.metmuseum.org/CRDImages/ph/original/DP71257.jpg", // Unknown, "Batavian Woman", 1860s-70s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP71289.jpg", // Unknown, "Batavia", 1860s-70s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-31141-020.jpg", // Timothy H. O'Sullivan, "Black Canon, From Camp 8, Looking Above", 1871
+  "https://images.metmuseum.org/CRDImages/ph/original/DP278779.jpg", // Charles Marville, "[Rue de Constantine]", 1866
+  "https://images.metmuseum.org/CRDImages/ph/original/DP152217.jpg", // Carleton E. Watkins, "Lower Yosemite Fall, 1,600 feet", ca. 1872, printed ca. 1876
+  "https://images.metmuseum.org/CRDImages/ph/original/DP152227.jpg", // Carleton E. Watkins, "Magic Tower, Yosemite", ca. 1872, printed ca. 1876
+  "https://images.metmuseum.org/CRDImages/ph/original/DP152260.jpg", // Carleton E. Watkins, "Santa Margarita Ranch", 1876, printed ca. 1876
+  "https://images.metmuseum.org/CRDImages/ph/original/DP109566.jpg", // Louis-Remy Robert, "[Table Top Still Life with Model Cathedral and Small Sculptures]", ca. 1856
+  "https://images.metmuseum.org/CRDImages/ph/original/DP71053.jpg", // Unknown, "[Charlton House with Seated Figures in Foreground]", 1850s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP113944.jpg", // Alfred Capel Cure, "West Front - Peterboro", 1856
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-15143-001.jpg", // Oscar Gustav Rejlander, "[Study for 'Two Ways of Life']", ca. 1857, printed 1987
+  "https://images.metmuseum.org/CRDImages/ph/original/DP116739.jpg", // Charles D'Hoy, "[Doorway of Predikherenkerk, Gent, Belgium]", ca. 1858
+  "https://images.metmuseum.org/CRDImages/ph/original/DT6533.jpg", // John Murray, "Street in Fatehpur Sikri, India", 1858-62
+  "https://images.metmuseum.org/CRDImages/ph/original/DT6799.jpg", // Gustave Le Gray, "Portail milieu d'Aubeterre", 1851
+  "https://images.metmuseum.org/CRDImages/ph/original/DP349113.jpg", // Raimund von Stillfried, "Views and Costumes of Japan", ca. 1872
+  "https://images.metmuseum.org/CRDImages/ph/original/DT6805.jpg", // Eadweard Muybridge, "Animal Locomotion. An Electro-Photographic Investigation of Consecutive Phases of Animal Movements. Commenced 1872 - Completed 1885. Volume I, Men (Nude)", 1880s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP275124.jpg", // Eadweard Muybridge, "Animal Locomotion. An Electro-Photographic Investigation... of Animal Movements. Commenced 1872 - Completed 1885. Volume VI, Woman (Semi-Nude and Transparent Drapery) Children", 1880s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP275123.jpg", // Eadweard Muybridge, "Animal Locomotion. An Electro-Photographic Investigation... of Animal Movements. Commenced 1872 - Completed 1885. Volume VII, Men and Woman (Draped) Miscellaneous Subjects", 1880s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP300688.jpg", // Linnaeus Tripe, "Elliot Marbles and Other Sculpture from the Central Museum Madras: Group 26", May-June 1858
+  "https://images.metmuseum.org/CRDImages/ph/original/DP263575.jpg", // Nadar, "[Standing Female Nude]", 1860-61
+  "https://images.metmuseum.org/CRDImages/ph/original/DP352773.jpg", // Nadar, "Eugene Pelletan", 1855-59
+  "https://images.metmuseum.org/CRDImages/ph/original/DP158034.jpg", // Nadar, "Pierre-Luc-Charles Ciceri", 1855-60
+  "https://images.metmuseum.org/CRDImages/ph/original/DT7015.jpg", // Edouard Baldus, "Madeleine Bourquelot de Cervignieres", 1858
+  "https://images.metmuseum.org/CRDImages/ph/original/DT7047.jpg", // Nadar, "Gioacchino Rossini", March 1856
+  "https://images.metmuseum.org/CRDImages/ph/original/DT6993.jpg", // Julien Vallou de Villeneuve, "[Reclining Female Nude]", ca. 1853
+  "https://images.metmuseum.org/CRDImages/ph/original/DT1157.jpg", // Julien Vallou de Villeneuve, "[Female Nude, Reclining, in Profile]", ca. 1853
+  "https://images.metmuseum.org/CRDImages/ph/original/DT1156.jpg", // V. Dijon, "[Farmyard Scene]", 1850-54
+  "https://images.metmuseum.org/CRDImages/ph/original/DP143006.jpg", // Charles Clifford, "Portal of the Convent of Sancti Spiritu, Salamanca", 1853
+  "https://images.metmuseum.org/CRDImages/ph/original/MM86126.jpg", // Adolphe Terris, "Rue des Grands Carmes, Vue prise de la Rue Ste. Marthe, Marseille", 1862
+  "https://images.metmuseum.org/CRDImages/ph/original/DP200355.jpg", // Louis-Emile Durandelle, "Le Nouvel Opera de Paris (Sculpture Ornementale)", 1865-72
+  "https://images.metmuseum.org/CRDImages/ph/original/DT1121.jpg", // Julia Margaret Cameron, "Julia Jackson", 1867
+  "https://images.metmuseum.org/CRDImages/ph/original/DT252290.jpg", // Joseph T. Keiley, "A Sioux Chief [Has-No-Horses]", 1898
+  "https://images.metmuseum.org/CRDImages/ph/original/DP259466.jpg", // Hugo Henneberg, "[Italian Villa in Autumn]", 1898
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70563.jpg", // William Frank Browne, "[Swamp Near Broadway Landing, Appomattox River, Virginia]", 1864
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70631.jpg", // Andrew Joseph Russell, "[Looking Toward Marye's Heights, Fredericksburg]", 1864
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70466.jpg", // Timothy H. O'Sullivan, "[Petersburg, Virginia]", April-May 1865
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70617.jpg", // Thomas C. Roche, "Ruins in Carey Street, Richmond", 1865
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70816.jpg", // Unknown, "[White picket fence with buildings in background]. Brady album, p. 123", 1861-65
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70821.jpg", // Unknown, "[House framed by trees]. Brady album, p. 123", 1861-65
+  "https://images.metmuseum.org/CRDImages/ph/original/DP274790.jpg", // Andrew Joseph Russell, "Laborers at Quartermaster's Wharf, Alexandria, Virginia", 1863-65
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70506.jpg", // George N. Barnard, "Bridge over Tennessee River at Chattanooga", ca. 1864
+  "https://images.metmuseum.org/CRDImages/ph/original/37.14.27.jpg", // Southworth and Hawes, "Mrs. James Thomas Fields (Annie Adams)", 1861
+  "https://images.metmuseum.org/CRDImages/ph/original/DP109623.jpg", // Victor Prevost, "[Rocky Hillside]", 1850s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP295221.jpg", // Julia Margaret Cameron, "Charles Hay Cameron", 1864
+  "https://images.metmuseum.org/CRDImages/ph/original/DP295222.jpg", // Julia Margaret Cameron, "A Study", 1864
+  "https://images.metmuseum.org/CRDImages/ph/original/DP114480.jpg", // Henry Herschel Hay Cameron, "Julia Margaret Cameron", 1870
+  "https://images.metmuseum.org/CRDImages/ph/original/DP114472.jpg", // Julia Margaret Cameron, "Contemplations", 1864
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-40543-001.jpg", // Eadweard Muybridge, "[Woman with a Fan]", 1883-86, printed 1887
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-43767-031.jpg", // Edouard Baldus, "Vues de Paris en Photographie", 1850s-60s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP115220.jpg", // Unknown, "[Men By Carriage in Street]", 1850s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP-30374-001.jpg", // Louis-Desire Blanquart-Evrard, "Album Photographique. Choix de Vingt Sujets Divers.", 1850s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70287.jpg", // Edward King Tenison, "Etude d'arbre", 1850-53
+  "https://images.metmuseum.org/CRDImages/ph/original/DP70288.jpg", // Charles Marville, "Carriere", 1850-53
+  "https://images.metmuseum.org/CRDImages/ph/original/DP158041.jpg", // Charles Marville, "Homme allonge au pied d'un chataignier", 1850-53
+  "https://images.metmuseum.org/CRDImages/ph/original/DP111349.jpg", // Antoine-Samuel Adam-Salomon, "[Bearded Man with Magnifying Glass Examining a Manuscript]", 1870s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP260866.jpg", // Peter Henry Emerson, "A Stiff Pull", 1880s, printed 1887
+  "https://images.metmuseum.org/CRDImages/ph/original/DP111496.jpg", // Franz Antoine, "[Group Portrait of the Antoine and Hausermann Families]", 1850s-60s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP111498.jpg", // Franz Antoine, "[Seated Lady in Striped Dress with Four Little Girls]", 1850s-60s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP111499.jpg", // Franz Antoine, "Elise Hausermann, Hermine, Marie and Marie Antoine", 1850s-60s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP111501.jpg", // Franz Antoine, "[Hermine, Alfons and Eugen Antoine and Mathias Hausermann on a fallen tree]", 1850s-60s
+  "https://images.metmuseum.org/CRDImages/ph/original/DP111478.jpg", // Franz Antoine, "Grofin Auersperg", 1850s-60s
 ];
 
 // Assigns every campaign in one rendered list a DISTINCT photo — not just
