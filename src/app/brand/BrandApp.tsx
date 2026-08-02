@@ -8,7 +8,7 @@ import {
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut, Pin, Lock, Globe, Shirt, Home, Radio
+  User, LogOut, Pin, Lock, Globe, Shirt, Home
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
@@ -19,12 +19,11 @@ import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distribute
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
-import RelayConsole from "./relay/RelayConsole";
 import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar from "./CampaignCalendar";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
-type AppView = GlobalView | "campaign" | "create-campaign" | "relay";
+type AppView = GlobalView | "campaign" | "create-campaign";
 type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
@@ -169,15 +168,9 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
   return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
-// Runway and Event both get the Relay day-of console; every other type
-// doesn't have a "show day" to run.
-function hasRelay(type: Campaign["type"]): boolean {
-  return type === "Runway" || type === "Event";
-}
-
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay, counts, fullExtensionUntil }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
-  onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
+  onBack: () => void; onNewCampaign: () => void; onHome: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
@@ -227,15 +220,6 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           );
         })}
       </nav>
-      {hasRelay(campaign.type) && (
-        <div className="px-3 pt-3 border-t border-border">
-          <button onClick={onOpenRelay}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer">
-            <Radio size={13}/> Open Relay
-          </button>
-          <div className="text-[9px] text-muted-foreground text-center mt-1.5">Live show-day operations</div>
-        </div>
-      )}
       <div className="px-3 py-3 border-t border-border">
         <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 px-1">Pipeline</div>
         {PIPELINE_STAGES.map(s => (
@@ -940,8 +924,8 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   );
 }
 
-function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onOpenRelay }: {
-  campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onOpenRelay: () => void;
+function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome }: {
+  campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void;
 }) {
   const { profile, org } = useAuth();
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
@@ -1094,7 +1078,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} onOpenRelay={onOpenRelay} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name}
           actions={viewingAgency ? <Btn variant="primary" size="sm" icon={<Send size={13}/>}
@@ -3586,15 +3570,6 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     navigate(shimId != null ? `/brand/campaigns/${shimId}` : "/brand");
   }
 
-  // Relay is a hard context switch, not another campaign tab — its own
-  // full-bleed console (own sidebar, dark-mode scoped), not nested inside
-  // the normal light-mode chrome. Exiting it lands back on the same
-  // campaign, since the URL never changed while relay was open.
-  if (view === "relay") {
-    const relayCampaign = allCampaigns.find(c=>c.id===activeCampaignId);
-    return <RelayConsole mode={relayCampaign?.type==="Event" ? "event" : "runway"} onExit={()=>setView("campaigns")}/>;
-  }
-
   if (activeCampaignId != null && campaignsLoading) {
     return <div className="h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;
   }
@@ -3603,7 +3578,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:org?.name ?? "", email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>handleGlobalNav("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
         {activeCampaignId != null ? (
-          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onOpenRelay={()=>setView("relay")}/>
+          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")}/>
         ) : (
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
