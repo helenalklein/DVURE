@@ -21,6 +21,7 @@ import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/quer
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import RelayConsole from "./relay/RelayConsole";
 import InvoicePaymentPanel from "./InvoicePayment";
+import CampaignCalendar from "./CampaignCalendar";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign" | "relay";
@@ -1607,21 +1608,24 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`}/>
-      <div className="flex-1 overflow-auto p-6 space-y-5">
-        <div className="flex items-center justify-between gap-1 mb-4 border-b border-border">
-          <div className="flex items-center gap-1">
-            {["active","drafts","archived"].map(t=>(
-              <button key={t} onClick={()=>setTab(t)}
-                className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
-                  tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
-                )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
-            ))}
-          </div>
-          <button onClick={onNewCampaign}
-            className="mb-2 flex items-center gap-2 px-4 py-2 bg-foreground text-primary-foreground text-sm font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
-            <Plus size={14}/> New Campaign
-          </button>
+      <div className="flex items-center justify-between gap-1 px-6 pt-5 border-b border-border shrink-0">
+        <div className="flex items-center gap-1">
+          {["active","drafts","archived","calendar"].map(t=>(
+            <button key={t} onClick={()=>setTab(t)}
+              className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
+                tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
+              )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+          ))}
         </div>
+        <button onClick={onNewCampaign}
+          className="mb-2 flex items-center gap-2 px-4 py-2 bg-foreground text-primary-foreground text-sm font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
+          <Plus size={14}/> New Campaign
+        </button>
+      </div>
+      {tab==="calendar" ? (
+        <CampaignCalendar campaigns={campaigns.filter(c=>c.status!=="archived")} openCampaign={openCampaign}/>
+      ) : (
+      <div className="flex-1 overflow-auto p-6 space-y-5">
         {filtered.length===0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
             <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
@@ -1666,6 +1670,7 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

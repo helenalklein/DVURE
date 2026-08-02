@@ -85,6 +85,7 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
       type: r.type as CampaignType,
       status: r.status as CampaignStatus,
       due: formatCampaignDue(r.due_date),
+      dueDateISO: r.due_date ?? undefined,
       dueLabel,
       dueUrgency,
       submissionOpen: formatDateLong(r.submission_open),

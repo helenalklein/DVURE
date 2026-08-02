@@ -89,6 +89,11 @@ export interface Campaign {
   type: CampaignType;
   status: CampaignStatus;
   due: string;
+  // The raw ISO date `due` was formatted from — `due` itself often omits
+  // the year ("Jul 22"), which new Date() silently misparses (defaults
+  // to 2001), so anything that needs a real date for comparison/plotting
+  // (the calendar tab) must use this instead of parsing `due`.
+  dueDateISO?: string;
   dueLabel: string;
   dueUrgency: "high" | "medium" | "low";
   // Window during which agencies can submit talent — separate from `due`
