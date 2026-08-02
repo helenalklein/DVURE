@@ -145,7 +145,7 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
               colorText: "#1E1C1A",
               colorTextSecondary: "#6E675D",
               colorDanger: "#C0392B",
-              fontFamily: "\"Instrument Sans\", ui-sans-serif, sans-serif",
+              fontFamily: "\"Libre Franklin\", ui-sans-serif, sans-serif",
               borderRadius: "3px",
               spacingUnit: "4px",
             },

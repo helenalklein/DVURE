@@ -80,7 +80,7 @@ function ExclamationIcon({ size = 15, className }: { size?: number; className?: 
 }
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
-  { id:"campaigns",        label:"Campaigns",  Icon:Camera                },
+  { id:"campaigns",        label:"Projects",   Icon:Camera                },
   { id:"urgent",           label:"Tasks",      Icon:ExclamationIcon        },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
@@ -106,7 +106,7 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
           <div className="text-base font-medium truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <button onClick={()=>onNav("campaigns")} title="Campaigns"
+        <button onClick={()=>onNav("campaigns")} title="Projects"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={15}/>
         </button>
@@ -192,14 +192,14 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           <div className="text-base font-medium truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <button onClick={onHome} title="Campaigns"
+        <button onClick={onHome} title="Projects"
           className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={15}/>
         </button>
       </div>
       <div className="px-3 pt-3 pb-2">
         <button onClick={onBack} className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md transition-colors text-left">
-          <ChevronLeft size={13}/> All Campaigns
+          <ChevronLeft size={13}/> All Projects
         </button>
       </div>
       <div className="px-4 py-3 border-b border-border">
@@ -1606,7 +1606,7 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
   const covers = assignCampaignCovers(filtered.map(c=>c.id));
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Campaigns" sub={`${currentUser?.org ?? ""} · Brand`}/>
+      <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`}/>
       <div className="flex-1 overflow-auto p-6 space-y-5">
         <div className="flex items-center justify-between gap-1 mb-4 border-b border-border">
           <div className="flex items-center gap-1">

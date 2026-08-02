@@ -40,7 +40,7 @@
   --glass-dark-bg: rgba(10, 10, 10, 0.72);
   --glass-dark-border: rgba(255, 255, 255, 0.08);
   --font-display: "Bodoni Moda", ui-serif, Georgia, "Times New Roman", serif;
-  --font-sans: "Instrument Sans", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Libre Franklin", ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
   /* Formerly a gold accent — retired. Black/white is DVURE's anchor
      ("fashion forward", per direct feedback); color now comes only from
      whatever a brand actually uploads for their own campaign covers,
