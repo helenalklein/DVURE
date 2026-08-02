@@ -8,6 +8,8 @@ import BrandApp from "./brand/BrandApp";
 import AgencyApp from "./agency/AgencyApp";
 import ModelApp from "./model/ModelApp";
 import AcceptInvitePage from "./AcceptInvitePage";
+import CrewApp from "./crew/CrewApp";
+import TermsPage from "./TermsPage";
 
 // One app, one login, three role-based views, each at a real URL. Role/org/
 // access come from a real Supabase Auth session (src/app/shared/auth.tsx),
@@ -81,6 +83,8 @@ export default function App() {
           </RoleRoute>
         }/>
         <Route path="/accept-invite/:token" element={<AcceptInvitePage/>}/>
+        <Route path="/crew/:accessCode" element={<CrewApp/>}/>
+        <Route path="/terms" element={<TermsPage/>}/>
         <Route path="/" element={<Navigate to={canEnterApp ? `/${effectiveRole}` : "/login"} replace/>}/>
         <Route path="*" element={<Navigate to="/" replace/>}/>
       </Routes>

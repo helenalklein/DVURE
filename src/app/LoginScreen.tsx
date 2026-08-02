@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles, AlertCircle } from "lucide-react";
 import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
 import { useAuth } from "./shared/auth";
@@ -122,6 +123,10 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
         <div className="text-center mt-5 text-xs text-muted-foreground">
           New to DVURE?{" "}
           <button onClick={()=>setSignup("role")} className="text-foreground font-medium cursor-pointer hover:underline">Try Demo</button>
+        </div>
+
+        <div className="text-center mt-3 text-[11px] text-muted-foreground">
+          <Link to="/terms" className="hover:text-foreground underline underline-offset-2">Terms of Service</Link>
         </div>
       </div>
 
