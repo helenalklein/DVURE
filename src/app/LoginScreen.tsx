@@ -252,7 +252,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
             </div>
             <div className="text-xs text-muted-foreground leading-relaxed space-y-2">
               <div>Models are added to DVURE by their agency — contact your agency directly to get connected.</div>
-              <div>Artists will receive a one-time login access code from the production team.</div>
+              <div>Artists and production crew get a real login once a production sends their first access — sign in above the same way, no separate portal.</div>
             </div>
           </div>
         </Modal>

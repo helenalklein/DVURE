@@ -27,6 +27,14 @@ export async function fetchModelProfile(profileId: string) {
     .maybeSingle();
 }
 
+export async function fetchCrewProfile(profileId: string) {
+  return supabase
+    .from("crew_payees")
+    .select("id, full_name, discipline")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+}
+
 export async function fetchModelAgencies(modelId: string) {
   return supabase
     .from("agency_model_relationships")

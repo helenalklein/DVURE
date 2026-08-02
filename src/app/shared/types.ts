@@ -1,4 +1,4 @@
-export type Role = "brand" | "agency" | "model";
+export type Role = "brand" | "agency" | "model" | "crew";
 
 export type SubmissionStage = "submitted" | "approved" | "rejected" | "booked";
 

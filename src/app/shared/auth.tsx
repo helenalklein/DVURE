@@ -3,7 +3,7 @@ import { supabase } from "../../lib/supabaseClient";
 import * as authQueries from "../../lib/queries/auth";
 import type { Role } from "./types";
 
-type ProfileRole = "brand_staff" | "agency_staff" | "model";
+type ProfileRole = "brand_staff" | "agency_staff" | "model" | "crew";
 type OrgType = "brand" | "agency";
 type AccessLevel = "administrator" | "enhanced" | "basic";
 
@@ -33,6 +33,12 @@ export interface ModelInfo {
   location: string | null;
 }
 
+export interface CrewInfo {
+  id: string;
+  fullName: string;
+  discipline: string | null;
+}
+
 interface AuthState {
   status: "loading" | "signedOut" | "signedIn" | "error";
   errorMessage?: string;
@@ -42,6 +48,7 @@ interface AuthState {
   org?: OrgInfo;
   modelProfile?: ModelInfo;
   modelAgencies?: ModelAgencyInfo[];
+  crewProfile?: CrewInfo;
 }
 
 interface AuthContextValue extends AuthState {
@@ -53,7 +60,7 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const ROLE_MAP: Record<ProfileRole, Role> = { brand_staff: "brand", agency_staff: "agency", model: "model" };
+const ROLE_MAP: Record<ProfileRole, Role> = { brand_staff: "brand", agency_staff: "agency", model: "model", crew: "crew" };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: "loading" });
@@ -88,6 +95,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: r.organizations.name,
           relationshipType: r.relationship_type,
         })),
+      });
+      return;
+    }
+
+    if (profileRole === "crew") {
+      const { data: crewProfile } = await authQueries.fetchCrewProfile(userId);
+      setState({
+        status: "signedIn",
+        ...base,
+        ...(crewProfile ? { crewProfile: { id: crewProfile.id, fullName: crewProfile.full_name, discipline: crewProfile.discipline } } : {}),
       });
       return;
     }

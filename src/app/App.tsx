@@ -82,8 +82,13 @@ export default function App() {
             <ModelApp onLogout={onLogout}/>
           </RoleRoute>
         }/>
+        <Route path="/crew" element={
+          <RoleRoute canEnterApp={canEnterApp} match={effectiveRole==="crew"} effectiveRole={effectiveRole}>
+            <CrewApp onLogout={onLogout}/>
+          </RoleRoute>
+        }/>
         <Route path="/accept-invite/:token" element={<AcceptInvitePage/>}/>
-        <Route path="/crew/:accessCode" element={<CrewApp/>}/>
+        <Route path="/crew/link/:accessCode" element={<CrewApp/>}/>
         <Route path="/terms" element={<TermsPage/>}/>
         <Route path="/" element={<Navigate to={canEnterApp ? `/${effectiveRole}` : "/login"} replace/>}/>
         <Route path="*" element={<Navigate to="/" replace/>}/>
@@ -127,6 +132,7 @@ function DevRoleSwitcher({ role, onSelect }: { role: Role | null; onSelect: (r: 
     { id:"brand",  label:"Brand"  },
     { id:"agency", label:"Agency" },
     { id:"model",  label:"Model"  },
+    { id:"crew",   label:"Crew"   },
   ];
 
   return (
