@@ -334,3 +334,16 @@
     letter-spacing: 0.01em;
   }
 }
+
+/* Call Sheet printing — everything on the page is hidden except the
+   call sheet subtree itself (app chrome, sidebar, other campaign tabs),
+   which is otherwise still mounted/visible in the DOM since only
+   window.print() changes, not the route. .call-sheet-noprint hides
+   pieces of the call sheet's OWN UI that shouldn't appear on paper
+   (the Print button itself, its dropdown). */
+@media print {
+  body * { visibility: hidden; }
+  .call-sheet-root, .call-sheet-root * { visibility: visible; }
+  .call-sheet-root { position: absolute; top: 0; left: 0; width: 100%; }
+  .call-sheet-noprint { display: none !important; }
+}

@@ -8,7 +8,7 @@ import {
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, LogOut, Pin, Lock, Globe, Shirt, Home
+  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
@@ -21,10 +21,11 @@ import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/quer
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar from "./CampaignCalendar";
+import CallSheet from "./CallSheet";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "casting" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "casting" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
 
@@ -158,12 +159,17 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"users",         label:"Users",         Icon:User            },
 ];
 
-// Casting Board is a universal companion tool now — every type gets it
-// as its own tab alongside Submissions, not a swap-in that only certain
-// types receive. Runway additionally gets a Looks tab, since that's
-// specifically a fashion-show concern the others don't share.
+// Casting Board and Call Sheet are both universal companion tools now —
+// every type gets them as their own tabs right under Submissions, not a
+// swap-in only certain types receive. Runway additionally gets a Looks
+// tab, since that's specifically a fashion-show concern the others
+// don't share.
 function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: string; Icon: IconFn }[] {
-  const withCasting = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [item, { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check }] : [item]);
+  const withCasting = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
+    item,
+    { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check },
+    { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:Users },
+  ] : [item]);
   if (type !== "Runway") return withCasting;
   return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
@@ -1144,6 +1150,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
 
           {section==="casting" && <CastingBoard campaign={campaign}/>}
+
+          {section==="call-sheet" && (
+            realCampaignId
+              ? <CallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">Call Sheet needs a real, saved campaign — publish this campaign first.</div>
+          )}
 
           {section==="looks" && <LooksScreen campaignId={campaign.id}/>}
 
