@@ -21,9 +21,17 @@ export async function findCampaignIdByName(name: string): Promise<string | null>
 // Campaign.id never has to become a string across the whole app.
 const CAMPAIGN_SHIM_BASE = 500_000;
 
+// submission_open/close are timestamptz (midnight UTC when set from a
+// plain <input type="date">), but they only ever mean a calendar day —
+// no time-of-day is shown anywhere. Formatting in the viewer's local
+// zone would silently roll back a day for anyone west of UTC (e.g.
+// "2026-09-01" stored as 2026-09-01T00:00:00Z reads back as Aug 31 in
+// US timezones) — reproduced directly by creating a real campaign and
+// comparing the picked dates to what rendered. timeZone: "UTC" makes
+// the displayed day match the picked day regardless of the viewer.
 function formatDateLong(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 function dueLabelAndUrgency(dueDateIso: string | null): { dueLabel: string; dueUrgency: "high" | "medium" | "low" } {
