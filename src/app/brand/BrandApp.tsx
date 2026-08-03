@@ -24,6 +24,9 @@ import CampaignCalendar from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
+import { fetchCastingEntries, setCastingStage } from "../../lib/queries/castingBoard";
+import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
+import { fetchShootDays, saveShootDays, type ShootDay } from "../../lib/queries/deliverables";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -626,15 +629,12 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
 // before another is even optioned, so every stage is independently
 // toggleable per model rather than columns you move cards between.
 
-function CastingBoard({ campaign, talent }: { campaign: Campaign; talent: Talent[] }) {
+function CastingBoard({ campaign, talent, realCampaignId, shim }: { campaign: Campaign; talent: Talent[]; realCampaignId: string | null; shim: SubmissionShim }) {
   // CASTING_ENTRIES is keyed to mock campaign ids only (1-5) — it's
   // always empty for a real campaign (shim ids start at 500_000), which
   // used to render as a flatly wrong "No models cast yet" even once a
   // real booking existed. Seed from actually booked talent instead of
-  // leaving the board empty; there's no per-stage persistence yet (no
-  // casting_entries table for real campaigns), so toggles here are
-  // session-local for a real campaign, same honest limitation
-  // Deliverables already has.
+  // leaving the board empty.
   const [entries, setEntries] = useState<CastingEntry[]>(() => {
     const mockEntries = CASTING_ENTRIES.filter(e=>e.campaignId===campaign.id);
     if (mockEntries.length > 0) return mockEntries;
@@ -644,8 +644,35 @@ function CastingBoard({ campaign, talent }: { campaign: Campaign; talent: Talent
   const show = RUNWAY_SHOWS.find(s=>s.id===campaign.runwayShowId);
   const otherBrands = campaign.runwayShowId ? RUNWAY_SHOW_OTHER_BRANDS[campaign.runwayShowId] ?? [] : [];
 
+  // casting_entries already existed in the schema with full RLS — this
+  // was only ever missing frontend wiring. Real toggle state loads over
+  // the seeded rows once fetched, keyed back through the same shim
+  // Submissions/Bookings already use to resolve a shim talent id to its
+  // real model_profiles uuid.
+  useEffect(() => {
+    if (!realCampaignId) return;
+    let active = true;
+    fetchCastingEntries(realCampaignId).then(real => {
+      if (!active || real.size === 0) return;
+      setEntries(prev => prev.map(e => {
+        const realModelId = shim.get(e.modelId)?.modelId;
+        const r = realModelId ? real.get(realModelId) : undefined;
+        if (!r) return e;
+        return { ...e, stages: {
+          confirmed: r.confirmed, optioned: r.optioned, fittingComplete: r.fittingComplete,
+          rehearsalComplete: r.rehearsalComplete, checkedIn: r.checkedIn, walked: r.walked, wrapComplete: r.wrapComplete,
+        } };
+      }));
+    });
+    return () => { active = false; };
+  }, [realCampaignId]);
+
   function toggleStage(modelId: number, stageId: CastingStageId) {
-    setEntries(prev => prev.map(e => e.modelId===modelId ? { ...e, stages: { ...e.stages, [stageId]: !e.stages[stageId] } } : e));
+    const current = entries.find(e=>e.modelId===modelId);
+    const newValue = current ? !current.stages[stageId] : true;
+    setEntries(prev => prev.map(e => e.modelId===modelId ? { ...e, stages: { ...e.stages, [stageId]: newValue } } : e));
+    const realModelId = realCampaignId ? shim.get(modelId)?.modelId : undefined;
+    if (realCampaignId && realModelId) setCastingStage(realCampaignId, realModelId, stageId, newValue);
   }
 
   return (
@@ -708,6 +735,225 @@ function CastingBoard({ campaign, talent }: { campaign: Campaign; talent: Talent
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Real, per-campaign shoot schedule (shoot_days, migration 0032) — the
+// UI never collected structured dates (a plain text field defaulting to
+// "Mon 07/14", no year), so date_label stays free text rather than
+// inventing a real date column nothing here actually populates.
+// Mock campaigns keep the two original demo rows and just don't save.
+function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) {
+  const [days, setDays] = useState<ShootDay[]>([
+    { dateLabel: "Mon 07/14", hours: "08:00–18:00", talentNote: "James Whitfield + Amara Diallo", description: "Hero shots — Studio 9, NYC" },
+    { dateLabel: "Tue 07/15", hours: "09:00–17:00", talentNote: "Amara Diallo", description: "Close-up editorial" },
+  ]);
+  const [loading, setLoading] = useState(!!realCampaignId);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!realCampaignId) { setLoading(false); return; }
+    let active = true;
+    fetchShootDays(realCampaignId).then(real => {
+      if (!active) return;
+      setDays(real); // a real campaign starts genuinely empty, not seeded with the mock rows
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [realCampaignId]);
+
+  function updateDay(i: number, patch: Partial<ShootDay>) {
+    setDays(prev => prev.map((d,idx) => idx===i ? { ...d, ...patch } : d));
+  }
+  function addDay() {
+    setDays(prev => [...prev, { dateLabel: "", hours: "", talentNote: "", description: "" }]);
+  }
+  function removeDay(i: number) {
+    setDays(prev => prev.filter((_,idx) => idx!==i));
+  }
+  async function handleSave() {
+    if (!realCampaignId) return;
+    setSaving(true);
+    await saveShootDays(realCampaignId, days);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  if (loading) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-2xl space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-heading text-sm">Deliverables</h2>
+          <Badge label="Editable" variant="info"/>
+        </div>
+        <div className="glass-subtle border rounded-md p-5 space-y-4">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Shoot Schedule</div>
+          {days.map((d,i)=>(
+            <div key={d.id ?? i} className="border border-border rounded-md p-3 space-y-2 relative">
+              <button onClick={()=>removeDay(i)} className="absolute top-2.5 right-2.5 text-muted-foreground hover:text-foreground cursor-pointer" title="Remove"><X size={12}/></button>
+              <div className="grid grid-cols-2 gap-2 pr-5">
+                <TextInput placeholder="Date" value={d.dateLabel} onChange={e=>updateDay(i,{dateLabel:e.target.value})}/>
+                <TextInput placeholder="Hours" value={d.hours} onChange={e=>updateDay(i,{hours:e.target.value})}/>
+              </div>
+              <TextInput placeholder="Talent" value={d.talentNote} onChange={e=>updateDay(i,{talentNote:e.target.value})}/>
+              <TextInput placeholder="Description" value={d.description} onChange={e=>updateDay(i,{description:e.target.value})}/>
+            </div>
+          ))}
+          <button onClick={addDay} className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 w-full flex items-center justify-center gap-1 hover:border-foreground cursor-pointer">
+            <Plus size={12}/> Add shoot day
+          </button>
+        </div>
+        <div className="flex justify-end items-center gap-3">
+          {saved && <span className="text-xs text-[#27AE60] flex items-center gap-1"><Check size={12}/> Saved</span>}
+          <Btn variant="primary" icon={<Check size={13}/>} onClick={handleSave} disabled={saving || !realCampaignId}>{saving ? "Saving…" : "Save Deliverables"}</Btn>
+        </div>
+        {!realCampaignId && <div className="text-xs text-muted-foreground text-right">This is a demo campaign — changes here aren't saved.</div>}
+      </div>
+    </div>
+  );
+}
+
+const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = { draft: "Draft — Not Sent", awaiting_signature: "Awaiting Signature", fully_executed: "Fully Executed" };
+const CONTRACT_STATUS_VARIANT: Record<ContractStatus, "active"|"pending"|"draft"> = { draft: "draft", awaiting_signature: "pending", fully_executed: "active" };
+
+// Real contracts (migration 0032) generated off actually booked talent
+// — the "Generate Contract" picker only ever offers models who are both
+// really booked on this campaign and don't already have one, so a
+// contract's day_rate always traces back to a real booking. No real
+// e-signature exists yet, so "Mark Signed" just records that signature
+// happened outside the system (paper, DocuSign, email) — an honest MVP
+// posture, not a faked in-app sign flow.
+function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaignId: string | null; talent: Talent[]; shim: SubmissionShim; profileId?: string }) {
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [loading, setLoading] = useState(!!realCampaignId);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reload() {
+    if (!realCampaignId) return;
+    const real = await fetchCampaignContracts(realCampaignId);
+    setContracts(real);
+    setLoading(false);
+  }
+  useEffect(() => { if (realCampaignId) reload(); else setLoading(false); }, [realCampaignId]);
+
+  const contractedModelIds = new Set(contracts.map(c=>c.modelId));
+  const uncontractedBooked = talent.filter(t => t.stage==="booked" && !contractedModelIds.has(shim.get(t.id)?.modelId ?? ""));
+
+  async function handleGenerate(t: Talent, sendImmediately: boolean) {
+    const realModelId = shim.get(t.id)?.modelId;
+    if (!realCampaignId || !realModelId || !profileId) return;
+    setShowPicker(false);
+    setError(null);
+    const dayRate = Number(String(t.rate).replace(/[^0-9.]/g, "")) || 0;
+    const { error: err } = await createContract({ campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT/100, createdByProfileId: profileId, sendImmediately });
+    if (err) { setError(err); return; }
+    await reload();
+  }
+  async function handleSend(c: Contract) {
+    if (!realCampaignId) return;
+    setBusyId(c.id);
+    setError(null);
+    const { error: err } = await sendContract(c.id, realCampaignId);
+    setBusyId(null);
+    if (err) { setError(err); return; }
+    await reload();
+  }
+  async function handleMarkSigned(c: Contract) {
+    if (!realCampaignId) return;
+    setBusyId(c.id);
+    setError(null);
+    const { error: err } = await markContractExecuted(c.id, realCampaignId, { contractNumber: c.contractNumber, modelId: c.modelId, dayRate: c.dayRate, agencyPct: c.agencyPct, territory: c.territory, duration: c.duration });
+    setBusyId(null);
+    if (err) { setError(err); return; }
+    await reload();
+  }
+
+  if (!realCampaignId) {
+    return (
+      <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-2xl space-y-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-heading text-sm">Contracts</h2>
+            <Btn variant="primary" size="sm" icon={<Plus size={13}/>} disabled>Generate Contract</Btn>
+          </div>
+          {[["CF-2025-0841","James Whitfield","Fully Executed","$2,850","06/14/2025"],
+            ["CF-2025-0842","Amara Diallo","Awaiting Signature","$2,300","06/14/2025"],
+            ["CF-2025-0843","Zara Okafor","Draft — Not Sent","$1,960","06/15/2025"]].map(c=>(
+            <div key={c[0]} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
+              <FileCheck size={18} className="text-muted-foreground shrink-0"/>
+              <div className="flex-1">
+                <div className="text-sm font-semibold">{c[1]}</div>
+                <div className="text-xs text-muted-foreground font-mono">{c[0]} · {c[4]}</div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-sm">{c[3]}</span>
+                <Badge label={c[2]} variant={c[2]==="Fully Executed"?"active":c[2]==="Awaiting Signature"?"pending":"draft"}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-2xl space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-heading text-sm">Contracts</h2>
+          <Btn variant="primary" size="sm" icon={<Plus size={13}/>} disabled={uncontractedBooked.length===0} onClick={()=>setShowPicker(true)}>Generate Contract</Btn>
+        </div>
+        {error && <div className="text-xs text-red-500">{error}</div>}
+        {contracts.length===0 ? (
+          <div className="glass-subtle border border-dashed rounded-md p-8 text-center text-sm text-muted-foreground">
+            No contracts yet — approving a submission generates one automatically, or use Generate Contract for any already-booked model.
+          </div>
+        ) : contracts.map(c=>(
+          <div key={c.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
+            <FileCheck size={18} className="text-muted-foreground shrink-0"/>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold truncate">{c.modelName}</div>
+              <div className="text-xs text-muted-foreground font-mono">{c.contractNumber} · {new Date(c.createdAt).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric",timeZone:"UTC"})}</div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="font-mono text-sm">${c.dayRate.toLocaleString()}</span>
+              <Badge label={CONTRACT_STATUS_LABEL[c.status]} variant={CONTRACT_STATUS_VARIANT[c.status]}/>
+              {c.status==="draft" && <Btn variant="outline" size="sm" disabled={busyId===c.id} onClick={()=>handleSend(c)}>{busyId===c.id?"Sending…":"Send"}</Btn>}
+              {c.status==="awaiting_signature" && <Btn variant="outline" size="sm" disabled={busyId===c.id} onClick={()=>handleMarkSigned(c)}>{busyId===c.id?"Saving…":"Mark Signed"}</Btn>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showPicker && (
+        <Modal onClose={()=>setShowPicker(false)} maxWidth="max-w-sm">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="text-heading text-sm">Generate Contract</div>
+            <button onClick={()=>setShowPicker(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+          </div>
+          <div className="p-4 space-y-1 max-h-72 overflow-y-auto">
+            {uncontractedBooked.map(t=>(
+              <button key={t.id} onClick={()=>handleGenerate(t, false)}
+                className="w-full text-left px-3 py-2.5 rounded-md hover:bg-secondary cursor-pointer transition-colors flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium">{t.name}</div>
+                  <div className="text-xs text-muted-foreground">{t.agency} · {t.rate}</div>
+                </div>
+                <Plus size={13} className="text-muted-foreground"/>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1015,6 +1261,17 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     return Number.isFinite(n) && n > 0 ? String(n) : "";
   }
 
+  // Fires from the "Contract Generated" modal at approval time — before
+  // a real booking necessarily exists yet, which is why contracts key
+  // off model_id directly rather than requiring a booking_id.
+  async function generateContractFor(t: Talent, sendImmediately: boolean) {
+    if (!realCampaignId || !profile) return; // mock campaign — nothing real to persist
+    const realModelId = shim.get(t.id)?.modelId;
+    if (!realModelId) return;
+    const dayRate = Number(String(t.rate).replace(/[^0-9.]/g, "")) || 0;
+    await createContract({ campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT / 100, createdByProfileId: profile.id, sendImmediately });
+  }
+
   function openBookModal(ids: number[]) {
     const today = new Date().toISOString().slice(0, 10);
     const form: Record<number, { dayRate: string; days: string; shootDate: string }> = {};
@@ -1164,7 +1421,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
 
-          {section==="casting" && <CastingBoard campaign={campaign} talent={talent}/>}
+          {section==="casting" && <CastingBoard campaign={campaign} talent={talent} realCampaignId={realCampaignId} shim={shim}/>}
 
           {section==="call-sheet" && (
             realCampaignId
@@ -1201,65 +1458,9 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             </div>
           )}
 
-          {section==="deliverables" && (
-            <div className="flex-1 overflow-auto p-6">
-              <div className="max-w-2xl space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-heading text-sm">Deliverables</h2>
-                  <Badge label="Editable" variant="info"/>
-                </div>
-                <div className="glass-subtle border rounded-md p-5 space-y-4">
-                  <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">Shoot Schedule</div>
-                  {[["Mon 07/14","08:00–18:00","James Whitfield + Amara Diallo","Hero shots — Studio 9, NYC"],
-                    ["Tue 07/15","09:00–17:00","Amara Diallo","Close-up editorial"]].map((d,i)=>(
-                    <div key={i} className="border border-border rounded-md p-3 space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <TextInput placeholder="Date" defaultValue={d[0]}/>
-                        <TextInput placeholder="Hours" defaultValue={d[1]}/>
-                      </div>
-                      <TextInput placeholder="Talent" defaultValue={d[2]}/>
-                      <TextInput placeholder="Description" defaultValue={d[3]}/>
-                    </div>
-                  ))}
-                  <button className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 w-full flex items-center justify-center gap-1 hover:border-foreground">
-                    <Plus size={12}/> Add shoot day
-                  </button>
-                </div>
-                <div className="flex justify-end"><Btn variant="primary" icon={<Check size={13}/>}>Save Deliverables</Btn></div>
-              </div>
-            </div>
-          )}
+          {section==="deliverables" && <DeliverablesTab realCampaignId={realCampaignId}/>}
 
-          {section==="contracts" && (
-            <div className="flex-1 overflow-auto p-6">
-              <div className="max-w-2xl space-y-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-heading text-sm">Contracts</h2>
-                  <Btn variant="primary" size="sm" icon={<Plus size={13}/>}>Generate Contract</Btn>
-                </div>
-                {[["CF-2025-0841","James Whitfield","Fully Executed","$2,850","06/14/2025"],
-                  ["CF-2025-0842","Amara Diallo","Awaiting Signature","$2,300","06/14/2025"],
-                  ["CF-2025-0843","Zara Okafor","Draft — Not Sent","$1,960","06/15/2025"]].map(c=>(
-                  <div key={c[0]} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
-                    <FileCheck size={18} className="text-muted-foreground shrink-0"/>
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">{c[1]}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{c[0]} · {c[4]}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-sm">{c[3]}</span>
-                      <Badge label={c[2]} variant={c[2]==="Fully Executed"?"active":c[2]==="Awaiting Signature"?"pending":"draft"}/>
-                      <div className="flex gap-1">
-                        <button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md" title="View"><Eye size={13}/></button>
-                        <button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md" title="Open PDF"><Download size={13}/></button>
-                        {c[2]==="Draft — Not Sent"&&<button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-md" title="Edit & Send"><Send size={13}/></button>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {section==="contracts" && <ContractsTab realCampaignId={realCampaignId} talent={talent} shim={shim} profileId={profile?.id}/>}
 
           {section==="bookings" && (
             <div className="flex-1 overflow-auto">
@@ -1335,7 +1536,11 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
         </div>
       </div>
 
-      {contractModal && <ContractModal talent={contractModal} onSend={()=>setContractModal(null)} onLater={()=>setContractModal(null)}/>}
+      {contractModal && (
+        <ContractModal talent={contractModal}
+          onSend={async ()=>{ await generateContractFor(contractModal, true); setContractModal(null); }}
+          onLater={async ()=>{ await generateContractFor(contractModal, false); setContractModal(null); }}/>
+      )}
       {bookModal && (
         <Modal onClose={()=>{ if (!bookSaving) setBookModal(null); }} maxWidth="max-w-md">
           <div className="p-6 space-y-4">

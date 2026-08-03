@@ -1,0 +1,12 @@
+-- Real bug found by testing contract generation live: "permission
+-- denied for sequence contract_number_seq" (42501). set_contract_number()
+-- is a plain trigger function, so it runs with the CALLING client's own
+-- privileges by default — table-level grants (0032) don't cover
+-- sequences, those need their own grant, and this one never got it.
+--
+-- Fixed by making the function security definer instead of granting the
+-- sequence directly to authenticated — same reasoning as every other
+-- security-definer function in this schema: a client should never be
+-- able to call nextval('contract_number_seq') on its own, only through
+-- this specific insert path.
+alter function set_contract_number() security definer set search_path = public;
