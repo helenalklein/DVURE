@@ -10,10 +10,10 @@ import {
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
   User, Users, LogOut, Pin, Lock, Globe, Shirt, Home
 } from "lucide-react";
-import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
+import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
@@ -24,13 +24,12 @@ import CampaignCalendar from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
-import { fetchCastingEntries, setCastingStage } from "../../lib/queries/castingBoard";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
 import { fetchShootDays, saveShootDays, type ShootDay } from "../../lib/queries/deliverables";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "casting" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
 
@@ -164,19 +163,19 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"users",         label:"Users",         Icon:User            },
 ];
 
-// Casting Board and Call Sheet are both universal companion tools now —
-// every type gets them as their own tabs right under Submissions, not a
-// swap-in only certain types receive. Runway additionally gets a Looks
-// tab, since that's specifically a fashion-show concern the others
-// don't share.
+// Call Sheet is a universal companion tool — every type gets it as its
+// own tab right under Submissions, not a swap-in only certain types
+// receive. Runway additionally gets a Looks tab, since that's
+// specifically a fashion-show concern the others don't share. (Casting
+// Board was pulled — it's part of Relay, deferred to Phase 2 along with
+// the rest of that module.)
 function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: string; Icon: IconFn }[] {
-  const withCasting = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
+  const withCallSheet = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
     item,
-    { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check },
     { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:Users },
   ] : [item]);
-  if (type !== "Runway") return withCasting;
-  return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
+  if (type !== "Runway") return withCallSheet;
+  return withCallSheet.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
 function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil }: {
@@ -395,7 +394,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                           )}
                         >
                           <div className="relative">
-                            <XBox className="w-full h-32"/>
+                            {t.photo ? <img src={t.photo} alt="" className="w-full h-32 object-cover"/> : <XBox className="w-full h-32"/>}
                             <div className={cx("absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",isSel?"bg-foreground border-foreground":"bg-card/80 border-border")}>
                               {isSel&&<Check size={11} className="text-primary-foreground"/>}
                             </div>
@@ -620,121 +619,6 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── RUNWAY: CASTING BOARD ──────────────────────────────────────────────────
-// Day-of checklist, not a drag pipeline — a model can be fitting-complete
-// before another is even optioned, so every stage is independently
-// toggleable per model rather than columns you move cards between.
-
-function CastingBoard({ campaign, talent, realCampaignId, shim }: { campaign: Campaign; talent: Talent[]; realCampaignId: string | null; shim: SubmissionShim }) {
-  // CASTING_ENTRIES is keyed to mock campaign ids only (1-5) — it's
-  // always empty for a real campaign (shim ids start at 500_000), which
-  // used to render as a flatly wrong "No models cast yet" even once a
-  // real booking existed. Seed from actually booked talent instead of
-  // leaving the board empty.
-  const [entries, setEntries] = useState<CastingEntry[]>(() => {
-    const mockEntries = CASTING_ENTRIES.filter(e=>e.campaignId===campaign.id);
-    if (mockEntries.length > 0) return mockEntries;
-    const emptyStages = CASTING_STAGES.reduce((acc,s) => ({ ...acc, [s.id]: false }), {} as Record<CastingStageId, boolean>);
-    return talent.filter(t=>t.stage==="booked").map(t => ({ modelId: t.id, campaignId: campaign.id, stages: { ...emptyStages } }));
-  });
-  const show = RUNWAY_SHOWS.find(s=>s.id===campaign.runwayShowId);
-  const otherBrands = campaign.runwayShowId ? RUNWAY_SHOW_OTHER_BRANDS[campaign.runwayShowId] ?? [] : [];
-
-  // casting_entries already existed in the schema with full RLS — this
-  // was only ever missing frontend wiring. Real toggle state loads over
-  // the seeded rows once fetched, keyed back through the same shim
-  // Submissions/Bookings already use to resolve a shim talent id to its
-  // real model_profiles uuid.
-  useEffect(() => {
-    if (!realCampaignId) return;
-    let active = true;
-    fetchCastingEntries(realCampaignId).then(real => {
-      if (!active || real.size === 0) return;
-      setEntries(prev => prev.map(e => {
-        const realModelId = shim.get(e.modelId)?.modelId;
-        const r = realModelId ? real.get(realModelId) : undefined;
-        if (!r) return e;
-        return { ...e, stages: {
-          confirmed: r.confirmed, optioned: r.optioned, fittingComplete: r.fittingComplete,
-          rehearsalComplete: r.rehearsalComplete, checkedIn: r.checkedIn, walked: r.walked, wrapComplete: r.wrapComplete,
-        } };
-      }));
-    });
-    return () => { active = false; };
-  }, [realCampaignId]);
-
-  function toggleStage(modelId: number, stageId: CastingStageId) {
-    const current = entries.find(e=>e.modelId===modelId);
-    const newValue = current ? !current.stages[stageId] : true;
-    setEntries(prev => prev.map(e => e.modelId===modelId ? { ...e, stages: { ...e.stages, [stageId]: newValue } } : e));
-    const realModelId = realCampaignId ? shim.get(modelId)?.modelId : undefined;
-    if (realCampaignId && realModelId) setCastingStage(realCampaignId, realModelId, stageId, newValue);
-  }
-
-  return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="max-w-5xl space-y-4">
-        {show && (
-          <div className="glass-subtle border rounded-md p-4 flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1.5">{show.season} · {show.name}</div>
-              <div className="text-sm font-semibold">{show.venue}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">{show.date} · {show.time} {show.timeZone}</div>
-            </div>
-            {otherBrands.length>0 && (
-              <div className="text-right">
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Also on this show</div>
-                <div className="flex gap-1.5 flex-wrap justify-end">
-                  {otherBrands.map(b=><Badge key={b} label={b} variant="default"/>)}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        <p className="text-sm text-muted-foreground">Day-of casting checklist — toggle each stage as models move through it. Stages don't have to complete in order.</p>
-        <div className="glass-subtle border rounded-md overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground whitespace-nowrap">Model</th>
-                {CASTING_STAGES.map(s=>(
-                  <th key={s.id} className="px-2 py-2.5 text-center text-[9px] font-mono text-muted-foreground uppercase leading-tight w-16">{s.label}</th>
-                ))}
-                <th className="px-4 py-2.5 text-right text-xs font-mono text-muted-foreground whitespace-nowrap">Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map(e=>{
-                const model = talent.find(t=>t.id===e.modelId) ?? SAMPLE_TALENT.find(t=>t.id===e.modelId);
-                const doneCount = CASTING_STAGES.filter(s=>e.stages[s.id]).length;
-                return (
-                  <tr key={e.modelId} className="border-b border-border last:border-0 hover:bg-secondary/60">
-                    <td className="px-4 py-3 font-medium whitespace-nowrap">{model?.name ?? `Model #${e.modelId}`}</td>
-                    {CASTING_STAGES.map(s=>(
-                      <td key={s.id} className="px-2 py-3 text-center">
-                        <button onClick={()=>toggleStage(e.modelId, s.id)} title={s.label}
-                          className={cx("w-5 h-5 rounded-sm border flex items-center justify-center mx-auto transition-colors cursor-pointer",
-                            e.stages[s.id] ? "bg-foreground border-foreground text-primary-foreground" : "border-border text-transparent hover:border-foreground/50"
-                          )}>
-                          <Check size={11}/>
-                        </button>
-                      </td>
-                    ))}
-                    <td className="px-4 py-3 text-right text-xs font-mono whitespace-nowrap">{doneCount}/{CASTING_STAGES.length}</td>
-                  </tr>
-                );
-              })}
-              {entries.length===0 && (
-                <tr><td colSpan={CASTING_STAGES.length+2} className="px-4 py-10 text-center text-sm text-muted-foreground">No models cast yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1421,7 +1305,6 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
 
-          {section==="casting" && <CastingBoard campaign={campaign} talent={talent} realCampaignId={realCampaignId} shim={shim}/>}
 
           {section==="call-sheet" && (
             realCampaignId

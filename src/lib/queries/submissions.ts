@@ -4,9 +4,9 @@ import type { Talent, SubmissionStage } from "../../app/shared/types";
 
 // Talent.id is `number` throughout the app (mock ids 1-14) — rather than
 // changing that type everywhere (it cascades into CAMPAIGN_AGENCIES,
-// CASTING_ENTRIES, LOOKS, all still mock/out of scope this pass), real
-// submissions get synthetic sequential ids starting well above the mock
-// range, with a reverse map back to the real uuids for writes.
+// LOOKS, still mock/out of scope this pass), real submissions get
+// synthetic sequential ids starting well above the mock range, with a
+// reverse map back to the real uuids for writes.
 const SHIM_ID_BASE = 100_000;
 
 export interface SubmissionShimEntry { submissionId: string; modelId: string; agencyOrgId: string; }

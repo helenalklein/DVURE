@@ -1,4 +1,4 @@
-import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CastingStageId, CastingEntry, Look, CrewMember, CampaignThreadMessage } from "./types";
+import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, Look, CrewMember, CampaignThreadMessage } from "./types";
 import { formatCampaignDue } from "../../lib/formatDue";
 import coverCrystalPalaceTransept from "../../assets/cover-crystal-palace-transept.jpg";
 import galleryDP138588 from "../../assets/gallery/DP138588.jpg";
@@ -22,6 +22,20 @@ import galleryDP107961 from "../../assets/gallery/DP107961.jpg";
 import galleryDP17115001 from "../../assets/gallery/DP-17115-001.jpg";
 import galleryDP112689 from "../../assets/gallery/DP112689.jpg";
 import seuratCover from "../../assets/gallery/seurat-cover.jpg";
+import photoZaraOkafor from "../../assets/talent/zara-okafor.jpg";
+import photoAmaraDiallo from "../../assets/talent/amara-diallo.jpg";
+import photoMilaTran from "../../assets/talent/mila-tran.jpg";
+import photoPetraNovak from "../../assets/talent/petra-novak.jpg";
+import photoInesFerreira from "../../assets/talent/ines-ferreira.jpg";
+import photoNadiaPetrov from "../../assets/talent/nadia-petrov.jpg";
+import photoCalebStone from "../../assets/talent/caleb-stone.jpg";
+import photoSofiaBrandt from "../../assets/talent/sofia-brandt.jpg";
+import photoJamesWhitfield from "../../assets/talent/james-whitfield.jpg";
+import photoLenaVogel from "../../assets/talent/lena-vogel.jpg";
+import photoAmirHassan from "../../assets/talent/amir-hassan.jpg";
+import photoChiaraRusso from "../../assets/talent/chiara-russo.jpg";
+import photoMayaChen from "../../assets/talent/maya-chen.jpg";
+import photoPriyaSharma from "../../assets/talent/priya-sharma.jpg";
 
 // Fixed "today" for demo purposes — drives talent-submission-window open/
 // closed state (see Campaign.submissionOpen/submissionClose) and the
@@ -34,20 +48,20 @@ export const MOCK_NOW = new Date("2026-07-21");
 // (Negotiation/counter-offer states are a deliberate Phase-1 cut, not an oversight.)
 
 export const SAMPLE_TALENT: Talent[] = [
-  { id:1,  name:"Zara Okafor",     agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", boutiqueAgency:"IMG Models", location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
-  { id:2,  name:"Amara Diallo",    agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
-  { id:3,  name:"Mila Tran",       agency:"IMG Models",        motherAgency:"IMG Models",        location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
-  { id:4,  name:"Petra Novak",     agency:"IMG Models",        motherAgency:"Storm Models", boutiqueAgency:"IMG Models", location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
-  { id:5,  name:"Ines Ferreira",   agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
-  { id:6,  name:"Nadia Petrov",    agency:"Next Models",       motherAgency:"Next Models",       location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
-  { id:7,  name:"Caleb Stone",     agency:"Wilhelmina",        motherAgency:"Wilhelmina",        location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
-  { id:8,  name:"Sofia Brandt",    agency:"DNA Models",        motherAgency:"DNA Models",        location:"Miami, FL",       rate:"$1,200/day", stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/22.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"11 yrs", score:5 },
-  { id:9,  name:"James Whitfield", agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"New York, NY",    rate:"$950/day",   stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/14.", height:`6'0"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"6 yrs",  score:5 },
-  { id:10, name:"Lena Vogel",      agency:"IMG Models",        motherAgency:"IMG Models",        location:"Berlin, DE",      rate:"$780/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"3 yrs",  score:3 },
-  { id:11, name:"Amir Hassan",     agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,050/day", stage:"rejected",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
-  { id:12, name:"Chiara Russo",    agency:"Next Models",       motherAgency:"Next Models",       location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
-  { id:13, name:"Maya Chen",       agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
-  { id:14, name:"Priya Sharma",    agency:"DNA Models",        motherAgency:"DNA Models",        location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+  { id:1,  name:"Zara Okafor",     photo:photoZaraOkafor,     agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", boutiqueAgency:"IMG Models", location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
+  { id:2,  name:"Amara Diallo",    photo:photoAmaraDiallo,    agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
+  { id:3,  name:"Mila Tran",       photo:photoMilaTran,       agency:"IMG Models",        motherAgency:"IMG Models",        location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
+  { id:4,  name:"Petra Novak",     photo:photoPetraNovak,     agency:"IMG Models",        motherAgency:"Storm Models", boutiqueAgency:"IMG Models", location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+  { id:5,  name:"Ines Ferreira",   photo:photoInesFerreira,   agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
+  { id:6,  name:"Nadia Petrov",    photo:photoNadiaPetrov,    agency:"Next Models",       motherAgency:"Next Models",       location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:7,  name:"Caleb Stone",     photo:photoCalebStone,     agency:"Wilhelmina",        motherAgency:"Wilhelmina",        location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
+  { id:8,  name:"Sofia Brandt",    photo:photoSofiaBrandt,    agency:"DNA Models",        motherAgency:"DNA Models",        location:"Miami, FL",       rate:"$1,200/day", stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/22.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"11 yrs", score:5 },
+  { id:9,  name:"James Whitfield", photo:photoJamesWhitfield, agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"New York, NY",    rate:"$950/day",   stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/14.", height:`6'0"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"6 yrs",  score:5 },
+  { id:10, name:"Lena Vogel",      photo:photoLenaVogel,      agency:"IMG Models",        motherAgency:"IMG Models",        location:"Berlin, DE",      rate:"$780/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"3 yrs",  score:3 },
+  { id:11, name:"Amir Hassan",     photo:photoAmirHassan,     agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,050/day", stage:"rejected",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
+  { id:12, name:"Chiara Russo",    photo:photoChiaraRusso,    agency:"Next Models",       motherAgency:"Next Models",       location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
+  { id:13, name:"Maya Chen",       photo:photoMayaChen,       agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:14, name:"Priya Sharma",    photo:photoPriyaSharma,    agency:"DNA Models",        motherAgency:"DNA Models",        location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
 ];
 
 // Sticky-note-style comments on individual candidate cards — separate
@@ -269,27 +283,6 @@ export const RUNWAY_SHOWS: RunwayShow[] = [
 export const RUNWAY_SHOW_OTHER_BRANDS: Record<number, string[]> = {
   1: ["Nocturne House", "Rivet & Sable"],
 };
-
-export const CASTING_STAGES: { id: CastingStageId; label: string }[] = [
-  { id:"confirmed",         label:"Confirmed"          },
-  { id:"optioned",          label:"Optioned"           },
-  { id:"fittingComplete",   label:"Fitting Complete"   },
-  { id:"rehearsalComplete", label:"Rehearsal Complete" },
-  { id:"checkedIn",         label:"Checked In"         },
-  { id:"walked",            label:"Walked"             },
-  { id:"wrapComplete",      label:"Wrap Complete"      },
-];
-
-const allStages = (v: boolean) => CASTING_STAGES.reduce((acc,s) => ({ ...acc, [s.id]: v }), {} as Record<CastingStageId, boolean>);
-
-export const CASTING_ENTRIES: CastingEntry[] = [
-  { modelId:1,  campaignId:5, stages:{ ...allStages(true), checkedIn:false, walked:false, wrapComplete:false } },   // Zara Okafor — mid-progress
-  { modelId:2,  campaignId:5, stages:{ ...allStages(true), wrapComplete:false } },                                  // Amara Diallo — near done
-  { modelId:5,  campaignId:5, stages:{ ...allStages(false), confirmed:true, optioned:true } },                     // Ines Ferreira — early
-  { modelId:6,  campaignId:5, stages:{ ...allStages(false), confirmed:true } },                                     // Nadia Petrov — just confirmed
-  { modelId:12, campaignId:5, stages:{ ...allStages(false), confirmed:true, optioned:true, fittingComplete:true } },// Chiara Russo
-  { modelId:9,  campaignId:5, stages:allStages(true) },                                                             // James Whitfield — fully wrapped
-];
 
 export const CREW: CrewMember[] = [
   { id:1,  name:"Priya Anand",    role:"hair" },

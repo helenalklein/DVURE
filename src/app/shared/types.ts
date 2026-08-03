@@ -9,6 +9,10 @@ export type PaymentStatus = "pending" | "processing" | "paid";
 export interface Talent {
   id: number;
   name: string;
+  // Demo-only headshot for the mock roster (SAMPLE_TALENT) — real
+  // submissions have no photo source wired yet, so this is undefined
+  // for anything coming from fetchCampaignSubmissions().
+  photo?: string;
   // agency = who actually submitted this candidate (mother or boutique —
   // whichever agency clicked submit). motherAgency/boutiqueAgency show on
   // the card regardless of who submitted, so the brand always knows the
@@ -135,17 +139,8 @@ export interface RunwayShow {
 }
 
 // ─── RUNWAY CASTING ─────────────────────────────────────────────────────────
-
-// Day-of checklist, not a linear pipeline — a model can be
-// fitting-complete before another is even optioned, so every stage is
-// independently toggleable rather than columns you drag between.
-export type CastingStageId = "confirmed" | "optioned" | "fittingComplete" | "rehearsalComplete" | "checkedIn" | "walked" | "wrapComplete";
-
-export interface CastingEntry {
-  modelId: number;
-  campaignId: number;
-  stages: Record<CastingStageId, boolean>;
-}
+// Casting Board (day-of checklist) was pulled — it's part of Relay,
+// deferred to Phase 2 along with the rest of that module.
 
 // One numbered look for a runway campaign — garments/accessories plus
 // who's assigned to execute it (model, hair, makeup, dresser).
