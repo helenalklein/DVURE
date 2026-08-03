@@ -84,6 +84,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <img src={dvureLogo} alt="DVURE" className="w-56 mx-auto"/>
+          <div className="text-heading text-sm italic text-muted-foreground mt-2">Make It Possible.</div>
         </div>
 
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">

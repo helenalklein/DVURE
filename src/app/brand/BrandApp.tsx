@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
@@ -23,6 +23,7 @@ import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
+import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -3387,15 +3388,133 @@ function CheckRow({ checked, onClick, children }: { checked: boolean; onClick: (
   );
 }
 
+// Real, DB-backed — the client-side proof-of-history surface onto
+// audit_log (0018) / fetch_org_audit_log (0027). Administrator-only,
+// scoped server-side to this org; there is no client-side filter to
+// bypass since the RPC itself refuses non-admins and other orgs' rows.
+function AuditLogPanel() {
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  async function load(before?: string) {
+    const { entries: fetched, error: err } = await fetchOrgAuditLog(before);
+    if (err) { setError(err); setLoading(false); setLoadingMore(false); return; }
+    setEntries(prev => before ? [...prev, ...fetched] : fetched);
+    setHasMore(fetched.length >= 100);
+    setLoading(false);
+    setLoadingMore(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function loadMore() {
+    if (entries.length === 0) return;
+    setLoadingMore(true);
+    load(entries[entries.length - 1].occurredAt);
+  }
+
+  function exportCsv() {
+    const header = ["Timestamp", "Actor", "Email", "Action", "Object Type", "Campaign", "IP Address"];
+    const rows = entries.map(e => [
+      new Date(e.occurredAt).toISOString(), e.actorName ?? "", e.actorEmail ?? "", e.action,
+      e.objectType ?? "", e.campaignName ?? "", e.ipAddress ?? "",
+    ]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `dvure-audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-heading text-base mb-0.5">Audit Log</h2>
+          <p className="text-sm text-muted-foreground">Every recorded action on your organization's account — kept for compliance and legal record-keeping. Administrators only.</p>
+        </div>
+        <Btn variant="outline" size="sm" icon={<Download size={13}/>} onClick={exportCsv} disabled={entries.length===0}>Export CSV</Btn>
+      </div>
+      {error && <div className="text-xs text-red-500">{error}</div>}
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      ) : entries.length === 0 ? (
+        <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No recorded actions yet.</div>
+      ) : (
+        <div className="glass-subtle border rounded-md overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-secondary text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="text-left px-4 py-2 font-medium">Time</th>
+                <th className="text-left px-4 py-2 font-medium">Actor</th>
+                <th className="text-left px-4 py-2 font-medium">Action</th>
+                <th className="text-left px-4 py-2 font-medium">Campaign</th>
+                <th className="text-left px-4 py-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(e => (
+                <Fragment key={e.id}>
+                  <tr className="border-t border-border">
+                    <td className="px-4 py-2 whitespace-nowrap tabular-nums">{new Date(e.occurredAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</td>
+                    <td className="px-4 py-2">{e.actorName ?? "—"}</td>
+                    <td className="px-4 py-2 font-mono">{e.action}</td>
+                    <td className="px-4 py-2">{e.campaignName ?? "—"}</td>
+                    <td className="px-4 py-2 text-right">
+                      {(e.previousValue || e.newValue || e.ipAddress || e.userAgent) && (
+                        <button onClick={()=>setExpanded(expanded===e.id?null:e.id)} className="text-muted-foreground hover:text-foreground cursor-pointer underline underline-offset-2">
+                          {expanded===e.id ? "Hide" : "Details"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {expanded===e.id && (
+                    <tr className="border-t border-border bg-secondary/40">
+                      <td colSpan={5} className="px-4 py-3">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div><div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">Before</div><pre className="text-[10px] whitespace-pre-wrap break-all">{e.previousValue ? JSON.stringify(e.previousValue, null, 1) : "—"}</pre></div>
+                          <div><div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">After</div><pre className="text-[10px] whitespace-pre-wrap break-all">{e.newValue ? JSON.stringify(e.newValue, null, 1) : "—"}</pre></div>
+                        </div>
+                        {(e.ipAddress || e.userAgent) && (
+                          <div className="text-[10px] text-muted-foreground mt-2 pt-2 border-t border-border">
+                            {e.ipAddress && <>IP {e.ipAddress}</>}{e.ipAddress && e.userAgent && " · "}{e.userAgent}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {hasMore && entries.length > 0 && (
+        <div className="text-center">
+          <Btn variant="outline" size="sm" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load more"}</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
   const user = useCurrentUser();
   const isAdmin = user?.access === "administrator";
-  const [tab, setTab] = useState<"profile"|"subscription"|"billing"|"security"|"org"|"notifications">("profile");
+  const [tab, setTab] = useState<"profile"|"subscription"|"billing"|"security"|"org"|"notifications"|"audit">("profile");
   const [channels, setChannels] = useState<string[]>(["Email"]);
   const [timing, setTiming] = useState<string[]>(["1 day before","Day of"]);
   const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
     set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
-  // Subscription is a platform-billing surface — only administrators see it.
+  // Subscription and Audit Log are both administrator-only surfaces —
+  // one is platform billing, the other is the org's own compliance
+  // record, neither is a regular staff member's concern.
   const TABS: [string,string][] = [
     ["profile","Profile"],
     ...(isAdmin ? [["subscription","Subscription"] as [string,string]] : []),
@@ -3403,6 +3522,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
     ["security","Security"],
     ["org","Organization"],
     ["notifications","Notifications"],
+    ...(isAdmin ? [["audit","Audit Log"] as [string,string]] : []),
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -3425,7 +3545,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
         <div className="flex-1 overflow-auto p-8">
-          <div className="max-w-xl">
+          <div className={tab === "audit" ? "max-w-4xl" : "max-w-xl"}>
             {tab === "profile" && (
               <div className="space-y-5">
                 <div><h2 className="text-heading text-base mb-0.5">Profile</h2><p className="text-sm text-muted-foreground">Your personal account details.</p></div>
@@ -3524,6 +3644,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                 <div className="flex justify-end pt-2"><Btn variant="primary">Save Changes</Btn></div>
               </div>
             )}
+            {tab === "audit" && <AuditLogPanel/>}
           </div>
         </div>
       </div>
