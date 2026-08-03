@@ -626,8 +626,21 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
 // before another is even optioned, so every stage is independently
 // toggleable per model rather than columns you move cards between.
 
-function CastingBoard({ campaign }: { campaign: Campaign }) {
-  const [entries, setEntries] = useState<CastingEntry[]>(() => CASTING_ENTRIES.filter(e=>e.campaignId===campaign.id));
+function CastingBoard({ campaign, talent }: { campaign: Campaign; talent: Talent[] }) {
+  // CASTING_ENTRIES is keyed to mock campaign ids only (1-5) — it's
+  // always empty for a real campaign (shim ids start at 500_000), which
+  // used to render as a flatly wrong "No models cast yet" even once a
+  // real booking existed. Seed from actually booked talent instead of
+  // leaving the board empty; there's no per-stage persistence yet (no
+  // casting_entries table for real campaigns), so toggles here are
+  // session-local for a real campaign, same honest limitation
+  // Deliverables already has.
+  const [entries, setEntries] = useState<CastingEntry[]>(() => {
+    const mockEntries = CASTING_ENTRIES.filter(e=>e.campaignId===campaign.id);
+    if (mockEntries.length > 0) return mockEntries;
+    const emptyStages = CASTING_STAGES.reduce((acc,s) => ({ ...acc, [s.id]: false }), {} as Record<CastingStageId, boolean>);
+    return talent.filter(t=>t.stage==="booked").map(t => ({ modelId: t.id, campaignId: campaign.id, stages: { ...emptyStages } }));
+  });
   const show = RUNWAY_SHOWS.find(s=>s.id===campaign.runwayShowId);
   const otherBrands = campaign.runwayShowId ? RUNWAY_SHOW_OTHER_BRANDS[campaign.runwayShowId] ?? [] : [];
 
@@ -669,7 +682,7 @@ function CastingBoard({ campaign }: { campaign: Campaign }) {
             </thead>
             <tbody>
               {entries.map(e=>{
-                const model = SAMPLE_TALENT.find(t=>t.id===e.modelId);
+                const model = talent.find(t=>t.id===e.modelId) ?? SAMPLE_TALENT.find(t=>t.id===e.modelId);
                 const doneCount = CASTING_STAGES.filter(s=>e.stages[s.id]).length;
                 return (
                   <tr key={e.modelId} className="border-b border-border last:border-0 hover:bg-secondary/60">
@@ -1151,7 +1164,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
 
-          {section==="casting" && <CastingBoard campaign={campaign}/>}
+          {section==="casting" && <CastingBoard campaign={campaign} talent={talent}/>}
 
           {section==="call-sheet" && (
             realCampaignId
