@@ -461,7 +461,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
             <div className="flex-1 overflow-auto p-4 space-y-4">
               <div>
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Portfolio</div>
-                <XBox className="w-full h-36 rounded-md"/>
+                {drawer.photo ? <img src={drawer.photo} alt="" className="w-full h-36 rounded-md object-cover"/> : <XBox className="w-full h-36 rounded-md"/>}
                 <div className="grid grid-cols-3 gap-1 mt-1">{[0,1,2].map(i=><XBox key={i} className="aspect-square rounded-sm"/>)}</div>
               </div>
               <div>
@@ -1352,7 +1352,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                 <p className="text-xs text-muted-foreground mb-4">Bookings originate from this campaign's approved submissions.</p>
                 {talent.filter(t=>t.stage==="booked").map(t=>(
                   <div key={t.id} className="glass-subtle border border-foreground/20 rounded-md p-4 flex items-center gap-4">
-                    <XBox className="w-14 h-[72px] rounded-sm shrink-0"/>
+                    {t.photo ? <img src={t.photo} alt="" className="w-14 h-[72px] rounded-sm shrink-0 object-cover"/> : <XBox className="w-14 h-[72px] rounded-sm shrink-0"/>}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <div className="text-sm font-semibold">{t.name}</div>
