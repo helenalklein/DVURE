@@ -8,18 +8,26 @@ import { fetchAgencyRoster, insertRosterModel } from "../../lib/queries/roster";
 import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
+import { fetchAgencyInvitations, type AgencyInvitation } from "../../lib/queries/agencyInvitations";
+
+type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
 type View = "invitations" | "submit" | "roster" | "payments" | "messaging";
 
 const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
-  { id:"invitations", label:"Campaign Invitations", Icon:Inbox,         count:3 },
+  { id:"invitations", label:"Campaign Invitations", Icon:Inbox                 },
   { id:"submit",       label:"Talent Submissions",   Icon:Send                  },
   { id:"roster",       label:"Talent Roster",        Icon:Users2                },
   { id:"payments",     label:"Payments",             Icon:CreditCard            },
   { id:"messaging",    label:"Messaging",            Icon:MessageSquare, count:1 },
 ];
 
-const INVITATIONS = [
+// Mock-only invitations — AW25 has no realCampaignId attached since its
+// real counterpart is matched by name (findCampaignIdByName) for
+// backward compatibility with the original single-campaign real loop.
+// Every campaign actually distributed via campaign_agency_distributions
+// now shows up for real (see fetchAgencyInvitations) alongside these.
+const INVITATIONS: Invitation[] = [
   { brand:"Acne Studios", campaign:"AW25 Womenswear Campaign", type:"Campaign", due:"06/20/2025", budget:"$800–$1,200/day", models:3, submissionOpen:"May 1, 2026", submissionClose:"Aug 15, 2026" },
   { brand:"Nike",         campaign:"Run Global SS25",          type:"Campaign", due:"07/01/2025", budget:"$600–$900/day",   models:5, submissionOpen:"Jul 1, 2026", submissionClose:"Aug 5, 2026"  },
   { brand:"Chanel",       campaign:"Beauty Editorial AW25",    type:"Campaign", due:"06/28/2025", budget:"$1,200–$2,000/day", models:2, submissionOpen:"Jul 10, 2026", submissionClose:"Jul 24, 2026" },
@@ -56,12 +64,15 @@ function BrandLogoBadge({ brand }: { brand: string }) {
 // instead of mood/editorial stock. An agency or model cares who's
 // hiring first; the brand doesn't need to be told its own campaign is
 // its own campaign, so it gets the photo instead. Same data, two reads.
-function InvitationsView({ onSubmitTalent }: { onSubmitTalent: (campaign: string) => void }) {
+function InvitationsView({ invitations, onSubmitTalent }: { invitations: Invitation[]; onSubmitTalent: (campaign: string) => void }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Brand campaign invitations requiring talent submissions.</p>
+      {invitations.length === 0 && (
+        <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No campaign invitations yet.</div>
+      )}
       <div className="grid grid-cols-3 gap-4">
-        {INVITATIONS.map(inv=>{
+        {invitations.map(inv=>{
           const closed = submissionIsClosed(inv);
           return (
             <div key={inv.campaign} className="glass-subtle border rounded-lg overflow-hidden">
@@ -201,12 +212,12 @@ function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
 // rejected, surfaced below as submitError rather than a pre-check.
 type CampaignSubmissionStatus = { modelId: string; campaign: string; status: "pending" | "declined" };
 
-function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: RosterModel[]; onGoToRoster: () => void; initialCampaign?: string }) {
+function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }: { roster: RosterModel[]; invitations: Invitation[]; onGoToRoster: () => void; initialCampaign?: string }) {
   const { profile, org } = useAuth();
   const [submitted, setSubmitted] = useState<CampaignSubmissionStatus[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [pickedCampaign, setPickedCampaign] = useState(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
+  const [pickedCampaign, setPickedCampaign] = useState(initialCampaign ?? invitations[0]?.campaign ?? "");
   const [pickedModelId, setPickedModelId] = useState<string | "">("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -217,13 +228,13 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
 
   const submittedIds = new Set(submitted.filter(s=>s.status==="pending").map(s=>s.modelId));
   const pickedModel = roster.find(m=>m.id===pickedModelId);
-  const pickedInvitation = INVITATIONS.find(i=>i.campaign===pickedCampaign);
+  const pickedInvitation = invitations.find(i=>i.campaign===pickedCampaign);
   const submissionClosed = pickedInvitation ? submissionIsClosed(pickedInvitation) : false;
   const pickedStatus = pickedModel ? statusFor(pickedModel.id, pickedCampaign) : undefined;
 
   function selectModel(id: string) {
     setPickedModelId(id);
-    setPickedCampaign(initialCampaign ?? INVITATIONS[0]?.campaign ?? "");
+    setPickedCampaign(initialCampaign ?? invitations[0]?.campaign ?? "");
     setSubmitError(null);
     setShowPicker(false);
     setShowForm(true);
@@ -233,7 +244,11 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
     if (!pickedModel || !org || !profile) return;
     setSubmitting(true);
     setSubmitError(null);
-    const realCampaignId = await findCampaignIdByName(pickedCampaign);
+    // Real invitations already know their own campaign id — falling
+    // back to a name lookup only for the legacy mock/real AW25 pairing,
+    // where two rows can share a name and a lookup is genuinely
+    // ambiguous otherwise.
+    const realCampaignId = pickedInvitation?.realCampaignId ?? await findCampaignIdByName(pickedCampaign);
     if (!realCampaignId) {
       setSubmitting(false);
       setSubmitError("This campaign isn't connected yet — check back once it's set up.");
@@ -322,7 +337,7 @@ function SubmitTalentView({ roster, onGoToRoster, initialCampaign }: { roster: R
               </button>
               <div className="text-[10px] text-muted-foreground font-mono mt-1">Pulled from their <DvureSignature size={9}/> profile.</div>
             </div>
-            <FSelect label="Campaign" options={INVITATIONS.map(i=>i.campaign)} value={pickedCampaign} onChange={setPickedCampaign}/>
+            <FSelect label="Campaign" options={invitations.map(i=>i.campaign)} value={pickedCampaign} onChange={setPickedCampaign}/>
             {pickedInvitation && (
               <div className={cx("text-[10px] font-mono flex items-center gap-1.5", submissionClosed ? "text-urgent" : "text-muted-foreground")}>
                 <span>Submissions {pickedInvitation.submissionOpen} – {pickedInvitation.submissionClose}</span>
@@ -641,11 +656,14 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   const agencyName = org?.name ?? "";
   const [view, setView] = useState<View>("invitations");
   const [roster, setRoster] = useState<RosterModel[]>([]);
+  const [realInvitations, setRealInvitations] = useState<AgencyInvitation[]>([]);
   const [submitCampaign, setSubmitCampaign] = useState<string | undefined>(undefined);
+  const invitations: Invitation[] = [...INVITATIONS, ...realInvitations];
 
   useEffect(() => {
     let active = true;
     if (org) fetchAgencyRoster(org.id, org.name).then(r => { if (active) setRoster(r); });
+    if (org) fetchAgencyInvitations(org.id).then(inv => { if (active) setRealInvitations(inv); });
     return () => { active = false; };
   }, [org?.id, org?.name]);
 
@@ -671,13 +689,14 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
           <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
             {NAV.map(item=>{
               const NavIcon = item.Icon;
+              const count = item.id==="invitations" ? invitations.length : item.count;
               return (
                 <button key={item.id} onClick={()=>setView(item.id)}
                   className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors text-left",
                     view===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
                   )}>
                   <NavIcon size={15}/>{item.label}
-                  {item.count && <span className="ml-auto text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-full">{item.count}</span>}
+                  {!!count && <span className="ml-auto text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-full">{count}</span>}
                 </button>
               );
             })}
@@ -694,8 +713,8 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
         <main className="flex-1 flex flex-col min-h-0">
           <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`}/>
           <div className="flex-1 overflow-auto p-6">
-            {view === "invitations" && <InvitationsView onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
-            {view === "submit" && <SubmitTalentView roster={roster} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
+            {view === "invitations" && <InvitationsView invitations={invitations} onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
+            {view === "submit" && <SubmitTalentView roster={roster} invitations={invitations} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
             {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
             {view === "payments" && <PaymentsView/>}
             {view === "messaging" && <AgencyMessagingView/>}
