@@ -21,7 +21,8 @@ import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/quer
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar from "./CampaignCalendar";
-import CallSheet from "./CallSheet";
+import CallSheet from "../shared/CallSheet";
+import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -91,12 +92,12 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
   { id:"directory",        label:"Directory",  Icon:User                   },
 ];
 
-function BrandSidebar({ active, onNav, onOpenCampaign, onLogout }: {
-  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void;
+function BrandSidebar({ active, onNav, onOpenCampaign, onLogout, leadsNeededCount }: {
+  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void; leadsNeededCount: number;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
-  const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length;
+  const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length + leadsNeededCount;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
@@ -1677,15 +1678,33 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
 // behavior can be layered on later; today it just needs to exist and show
 // the same items the metric is counting.
 
-function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => void }) {
+function UrgentOverdueScreen({ openCampaign, openCampaignCallSheet, leadsNeeded }: {
+  openCampaign: (id: number) => void; openCampaignCallSheet: (id: number) => void; leadsNeeded: (CampaignNeedingLeads & { shimId: number })[];
+}) {
   const currentUser = useCurrentUser();
   const byType = (t: string) => OVERDUE_ACTIONS.filter(a=>a.type===t).length;
+  const totalCount = OVERDUE_ACTIONS.length + leadsNeeded.length;
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Tasks" sub={`${currentUser?.org ?? ""} · ${OVERDUE_ACTIONS.length} actions past due`}/>
+      <TopBar title="Tasks" sub={`${currentUser?.org ?? ""} · ${totalCount} open tasks`}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="flex gap-10">
           <div className="flex-1 min-w-0 max-w-3xl space-y-3">
+            {/* Real, DB-derived — not mock like the rest of this screen: a
+                filled call sheet role with no department lead set yet on
+                its whole campaign. */}
+            {leadsNeeded.map(l=>(
+              <div key={l.campaignId} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
+                <Star size={15} className="text-foreground mt-0.5 shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge label="Leads" variant="info"/>
+                  </div>
+                  <div className="text-sm text-muted-foreground">{l.campaignName} — {l.filledCount} filled role{l.filledCount===1?"":"s"}, no department lead assigned yet.</div>
+                </div>
+                <Btn variant="primary" size="md" onClick={()=>openCampaignCallSheet(l.shimId)}>Pick leads</Btn>
+              </div>
+            ))}
             {OVERDUE_ACTIONS.map(a=>(
               <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
                 <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
@@ -1704,11 +1723,12 @@ function UrgentOverdueScreen({ openCampaign }: { openCampaign: (id: number) => v
               dropped its own copy of this metric entirely. */}
           <div className="w-48 shrink-0 min-h-[24rem] border-l border-border pl-6 flex flex-col">
             <div className="bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3">
-              <div className="text-3xl font-semibold tabular-nums tracking-tight">{OVERDUE_ACTIONS.length}</div>
+              <div className="text-3xl font-semibold tabular-nums tracking-tight">{totalCount}</div>
               <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Tasks</div>
             </div>
             <div className="flex-1 flex flex-col">
               {[
+                { label:"Leads",     value:leadsNeeded.length },
                 { label:"Payments",  value:byType("Payment") },
                 { label:"Contracts", value:byType("Contract") },
                 { label:"Talent Review", value:byType("Review") },
@@ -3529,6 +3549,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [realCampaigns, setRealCampaigns] = useState<Campaign[]>([]);
   const [realIdShim, setRealIdShim] = useState<Map<number, string>>(new Map());
   const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [leadsNeededRaw, setLeadsNeededRaw] = useState<CampaignNeedingLeads[]>([]);
   const allCampaigns = [...CAMPAIGNS, ...realCampaigns];
 
   async function refetchCampaigns() {
@@ -3537,12 +3558,21 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     setRealCampaigns(fetched);
     setRealIdShim(shim);
     setCampaignsLoading(false);
+    fetchCampaignsNeedingLeads(org.id).then(setLeadsNeededRaw);
     return shim;
   }
 
   useEffect(() => {
     if (org) refetchCampaigns();
   }, [org?.id]);
+
+  // Real campaign UUIDs mapped to the synthetic shim id routing already
+  // uses everywhere else — a campaign not yet reflected in the shim
+  // (freshly created, refetch still in flight) is dropped rather than
+  // shown with a dead link.
+  const leadsNeeded = leadsNeededRaw
+    .map(l => ({ ...l, shimId: [...realIdShim.entries()].find(([, v]) => v === l.campaignId)?.[0] }))
+    .filter((l): l is CampaignNeedingLeads & { shimId: number } => l.shimId != null);
 
   useEffect(() => {
     if (!activityOpen) return;
@@ -3572,7 +3602,11 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     setCampaignSection("moodboard");
     navigate(`/brand/campaigns/${id}`);
   }
-  function backToCampaigns() { setGlobalNav("campaigns"); navigate("/brand"); }
+  function openCampaignCallSheet(id: number) {
+    setCampaignSection("call-sheet");
+    navigate(`/brand/campaigns/${id}`);
+  }
+  function backToCampaigns() { setGlobalNav("campaigns"); navigate("/brand"); if (org) fetchCampaignsNeedingLeads(org.id).then(setLeadsNeededRaw); }
   function handleGlobalNav(v: GlobalView) { setGlobalNav(v); setView(v); navigate("/brand"); }
 
   async function handleCampaignCreated(realId: string) {
@@ -3593,10 +3627,10 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")}/>
         ) : (
           <>
-            <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout}/>
+            <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout} leadsNeededCount={leadsNeeded.length}/>
             <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }}/>}
-              {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign}/>}
+              {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign} openCampaignCallSheet={openCampaignCallSheet} leadsNeeded={leadsNeeded}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
               {view==="contracts-global" && <GlobalContracts/>}
               {view==="payments-global"  && <GlobalPayments/>}

@@ -25,3 +25,4 @@ Customer agrees that any booking, engagement, or payment arrangement with a mode
 ## 5. Limitation of Liability
 
 [Placeholder]
+

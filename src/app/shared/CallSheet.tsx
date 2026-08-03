@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Printer, Plus, X, Search, ChevronDown } from "lucide-react";
-import { cx, Btn, Modal, TextInput } from "../shared/ui";
-import { CALL_SHEET_CATEGORIES } from "../shared/callSheetRoles";
+import { Printer, Plus, X, Search, ChevronDown, Lock, Star } from "lucide-react";
+import { cx, Btn, Modal, TextInput } from "./ui";
+import { CALL_SHEET_CATEGORIES } from "./callSheetRoles";
+import { useAuth } from "./auth";
 import {
-  fetchCallSheetSlots, fetchCrewDirectory, assignCallSheetRole, clearCallSheetRole, inviteCrewToCallSheet,
-  type CallSheetAssignment, type CrewDirectoryEntry,
+  fetchCallSheetSlots, fetchCrewDirectory, fetchMyCallSheetRole, assignCallSheetRole, clearCallSheetRole,
+  inviteCrewToCallSheet, setDepartmentLead,
+  type CallSheetAssignment, type CrewDirectoryEntry, type CallSheetPermission,
 } from "../../lib/queries/callSheet";
 
 // Every gray box is one named role slot for this campaign — click it to
@@ -13,17 +15,20 @@ import {
 // invite_crew_to_call_sheet). Deliberately not a moodboard of talent —
 // exactly one person per role, not a shortlist.
 export default function CallSheet({ campaignId, campaignName }: { campaignId: string; campaignName: string }) {
+  const { crewProfile } = useAuth();
   const [assignments, setAssignments] = useState<Map<string, CallSheetAssignment>>(new Map());
   const [directory, setDirectory] = useState<CrewDirectoryEntry[]>([]);
+  const [myRole, setMyRole] = useState<CallSheetPermission>(null);
   const [loading, setLoading] = useState(true);
   const [pickerRole, setPickerRole] = useState<{ key: string; label: string } | null>(null);
   const [printMode, setPrintMode] = useState<"boxes" | "standard" | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
 
   async function reload() {
-    const [slots, dir] = await Promise.all([fetchCallSheetSlots(campaignId), fetchCrewDirectory()]);
+    const [slots, dir, role] = await Promise.all([fetchCallSheetSlots(campaignId), fetchCrewDirectory(), fetchMyCallSheetRole(campaignId)]);
     setAssignments(new Map(slots.map((s) => [s.roleKey, s])));
     setDirectory(dir);
+    setMyRole(role);
     setLoading(false);
   }
 
@@ -35,16 +40,57 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
     return () => clearTimeout(t);
   }, [printMode]);
 
+  const roleKeyToCategory = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const cat of CALL_SHEET_CATEGORIES) for (const r of cat.roles) m.set(r.key, cat.key);
+    return m;
+  }, []);
+
+  // Which categories the signed-in crew member leads, derived from the
+  // already-fetched assignments — avoids a per-box permission RPC call.
+  // This is a UI hint only; every write is re-checked server-side
+  // against the real my_call_sheet_role() regardless of what this says.
+  const myLeadCategories = useMemo(() => {
+    const cats = new Set<string>();
+    if (myRole === "lead" && crewProfile) {
+      for (const a of assignments.values()) {
+        if (a.isDepartmentLead && a.crewPayeeId === crewProfile.id) {
+          const cat = roleKeyToCategory.get(a.roleKey);
+          if (cat) cats.add(cat);
+        }
+      }
+    }
+    return cats;
+  }, [assignments, myRole, crewProfile, roleKeyToCategory]);
+
+  function canEditRole(roleKey: string): boolean {
+    if (myRole === "admin" || myRole === "producer") return true;
+    if (myRole === "lead") {
+      const cat = roleKeyToCategory.get(roleKey);
+      return !!cat && myLeadCategories.has(cat);
+    }
+    return false;
+  }
+
+  const canManageLeads = myRole === "admin" || myRole === "producer";
   const filledCount = assignments.size;
   const totalRoles = useMemo(() => CALL_SHEET_CATEGORIES.reduce((n, c) => n + c.roles.length, 0), []);
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading call sheet...</div>;
 
+  if (myRole === null) {
+    return <div className="p-6 text-sm text-muted-foreground">You don't have access to this campaign's call sheet.</div>;
+  }
+
   return (
-    <div data-print-mode={printMode ?? undefined} className="call-sheet-root flex-1 overflow-auto">
+    <div data-print-mode={printMode ?? undefined} className="call-sheet-root h-full overflow-auto">
       <div className="call-sheet-noprint px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
         <div>
-          <div className="text-heading text-sm">Call Sheet</div>
+          <div className="text-heading text-sm flex items-center gap-2">
+            Call Sheet
+            {myRole === "viewer" && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5 flex items-center gap-1"><Lock size={9}/> Read only</span>}
+            {myRole === "lead" && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5">Department lead</span>}
+          </div>
           <div className="text-xs text-muted-foreground">{filledCount} of {totalRoles} roles filled</div>
         </div>
         <div className="relative">
@@ -82,17 +128,27 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
             <div className="grid grid-cols-4 gap-2 print:grid-cols-4">
               {cat.roles.map((r) => {
                 const a = assignments.get(r.key);
+                const editable = canEditRole(r.key);
+                const isLead = !!a?.isDepartmentLead;
                 return (
-                  <button key={r.key} onClick={()=>setPickerRole(r)}
+                  <button key={r.key} onClick={()=>editable && setPickerRole(r)} disabled={!editable}
                     className={cx(
-                      "call-sheet-noprint-hover text-left rounded-md border p-3 min-h-[72px] flex flex-col justify-between transition-colors cursor-pointer",
-                      a ? "border-foreground/30 bg-secondary" : "border-dashed border-border bg-secondary/30 hover:border-foreground/40"
+                      "call-sheet-noprint-hover text-left rounded-md p-3 aspect-square flex flex-col justify-between transition-colors",
+                      editable ? "cursor-pointer" : "cursor-default",
+                      isLead ? "border-2 border-foreground bg-secondary"
+                        : a ? "border border-foreground/30 bg-secondary"
+                        : "border border-dashed border-border bg-secondary/30",
+                      editable && !a && "hover:border-foreground/40"
                     )}>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{r.label}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      {r.label} {isLead && <Star size={9} className="fill-current shrink-0"/>}
+                    </div>
                     {a ? (
-                      <div className="text-sm font-medium truncate">{a.fullName}</div>
-                    ) : (
+                      <div className="text-sm font-medium leading-snug line-clamp-3">{a.fullName}</div>
+                    ) : editable ? (
                       <div className="text-xs text-muted-foreground flex items-center gap-1"><Plus size={11}/> Assign</div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground/50">—</div>
                     )}
                   </button>
                 );
@@ -126,6 +182,7 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
           campaignId={campaignId}
           directory={directory}
           current={assignments.get(pickerRole.key) ?? null}
+          canManageLeads={canManageLeads}
           onClose={()=>setPickerRole(null)}
           onAssigned={async ()=>{ setPickerRole(null); await reload(); }}
         />
@@ -134,9 +191,9 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
   );
 }
 
-function RolePickerModal({ role, campaignId, directory, current, onClose, onAssigned }: {
+function RolePickerModal({ role, campaignId, directory, current, canManageLeads, onClose, onAssigned }: {
   role: { key: string; label: string }; campaignId: string; directory: CrewDirectoryEntry[];
-  current: CallSheetAssignment | null; onClose: () => void; onAssigned: () => void;
+  current: CallSheetAssignment | null; canManageLeads: boolean; onClose: () => void; onAssigned: () => void;
 }) {
   const [mode, setMode] = useState<"pick" | "invite">("pick");
   const [query, setQuery] = useState("");
@@ -173,6 +230,15 @@ function RolePickerModal({ role, campaignId, directory, current, onClose, onAssi
     onAssigned();
   }
 
+  async function toggleLead() {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await setDepartmentLead(campaignId, role.key, !current?.isDepartmentLead);
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onAssigned();
+  }
+
   return (
     <Modal onClose={onClose} maxWidth="max-w-sm">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -182,6 +248,14 @@ function RolePickerModal({ role, campaignId, directory, current, onClose, onAssi
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
       </div>
+
+      {current && canManageLeads && (
+        <button onClick={toggleLead} disabled={saving}
+          className="w-full flex items-center gap-2 px-5 py-2.5 border-b border-border text-xs hover:bg-secondary cursor-pointer transition-colors">
+          <Star size={12} className={current.isDepartmentLead ? "fill-current" : ""}/>
+          {current.isDepartmentLead ? "Department lead — click to remove" : "Make department lead"}
+        </button>
+      )}
 
       <div className="flex border-b border-border">
         <button onClick={()=>setMode("pick")} className={cx("flex-1 text-xs py-2 cursor-pointer", mode==="pick"?"border-b-2 border-foreground font-medium":"text-muted-foreground")}>From directory</button>
