@@ -56,6 +56,7 @@ interface AuthContextValue extends AuthState {
   signUpBrandOrAgency: (params: { email: string; password: string; fullName: string; role: "brand_staff" | "agency_staff" }) => Promise<{ error: string | null }>;
   completeOrgSignup: (orgName: string, orgType: OrgType) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  refreshIdentity: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -180,8 +181,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  // For local edits that land straight in Supabase (a self-update
+  // policy, not a signup/session flow) — re-runs the same identity
+  // load signIn/onAuthStateChange already does, so a profile edit
+  // shows up everywhere it's read from context without a full reload.
+  const refreshIdentity = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session) await loadIdentity(session.user.id);
+  }, [loadIdentity]);
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUpBrandOrAgency, completeOrgSignup, signOut }}>
+    <AuthContext.Provider value={{ ...state, signIn, signUpBrandOrAgency, completeOrgSignup, signOut, refreshIdentity }}>
       {children}
     </AuthContext.Provider>
   );

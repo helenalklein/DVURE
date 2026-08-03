@@ -40,6 +40,27 @@ export async function fetchMyCrewGrants(): Promise<CrewAccessDetails[]> {
   }));
 }
 
+// Self-service profile edits — crew_payees_update_self and
+// profiles_update_self (0028/0002) both scope these to the caller's
+// own row, so no id-ownership check is needed client-side. Two tables
+// because crew_payees.full_name is the identity brands see on a call
+// sheet (kept in sync here) while profiles is the account record.
+export async function updateCrewPayee(payeeId: string, patch: { fullName?: string; discipline?: string | null }): Promise<{ error: string | null }> {
+  const update: Record<string, unknown> = {};
+  if (patch.fullName !== undefined) update.full_name = patch.fullName;
+  if (patch.discipline !== undefined) update.discipline = patch.discipline;
+  const { error } = await supabase.from("crew_payees").update(update).eq("id", payeeId);
+  return { error: error?.message ?? null };
+}
+
+export async function updateMyProfile(profileId: string, patch: { fullName?: string; phone?: string }): Promise<{ error: string | null }> {
+  const update: Record<string, unknown> = {};
+  if (patch.fullName !== undefined) update.full_name = patch.fullName;
+  if (patch.phone !== undefined) update.phone = patch.phone;
+  const { error } = await supabase.from("profiles").update(update).eq("id", profileId);
+  return { error: error?.message ?? null };
+}
+
 export async function redeemCrewAccess(accessCode: string): Promise<{ data: CrewAccessDetails | null; error: string | null }> {
   const { data, error } = await supabase.rpc("redeem_crew_access", { p_access_code: accessCode });
   if (error || !data || data.length === 0) {
