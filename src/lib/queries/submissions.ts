@@ -22,6 +22,7 @@ interface ModelRow {
   waist: string | null;
   dress: string | null;
   experience: string | null;
+  photo_url: string | null;
 }
 
 function formatRate(n: number | null): string {
@@ -35,7 +36,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       id, model_id, stage, availability, rate_quoted, notes, brand_score,
       submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
-      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience)
+      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url)
     `)
     .eq("campaign_id", campaignId);
 
@@ -64,6 +65,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
     return {
       id,
       name: m?.full_name ?? "Unknown",
+      photo: m?.photo_url ?? undefined,
       agency: s.submitting_agency?.name ?? "",
       motherAgency: motherByModel.get(s.model_id) ?? "",
       boutiqueAgency: boutiqueByModel.get(s.model_id),
