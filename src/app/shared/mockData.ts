@@ -48,10 +48,10 @@ export const MOCK_NOW = new Date("2026-07-21");
 // (Negotiation/counter-offer states are a deliberate Phase-1 cut, not an oversight.)
 
 export const SAMPLE_TALENT: Talent[] = [
-  { id:1,  name:"Zara Okafor",     photo:photoZaraOkafor,     agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", boutiqueAgency:"IMG Models", location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
-  { id:2,  name:"Amara Diallo",    photo:photoAmaraDiallo,    agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
+  { id:1,  name:"Zara Okafor",     photo:photoZaraOkafor,     agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", boutiqueAgency:"Kindred Talent", location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
+  { id:2,  name:"Amara Diallo",    photo:photoAmaraDiallo,    agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", boutiqueAgency:"Bloom Agency", location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
   { id:3,  name:"Mila Tran",       photo:photoMilaTran,       agency:"IMG Models",        motherAgency:"IMG Models",        location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
-  { id:4,  name:"Petra Novak",     photo:photoPetraNovak,     agency:"IMG Models",        motherAgency:"Storm Models", boutiqueAgency:"IMG Models", location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+  { id:4,  name:"Petra Novak",     photo:photoPetraNovak,     agency:"Nomad Models",      motherAgency:"Storm Models", boutiqueAgency:"Nomad Models", location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
   { id:5,  name:"Ines Ferreira",   photo:photoInesFerreira,   agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
   { id:6,  name:"Nadia Petrov",    photo:photoNadiaPetrov,    agency:"Next Models",       motherAgency:"Next Models",       location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
   { id:7,  name:"Caleb Stone",     photo:photoCalebStone,     agency:"Wilhelmina",        motherAgency:"Wilhelmina",        location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
@@ -234,6 +234,9 @@ export const ORG_COUNTRY: Record<string, string> = {
   "Wilhelmina": "US",
   "DNA Models": "US",
   "Next Models": "US",
+  "Kindred Talent": "US",
+  "Nomad Models": "UK",
+  "Bloom Agency": "FR",
 };
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
