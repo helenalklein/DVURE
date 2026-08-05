@@ -391,6 +391,12 @@ deno_version = 2
 # comment on why that's not optional).
 verify_jwt = false
 
+[functions.ics-feed]
+# Calendar apps (Apple/Google Calendar) poll this URL directly on their
+# own schedule — no Supabase session to check. The token in the query
+# string is the credential instead (see 0040's own comment).
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

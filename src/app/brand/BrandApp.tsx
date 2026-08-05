@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
@@ -8,7 +8,7 @@ import {
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home
+  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone, RefreshCw
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
@@ -20,16 +20,21 @@ import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } 
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import InvoicePaymentPanel from "./InvoicePayment";
-import CampaignCalendar from "./CampaignCalendar";
+import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
-import { fetchShootDays, saveShootDays, type ShootDay } from "../../lib/queries/deliverables";
+import { fetchShootDays, saveShootDays, createShootDay, type ShootDay } from "../../lib/queries/deliverables";
+import { createCasting } from "../../lib/queries/castings";
+import { fetchScheduleEvents } from "../../lib/queries/schedule";
+import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "../../lib/queries/calendarFeed";
+import { fetchOrgMembers, updateOrgMember, type OrgMember, type AccessLevel } from "../../lib/queries/orgMembers";
+import { createOrgStaffInvite, fetchPendingOrgInvites, type PendingInvite } from "../../lib/queries/invites";
 
-type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
+type GlobalView = "campaigns" | "urgent" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
 
@@ -86,7 +91,8 @@ function ExclamationIcon({ size = 15, className }: { size?: number; className?: 
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
   { id:"campaigns",        label:"Projects",   Icon:Camera                },
-  { id:"urgent",           label:"Tasks",      Icon:ExclamationIcon        },
+  { id:"urgent",           label:"Pending Review", Icon:ExclamationIcon    },
+  { id:"schedule",         label:"Calendar",   Icon:Calendar               },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
   { id:"messaging",        label:"Messaging",  Icon:MessageSquare          },
@@ -95,25 +101,48 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
   { id:"directory",        label:"Directory",  Icon:User                   },
 ];
 
-function BrandSidebar({ active, onNav, onOpenCampaign, onLogout, leadsNeededCount }: {
-  active: GlobalView; onNav: (v: GlobalView) => void; onOpenCampaign: (id: number) => void; onLogout: () => void; leadsNeededCount: number;
+// Re-pulls the signed-in identity (org verification/subscription status,
+// access level, etc.) from Supabase — the one thing every screen reads
+// from cached AuthProvider state, which otherwise only updates on
+// sign-in or a full page reload.
+function HeaderRefreshButton() {
+  const { refreshIdentity } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  async function handleRefresh() {
+    setRefreshing(true);
+    await refreshIdentity();
+    setRefreshing(false);
+  }
+  return (
+    <button onClick={handleRefresh} title="Refresh" disabled={refreshing}
+      className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:cursor-wait">
+      <RefreshCw size={13} className={refreshing ? "animate-spin" : undefined}/>
+    </button>
+  );
+}
+
+function BrandSidebar({ active, onNav, onLogout, leadsNeededCount }: {
+  active: GlobalView; onNav: (v: GlobalView) => void; onLogout: () => void; leadsNeededCount: number;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
   const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length + leadsNeededCount;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
+      <div className="px-3 h-14 flex items-center border-b border-border gap-1.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-base font-medium truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
+          <div className="text-xs font-medium min-w-0">
+            <span className="truncate block">{orgName}</span>
+          </div>
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
+        <HeaderRefreshButton/>
         <button onClick={()=>onNav("campaigns")} title="Projects"
-          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
-          <Home size={15}/>
+          className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+          <Home size={13}/>
         </button>
       </div>
       <nav className="flex-1 px-2 py-3 space-y-0.5">
@@ -130,14 +159,13 @@ function BrandSidebar({ active, onNav, onOpenCampaign, onLogout, leadsNeededCoun
           );
         })}
       </nav>
-      <div className="px-3 pb-3 border-t border-border pt-3">
-        <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 px-2">Recent</div>
-        {[{id:1,name:"AW25 Womenswear"},{id:2,name:"SS25 Fragrance"},{id:3,name:"Resort Lookbook"},{id:5,name:"AW26 Runway"}].map(c => (
-          <button key={c.id} onClick={()=>onOpenCampaign(c.id)}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-left">
-            <Camera size={11}/><span className="truncate">{c.name}</span>
-          </button>
-        ))}
+      <div className="px-3 pb-1 border-t border-border pt-3">
+        <button onClick={()=>onNav("settings")}
+          className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left",
+            active==="settings"?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
+          )}>
+          <Settings size={15}/>Settings
+        </button>
       </div>
       <div className="px-3 pb-3 border-t border-border pt-3">
         <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary">
@@ -155,11 +183,10 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"overview",      label:"Overview",      Icon:LayoutDashboard },
   { id:"moodboard",     label:"Submissions",   Icon:PolaroidIcon    },
   { id:"requirements",  label:"Requirements",  Icon:BookOpen        },
-  { id:"deliverables",  label:"Deliverables",  Icon:Calendar        },
+  { id:"deliverables",  label:"Schedule",      Icon:Calendar        },
   { id:"contracts",     label:"Contracts",     Icon:FileCheck       },
-  { id:"bookings",      label:"Bookings",      Icon:Briefcase       },
   { id:"activity",      label:"Activity",      Icon:Activity        },
-  { id:"collaboration", label:"Collaboration", Icon:MessageSquare   },
+  { id:"collaboration", label:"Messaging",     Icon:MessageSquare   },
   { id:"users",         label:"Users",         Icon:User            },
 ];
 
@@ -188,17 +215,20 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
   const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
+      <div className="px-3 h-14 flex items-center border-b border-border gap-1.5">
         <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
           <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-base font-medium truncate flex items-center gap-1.5">{orgName} <CountryFlag country={ORG_COUNTRY[orgName]} className="text-xs"/></div>
+          <div className="text-xs font-medium min-w-0">
+            <span className="truncate block">{orgName}</span>
+          </div>
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
+        <HeaderRefreshButton/>
         <button onClick={onHome} title="Projects"
-          className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
-          <Home size={15}/>
+          className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+          <Home size={13}/>
         </button>
       </div>
       <div className="px-3 pt-3 pb-2">
@@ -630,8 +660,8 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
 // Mock campaigns keep the two original demo rows and just don't save.
 function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) {
   const [days, setDays] = useState<ShootDay[]>([
-    { dateLabel: "Mon 07/14", hours: "08:00–18:00", talentNote: "James Whitfield + Amara Diallo", description: "Hero shots — Studio 9, NYC" },
-    { dateLabel: "Tue 07/15", hours: "09:00–17:00", talentNote: "Amara Diallo", description: "Close-up editorial" },
+    { eventDate: "2026-07-14", hours: "08:00–18:00", talentNote: "James Whitfield + Amara Diallo", description: "Hero shots — Studio 9, NYC" },
+    { eventDate: "2026-07-15", hours: "09:00–17:00", talentNote: "Amara Diallo", description: "Close-up editorial" },
   ]);
   const [loading, setLoading] = useState(!!realCampaignId);
   const [saving, setSaving] = useState(false);
@@ -652,7 +682,7 @@ function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) 
     setDays(prev => prev.map((d,idx) => idx===i ? { ...d, ...patch } : d));
   }
   function addDay() {
-    setDays(prev => [...prev, { dateLabel: "", hours: "", talentNote: "", description: "" }]);
+    setDays(prev => [...prev, { eventDate: "", hours: "", talentNote: "", description: "" }]);
   }
   function removeDay(i: number) {
     setDays(prev => prev.filter((_,idx) => idx!==i));
@@ -672,7 +702,7 @@ function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) 
     <div className="flex-1 overflow-auto p-6">
       <div className="max-w-2xl space-y-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-heading text-sm">Deliverables</h2>
+          <h2 className="text-heading text-sm">Schedule</h2>
           <Badge label="Editable" variant="info"/>
         </div>
         <div className="glass-subtle border rounded-md p-5 space-y-4">
@@ -681,7 +711,7 @@ function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) 
             <div key={d.id ?? i} className="border border-border rounded-md p-3 space-y-2 relative">
               <button onClick={()=>removeDay(i)} className="absolute top-2.5 right-2.5 text-muted-foreground hover:text-foreground cursor-pointer" title="Remove"><X size={12}/></button>
               <div className="grid grid-cols-2 gap-2 pr-5">
-                <TextInput placeholder="Date" value={d.dateLabel} onChange={e=>updateDay(i,{dateLabel:e.target.value})}/>
+                <TextInput type="date" placeholder="Date" value={d.eventDate} onChange={e=>updateDay(i,{eventDate:e.target.value})}/>
                 <TextInput placeholder="Hours" value={d.hours} onChange={e=>updateDay(i,{hours:e.target.value})}/>
               </div>
               <TextInput placeholder="Talent" value={d.talentNote} onChange={e=>updateDay(i,{talentNote:e.target.value})}/>
@@ -694,7 +724,7 @@ function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) 
         </div>
         <div className="flex justify-end items-center gap-3">
           {saved && <span className="text-xs text-[#27AE60] flex items-center gap-1"><Check size={12}/> Saved</span>}
-          <Btn variant="primary" icon={<Check size={13}/>} onClick={handleSave} disabled={saving || !realCampaignId}>{saving ? "Saving…" : "Save Deliverables"}</Btn>
+          <Btn variant="primary" icon={<Check size={13}/>} onClick={handleSave} disabled={saving || !realCampaignId}>{saving ? "Saving…" : "Save Schedule"}</Btn>
         </div>
         {!realCampaignId && <div className="text-xs text-muted-foreground text-right">This is a demo campaign — changes here aren't saved.</div>}
       </div>
@@ -817,6 +847,8 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
           </div>
         ))}
       </div>
+
+      {realCampaignId && <InvoicePaymentPanel campaignId={realCampaignId} key={realCampaignId}/>}
 
       {showPicker && (
         <Modal onClose={()=>setShowPicker(false)} maxWidth="max-w-sm">
@@ -1345,32 +1377,6 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="contracts" && <ContractsTab realCampaignId={realCampaignId} talent={talent} shim={shim} profileId={profile?.id}/>}
 
-          {section==="bookings" && (
-            <div className="flex-1 overflow-auto">
-              {realCampaignId && <InvoicePaymentPanel campaignId={realCampaignId} key={realCampaignId}/>}
-              <div className="max-w-2xl space-y-3 p-6">
-                <p className="text-xs text-muted-foreground mb-4">Bookings originate from this campaign's approved submissions.</p>
-                {talent.filter(t=>t.stage==="booked").map(t=>(
-                  <div key={t.id} className="glass-subtle border border-foreground/20 rounded-md p-4 flex items-center gap-4">
-                    {t.photo ? <img src={t.photo} alt="" className="w-14 h-[72px] rounded-sm shrink-0 object-cover"/> : <XBox className="w-14 h-[72px] rounded-sm shrink-0"/>}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <div className="text-sm font-semibold">{t.name}</div>
-                        <Badge label="Booked" variant="active"/>
-                      </div>
-                      <div className="text-xs text-muted-foreground">{t.agency} · {t.rate}</div>
-                      {t.note&&<div className="text-xs text-muted-foreground italic mt-1">{t.note}</div>}
-                    </div>
-                    <div className="flex gap-2">
-                      <Btn variant="outline" size="sm" icon={<FileText size={11}/>}>Contract</Btn>
-                      <Btn variant="ghost" size="sm" icon={<MessageSquare size={11}/>}>Message</Btn>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {section==="activity" && (
             <div className="flex-1 overflow-auto p-6">
               <div className="max-w-2xl space-y-1">
@@ -1393,28 +1399,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="collaboration" && <CollaborationTab campaign={campaign} focusAgency={focusAgency} onFocusAgencyHandled={()=>setFocusAgency(null)}/>}
 
-          {section==="users" && (
-            <div className="flex-1 overflow-auto p-6">
-              <div className="max-w-2xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-heading text-sm">Campaign Users</h2>
-                  <Btn variant="outline" size="sm" icon={<Plus size={12}/>}>Add / Remove</Btn>
-                </div>
-                {/* Brand's own team only — who's on the agency side of a
-                    campaign is that agency's own roster to manage, not
-                    something a brand has (or should have) access to edit. */}
-                <div className="space-y-2">
-                  {ORG_USERS.filter(u=>u.org===(org?.name ?? "")).slice(0,4).map(u=>(
-                    <div key={u.id} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
-                      <UserAvatar name={u.name} className="w-7 h-7 text-[10px]"/>
-                      <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.title}</div></div>
-                      <Badge label={u.access} variant={ACCESS_BADGE[u.access]}/>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+          {section==="users" && <UsersTab orgId={org?.id}/>}
           </>)}
         </div>
       </div>
@@ -1479,13 +1464,13 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
 // ─── COLLABORATION ───────────────────────────────────────────────────────────
 
-type CollabScope = "internal" | "agency";
+type CollabScope = "internal" | "agency" | "broadcast";
 
 // Every agency distributed on a campaign gets its own private thread with
 // the brand — two agencies never see each other's messages. Models get
 // read-only access to their own agency's thread elsewhere in the app.
-// The one exception: a "Send Update to All Agencies" broadcast, which
-// posts the same message into every agency's thread at once, for
+// The one exception is the Blast thread: a dedicated top-of-list thread
+// that posts the same message into every agency's thread at once, for
 // logistics changes (call time, location) that need to reach everyone
 // without opening up cross-agency visibility for normal conversation.
 function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
@@ -1502,14 +1487,13 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   const [threads, setThreads] = useState<Record<string, CampaignThreadMessage[]>>(
     () => CAMPAIGN_AGENCY_THREADS[campaign.id] ?? {}
   );
+  const [broadcastMsgs, setBroadcastMsgs] = useState<CampaignThreadMessage[]>([]);
   const [internalMsgs, setInternalMsgs] = useState([
     { id:1, from:"Priya Anand", text:"Mood board direction is locked — sharing the deck before we brief the agencies.", ts:"Jun 18, 4:10 PM" },
     { id:2, from:"Marcus Webb", text:"Nice. Let's hold final budget sign-off until Priya confirms the number.", ts:"Jun 18, 4:22 PM" },
     { id:3, from:"Priya Anand", text:"Confirmed — $18,000 total, $5,150 committed so far.", ts:"Jun 18, 4:30 PM" },
   ]);
   const [input, setInput] = useState("");
-  const [showBroadcast, setShowBroadcast] = useState(false);
-  const [broadcastText, setBroadcastText] = useState("");
   const [sent, setSent] = useState<string | null>(null);
 
   function flashSent(label: string) {
@@ -1526,37 +1510,42 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
   }, [focusAgency]);
 
   const isInternal = scope === "internal";
+  const isBroadcast = scope === "broadcast";
   const agencyMsgs = threads[selectedAgency] ?? [];
+  const displayMsgs = isInternal ? internalMsgs : isBroadcast ? broadcastMsgs : agencyMsgs;
 
   function send() {
     if (!input.trim() || messagingGate.gated) return;
     if (isInternal) {
       setInternalMsgs(p=>[...p,{ id:Date.now(), from:meName, text:input, ts:"Now" }]);
+      flashSent("Message sent");
+    } else if (isBroadcast) {
+      const text = input;
+      setBroadcastMsgs(p=>[...p, { id:Date.now(), from:meName, fromOrg:meOrg, text, ts:"Now", broadcast:true }]);
+      setThreads(prev => {
+        const next = { ...prev };
+        for (const a of agencies) {
+          next[a] = [...(next[a]??[]), { id:Date.now()+Math.random(), from:meName, fromOrg:meOrg, text, ts:"Now", broadcast:true }];
+        }
+        return next;
+      });
+      flashSent(`Sent to all ${agencies.length} agenc${agencies.length===1?"y":"ies"}`);
     } else {
       setThreads(p=>({ ...p, [selectedAgency]: [...(p[selectedAgency]??[]), { id:Date.now(), from:meName, fromOrg:meOrg, text:input, ts:"Now" }] }));
+      flashSent("Message sent");
     }
     setInput("");
-    flashSent("Message sent");
-  }
-
-  function sendBroadcast() {
-    if (!broadcastText.trim() || messagingGate.gated) return;
-    setThreads(prev => {
-      const next = { ...prev };
-      for (const a of agencies) {
-        const msg: CampaignThreadMessage = { id:Date.now()+Math.random(), from:meName, fromOrg:meOrg, text:broadcastText, ts:"Now", broadcast:true };
-        next[a] = [...(next[a]??[]), msg];
-      }
-      return next;
-    });
-    setBroadcastText("");
-    setShowBroadcast(false);
-    flashSent(`Sent to all ${agencies.length} agenc${agencies.length===1?"y":"ies"}`);
   }
 
   return (
-    <div className="flex-1 flex min-h-0 relative">
+    <div className="h-full flex min-h-0 relative">
       <div className="w-48 shrink-0 border-r border-border overflow-y-auto">
+        <button onClick={()=>setScope("broadcast")}
+          className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
+            isBroadcast?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+          )}>
+          <Megaphone size={11}/> All Agencies
+        </button>
         <button onClick={()=>setScope("internal")}
           className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
             isInternal?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
@@ -1568,34 +1557,31 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
         {agencies.map(a=>(
           <button key={a} onClick={()=>{ setScope("agency"); setSelectedAgency(a); }}
             className={cx("w-full flex items-center gap-1.5 px-4 py-3 text-xs font-medium text-left border-b border-border transition-colors",
-              !isInternal && selectedAgency===a?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              scope==="agency" && selectedAgency===a?"bg-secondary text-foreground":"text-muted-foreground hover:text-foreground hover:bg-secondary/50"
             )}>
-            <Globe size={11} className="shrink-0"/> <span className="truncate">{a}</span> <CountryFlag country={ORG_COUNTRY[a]} className="text-[11px] shrink-0"/>
+            <Globe size={11} className="shrink-0"/> <span className="truncate">{a}</span>
           </button>
         ))}
       </div>
       <div className="flex-1 flex flex-col min-h-0">
         <div className="px-6 py-2.5 border-b border-border flex items-center justify-between shrink-0">
           <div>
-            <div className="text-xs font-semibold">{isInternal ? `${meOrg} — Internal` : `${campaign.name} — ${selectedAgency}`}</div>
+            <div className="text-xs font-semibold">{isInternal ? `${meOrg} — Internal` : isBroadcast ? `${campaign.name} — All Agencies` : `${campaign.name} — ${selectedAgency}`}</div>
             <div className="text-[10px] text-muted-foreground">
-              {isInternal ? `Visible only to ${meOrg}` : `Private to ${meOrg} + ${selectedAgency} — no other agency can see this`}
+              {isInternal ? `Visible only to ${meOrg}` : isBroadcast ? `Delivered into every distributed agency's own thread at once — ${agencies.length} agenc${agencies.length===1?"y":"ies"} on this campaign` : `Private to ${meOrg} + ${selectedAgency} — no other agency can see this`}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {!isInternal && <Btn variant="outline" size="sm" onClick={()=>setShowBroadcast(true)}>Send Update to All Agencies</Btn>}
-            <Badge label={isInternal ? "Internal" : "Private thread"} variant={isInternal ? "draft" : "info"}/>
-          </div>
+          <Badge label={isInternal ? "Internal" : isBroadcast ? "Blast" : "Private thread"} variant={isInternal ? "draft" : isBroadcast ? "warning" : "info"}/>
         </div>
         <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
-          {(isInternal ? internalMsgs : agencyMsgs).length===0 && (
-            <div className="text-xs text-muted-foreground italic">No messages yet.</div>
+          {displayMsgs.length===0 && (
+            <div className="text-xs text-muted-foreground italic">{isBroadcast ? "No updates sent to all agencies yet." : "No messages yet."}</div>
           )}
-          {(isInternal ? internalMsgs : agencyMsgs).map(m => {
+          {displayMsgs.map(m => {
             const isMe = m.from === meName;
             return (
               <div key={m.id} className={cx("flex flex-col gap-1", isMe && "items-end")}>
-                {"broadcast" in m && m.broadcast && (
+                {"broadcast" in m && m.broadcast && !isBroadcast && (
                   <div className="text-[9px] font-mono uppercase tracking-wide text-urgent mb-0.5">Update sent to all agencies</div>
                 )}
                 <div className={cx("rounded-xl px-4 py-2.5 text-sm max-w-md leading-relaxed",
@@ -1619,7 +1605,7 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
           <div className="flex gap-3 items-end">
             <textarea value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-              placeholder={isInternal ? "Message your team…" : `Message ${selectedAgency}…`} rows={2}
+              placeholder={isInternal ? "Message your team…" : isBroadcast ? "Message all agencies at once…" : `Message ${selectedAgency}…`} rows={2}
               className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground resize-none placeholder:text-muted-foreground"/>
             <button onClick={send} disabled={messagingGate.gated}
               className="p-2.5 bg-foreground hover:bg-foreground/90 text-primary-foreground rounded-md transition-colors cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -1629,29 +1615,6 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
         </div>
       </div>
 
-      {showBroadcast && (
-        <Modal onClose={()=>setShowBroadcast(false)} maxWidth="max-w-md">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="text-heading text-sm">Send Update to All Agencies</div>
-            <button onClick={()=>setShowBroadcast(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
-          </div>
-          <div className="p-5 space-y-3">
-            <div className="text-xs text-muted-foreground">
-              Sent once, delivered into every agency's private thread on this campaign ({agencies.length} agenc{agencies.length===1?"y":"ies"}). Their models will see it too.
-            </div>
-            <Textarea label="Message" placeholder="e.g. Call time moved to 8am — please notify your talent." value={broadcastText} onChange={e=>setBroadcastText(e.target.value)} rows={4}/>
-            {messagingGate.gated && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Lock size={12}/> {messagingGate.reason === "unverified" ? "Verification required before messages can be sent." : "Add a payment method to send messages."}
-              </div>
-            )}
-          </div>
-          <div className="px-5 pb-5 flex gap-2">
-            <Btn variant="primary" disabled={!broadcastText.trim() || messagingGate.gated} onClick={sendBroadcast}>Send to All</Btn>
-            <Btn variant="outline" onClick={()=>setShowBroadcast(false)}>Cancel</Btn>
-          </div>
-        </Modal>
-      )}
       {sent && (
         <div className="absolute bottom-6 right-6 glass-strong border rounded-lg shadow-xl px-5 py-4 flex items-center gap-3 z-30 animate-in fade-in slide-in-from-bottom-2">
           <div className="w-9 h-9 rounded-full bg-foreground text-primary-foreground flex items-center justify-center shrink-0">
@@ -1664,6 +1627,167 @@ function CollaborationTab({ campaign, focusAgency, onFocusAgencyHandled }: {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── ORG USERS ──────────────────────────────────────────────────────────────
+// Brand's own team only — who's on the agency side of a campaign is that
+// agency's own roster to manage, not something a brand has (or should
+// have) access to edit. Membership is org-wide (org_memberships has no
+// per-campaign scoping), so "Campaign Users" really means "your team,"
+// same as before this was wired to real data.
+const ACCESS_LEVEL_OPTIONS: AccessLevel[] = ["administrator", "enhanced", "basic"];
+
+function UsersTab({ orgId }: { orgId: string | undefined }) {
+  const { profile } = useAuth();
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [pending, setPending] = useState<PendingInvite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, { title: string; accessLevel: AccessLevel }>>({});
+
+  async function reload() {
+    if (!orgId) { setLoading(false); return; }
+    const [rows, invites] = await Promise.all([fetchOrgMembers(orgId), fetchPendingOrgInvites(orgId, "brand_staff")]);
+    setMembers(rows);
+    setPending(invites);
+    setDrafts(Object.fromEntries(rows.map(m => [m.membershipId, { title: m.title ?? "", accessLevel: m.accessLevel }])));
+    setLoading(false);
+  }
+  useEffect(() => { reload(); }, [orgId]);
+
+  async function saveMember(membershipId: string) {
+    const draft = drafts[membershipId];
+    if (!draft) return;
+    setSavingId(membershipId);
+    await updateOrgMember(membershipId, draft);
+    setSavingId(null);
+    await reload();
+  }
+
+  if (loading) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-heading text-sm">Campaign Users</h2>
+          <div className="flex items-center gap-2">
+            <Btn variant="outline" size="sm" icon={<Edit3 size={12}/>} onClick={()=>setEditMode(e=>!e)}>{editMode ? "Done" : "Edit"}</Btn>
+            <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={()=>setShowInvite(true)}>Add</Btn>
+          </div>
+        </div>
+        {members.length===0 && pending.length===0 ? (
+          <div className="glass-subtle border border-dashed rounded-md p-8 text-center text-sm text-muted-foreground">No team members yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {members.map(m=>(
+              <div key={m.membershipId} className="glass-subtle border rounded-md px-4 py-3 flex items-center gap-3">
+                <UserAvatar name={m.name} className="w-7 h-7 text-[10px]"/>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium">{m.name}</div>
+                  {editMode ? (
+                    <input value={drafts[m.membershipId]?.title ?? ""} placeholder="Title"
+                      onChange={e=>setDrafts(d=>({ ...d, [m.membershipId]: { ...d[m.membershipId], title: e.target.value } }))}
+                      className="mt-1 text-xs bg-input-background border border-border rounded px-2 py-1 w-full focus:outline-none focus:border-foreground placeholder:text-muted-foreground"/>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">{m.title ?? "—"}</div>
+                  )}
+                </div>
+                {editMode ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <select value={drafts[m.membershipId]?.accessLevel ?? m.accessLevel}
+                      onChange={e=>setDrafts(d=>({ ...d, [m.membershipId]: { ...d[m.membershipId], accessLevel: e.target.value as AccessLevel } }))}
+                      className="text-xs bg-input-background border border-border rounded px-2 py-1 focus:outline-none focus:border-foreground">
+                      {ACCESS_LEVEL_OPTIONS.map(a=><option key={a} value={a}>{a}</option>)}
+                    </select>
+                    <Btn variant="outline" size="sm" disabled={savingId===m.membershipId} onClick={()=>saveMember(m.membershipId)}>{savingId===m.membershipId?"Saving…":"Save"}</Btn>
+                  </div>
+                ) : (
+                  <Badge label={m.accessLevel} variant={ACCESS_BADGE[m.accessLevel]}/>
+                )}
+              </div>
+            ))}
+            {pending.map(p=>(
+              <div key={p.id} className="glass-subtle border border-dashed rounded-md px-4 py-3 flex items-center gap-3">
+                <UserAvatar name={p.email} className="w-7 h-7 text-[10px]"/>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{p.email}</div>
+                  <div className="text-xs text-muted-foreground">Invited — hasn't joined yet</div>
+                </div>
+                <Badge label="Pending" variant="draft"/>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {showInvite && orgId && profile && (
+        <InviteStaffModal orgId={orgId} invitedByProfileId={profile.id} onClose={()=>setShowInvite(false)} onInvited={reload}/>
+      )}
+    </div>
+  );
+}
+
+function InviteStaffModal({ orgId, invitedByProfileId, onClose, onInvited }: {
+  orgId: string; invitedByProfileId: string; onClose: () => void; onInvited: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handleSend() {
+    if (!email.trim()) return;
+    setSending(true);
+    setError(null);
+    const { token, error: err } = await createOrgStaffInvite(orgId, invitedByProfileId, email.trim(), "brand_staff");
+    setSending(false);
+    if (err || !token) { setError(err ?? "Couldn't create invite."); return; }
+    setLink(`${window.location.origin}/accept-invite/${token}`);
+    onInvited();
+  }
+
+  function handleCopy() {
+    if (!link) return;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-heading text-sm">Add a teammate</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      </div>
+      {!link ? (
+        <>
+          <div className="p-5 space-y-3">
+            <TextInput label="Email" placeholder="teammate@company.com" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
+            <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+              Creates a private sign-up link with basic access — raise their access level from here once they've joined. There's no automated email yet — share the link with them directly.
+            </div>
+            {error && <div className="text-xs text-red-500">{error}</div>}
+          </div>
+          <div className="px-5 pb-5 flex gap-2">
+            <Btn variant="primary" disabled={!email.trim() || sending} onClick={handleSend}>{sending ? "Creating…" : "Create Invite Link"}</Btn>
+            <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+          </div>
+        </>
+      ) : (
+        <div className="p-5 space-y-3">
+          <div className="text-xs text-muted-foreground">Share this link with your teammate — it lets them set their own password and join.</div>
+          <div className="flex items-center gap-2 border border-border rounded-md bg-input-background px-3 py-2">
+            <div className="flex-1 text-xs font-mono truncate">{link}</div>
+            <button onClick={handleCopy} className="text-xs font-medium text-foreground hover:underline cursor-pointer shrink-0">{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <Btn variant="outline" fullWidth onClick={onClose}>Done</Btn>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -1709,7 +1833,7 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
       <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`}/>
       <div className="flex items-center justify-between gap-1 px-6 pt-5 border-b border-border shrink-0">
         <div className="flex items-center gap-1">
-          {["active","drafts","archived","calendar"].map(t=>(
+          {["active","drafts","archived"].map(t=>(
             <button key={t} onClick={()=>setTab(t)}
               className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
                 tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
@@ -1721,9 +1845,6 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
           <Plus size={14}/> New Campaign
         </button>
       </div>
-      {tab==="calendar" ? (
-        <CampaignCalendar campaigns={campaigns.filter(c=>c.status!=="archived")} openCampaign={openCampaign}/>
-      ) : (
       <div className="flex-1 overflow-auto p-6 space-y-5">
         {filtered.length===0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
@@ -1769,7 +1890,6 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
           </div>
         )}
       </div>
-      )}
     </div>
   );
 }
@@ -1788,10 +1908,10 @@ function UrgentOverdueScreen({ openCampaign, openCampaignCallSheet, leadsNeeded 
   const totalCount = OVERDUE_ACTIONS.length + leadsNeeded.length;
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Tasks" sub={`${currentUser?.org ?? ""} · ${totalCount} open tasks`}/>
+      <TopBar title="Pending Review" sub={`${currentUser?.org ?? ""} · ${totalCount} open`}/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex gap-10">
-          <div className="flex-1 min-w-0 max-w-3xl space-y-3">
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-10">
+          <div className="flex-1 min-w-0 lg:max-w-3xl space-y-3">
             {/* Real, DB-derived — not mock like the rest of this screen: a
                 filled call sheet role with no department lead set yet on
                 its whole campaign. */}
@@ -1821,43 +1941,45 @@ function UrgentOverdueScreen({ openCampaign, openCampaignCallSheet, leadsNeeded 
               </div>
             ))}
           </div>
-          {/* The only place an overdue/urgent count lives now — Campaigns
-              dropped its own copy of this metric entirely. */}
-          <div className="w-48 shrink-0 min-h-[24rem] border-l border-border pl-6 flex flex-col">
-            <div className="bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3">
-              <div className="text-3xl font-semibold tabular-nums tracking-tight">{totalCount}</div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Tasks</div>
-            </div>
-            <div className="flex-1 flex flex-col">
-              {[
-                { label:"Leads",     value:leadsNeeded.length },
-                { label:"Payments",  value:byType("Payment") },
-                { label:"Contracts", value:byType("Contract") },
-                { label:"Talent Review", value:byType("Review") },
-              ].map((s,i)=>(
-                <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
-                  <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Recently Completed — quiet history column, same idea as
-              Payments' Recent Activity: real completed items, not
-              another queue demanding action. */}
-          <div className="w-64 shrink-0 border-l border-border pl-6">
-            <h2 className="text-heading text-base mb-3">Recently Completed</h2>
-            <div className="space-y-3">
-              {RECENTLY_COMPLETED.map((r,i)=>(
-                <div key={i} className="text-xs">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
-                    <span className="text-[10px] font-mono text-muted-foreground">{r.resolvedDate}</span>
-                    <Badge label={r.type} variant="info"/>
+          <div className="flex flex-col sm:flex-row lg:flex-col gap-8 lg:gap-3 shrink-0">
+            {/* The only place an overdue/urgent count lives now — Campaigns
+                dropped its own copy of this metric entirely. */}
+            <div className="lg:w-48 shrink-0 lg:min-h-[24rem] lg:border-l border-border lg:pl-6 flex flex-col">
+              <div className="bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3">
+                <div className="text-3xl font-semibold tabular-nums tracking-tight">{totalCount}</div>
+                <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Pending</div>
+              </div>
+              <div className="flex-1 flex flex-col">
+                {[
+                  { label:"Leads",     value:leadsNeeded.length },
+                  { label:"Payments",  value:byType("Payment") },
+                  { label:"Contracts", value:byType("Contract") },
+                  { label:"Talent Review", value:byType("Review") },
+                ].map((s,i)=>(
+                  <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
+                    <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
                   </div>
-                  <div className="leading-snug">{r.label}</div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+            {/* Recently Completed — quiet history column, same idea as
+                Payments' Recent Activity: real completed items, not
+                another queue demanding action. */}
+            <div className="lg:w-64 shrink-0 border-l border-border pl-6">
+              <h2 className="text-heading text-base mb-3">Recently Completed</h2>
+              <div className="space-y-3">
+                {RECENTLY_COMPLETED.map((r,i)=>(
+                  <div key={i} className="text-xs">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
+                      <span className="text-[10px] font-mono text-muted-foreground">{r.resolvedDate}</span>
+                      <Badge label={r.type} variant="info"/>
+                    </div>
+                    <div className="leading-snug">{r.label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -3360,6 +3482,72 @@ function DirectoryScreen() {
 
 // ─── REPORTS ──────────────────────────────────────────────────────────────────
 
+function ScheduleScreen({ campaigns, realIdShim, openCampaign }: { campaigns: Campaign[]; realIdShim: Map<number, string>; openCampaign: (id: number) => void }) {
+  const { profile, org } = useAuth();
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [feedToken, setFeedToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (org?.id) fetchCalendarFeedToken(org.id).then(setFeedToken);
+  }, [org?.id]);
+
+  async function handleRegenerateFeed() {
+    if (!org?.id) return;
+    const { token } = await regenerateCalendarFeedToken(org.id);
+    if (token) setFeedToken(token);
+  }
+
+  const activeCampaigns = campaigns.filter(c=>c.status!=="archived");
+  // Only real campaigns (present in realIdShim) can actually persist a
+  // casting or shoot day — mock campaigns don't back onto a real row to
+  // attach one to, same restriction Deliverables already has.
+  const addableCampaigns = activeCampaigns.filter(c=>realIdShim.has(c.id));
+
+  async function reload() {
+    const realIds = [...realIdShim.values()];
+    const raw = await fetchScheduleEvents(realIds);
+    const byRealId = new Map(activeCampaigns.map(c => [realIdShim.get(c.id), c] as const));
+    const resolved: CalEvent[] = [];
+    for (const e of raw) {
+      const campaign = byRealId.get(e.campaignRealId);
+      if (!campaign) continue;
+      resolved.push({
+        date: new Date(`${e.eventDate}T00:00:00`),
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        kind: e.kind,
+        label: `${campaign.name}: ${e.title}`,
+      });
+    }
+    setEvents(resolved);
+    setLoading(false);
+  }
+
+  useEffect(() => { reload(); }, [realIdShim]);
+
+  async function handleAddEvent(params: { campaignId: number; kind: EventKind; date: string; title: string }): Promise<{ error: string | null }> {
+    const realId = realIdShim.get(params.campaignId);
+    if (!realId) return { error: "Campaign not found." };
+    const { error } = params.kind === "casting"
+      ? await createCasting({ campaignId: realId, eventDate: params.date, title: params.title, createdByProfileId: profile?.id })
+      : await createShootDay({ campaignId: realId, eventDate: params.date, description: params.title });
+    if (!error) await reload();
+    return { error };
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <TopBar title="Calendar" sub="Across every active campaign"/>
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
+      ) : (
+        <CampaignCalendar campaigns={activeCampaigns} addableCampaigns={addableCampaigns} openCampaign={openCampaign} events={events} onAddEvent={handleAddEvent} feedToken={feedToken} onRegenerateFeed={handleRegenerateFeed}/>
+      )}
+    </div>
+  );
+}
+
 function Reports() {
   const [running, setRunning] = useState<string|null>(null);
   const reportTypes = [
@@ -3849,10 +4037,11 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")}/>
         ) : (
           <>
-            <BrandSidebar active={globalNav} onNav={handleGlobalNav} onOpenCampaign={openCampaign} onLogout={onLogout} leadsNeededCount={leadsNeeded.length}/>
+            <BrandSidebar active={globalNav} onNav={handleGlobalNav} onLogout={onLogout} leadsNeededCount={leadsNeeded.length}/>
             <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }}/>}
               {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign} openCampaignCallSheet={openCampaignCallSheet} leadsNeeded={leadsNeeded}/>}
+              {view==="schedule"         && <ScheduleScreen campaigns={allCampaigns} realIdShim={realIdShim} openCampaign={openCampaign}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
               {view==="contracts-global" && <GlobalContracts/>}
               {view==="payments-global"  && <GlobalPayments/>}

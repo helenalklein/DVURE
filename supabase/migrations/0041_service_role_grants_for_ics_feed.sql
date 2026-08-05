@@ -1,0 +1,14 @@
+-- ics-feed (the new .ics calendar export function) queries organizations,
+-- campaigns, shoot_days, and castings via the service_role key — there's
+-- no interactive session for a calendar app polling a URL, so RLS is
+-- correctly bypassed by service_role's BYPASSRLS attribute. But
+-- BYPASSRLS is a separate permission layer from the Data API's own
+-- table-level GRANT — this project's Supabase instance runs under the
+-- new default (see config.toml's own comment: `auto_expose_new_tables`
+-- unset means nothing is auto-exposed to any Data API role, including
+-- service_role, without an explicit grant). Every other table in this
+-- schema only ever needed grants for anon/authenticated because nothing
+-- server-side had queried through service_role via the Data API before
+-- now — confirmed live: this function 404'd with "permission denied for
+-- table organizations" until this ran.
+grant select on organizations, campaigns, shoot_days, castings to service_role;

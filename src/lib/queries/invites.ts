@@ -22,6 +22,45 @@ export async function createModelInvite(
   return { token: data.token as string, error: null };
 }
 
+export async function createOrgStaffInvite(
+  orgId: string,
+  invitedByProfileId: string,
+  email: string,
+  role: "brand_staff" | "agency_staff"
+): Promise<{ token: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("invites")
+    .insert({
+      email,
+      role,
+      org_id: orgId,
+      invited_by_profile_id: invitedByProfileId,
+    })
+    .select("token")
+    .single();
+  if (error || !data) return { token: null, error: error?.message ?? "Couldn't create invite." };
+  return { token: data.token as string, error: null };
+}
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export async function fetchPendingOrgInvites(orgId: string, role: "brand_staff" | "agency_staff"): Promise<PendingInvite[]> {
+  const { data, error } = await supabase
+    .from("invites")
+    .select("id, email, created_at, expires_at")
+    .eq("org_id", orgId)
+    .eq("role", role)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map(r => ({ id: r.id, email: r.email, createdAt: r.created_at, expiresAt: r.expires_at }));
+}
+
 export interface InviteDetails {
   inviteId: string;
   email: string;

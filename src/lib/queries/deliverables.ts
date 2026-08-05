@@ -2,7 +2,7 @@ import { supabase } from "../supabaseClient";
 
 export interface ShootDay {
   id?: string;
-  dateLabel: string;
+  eventDate: string; // ISO yyyy-mm-dd — real date, not the old freeform "Mon 07/14" label
   hours: string;
   talentNote: string;
   description: string;
@@ -11,13 +11,13 @@ export interface ShootDay {
 export async function fetchShootDays(campaignId: string): Promise<ShootDay[]> {
   const { data, error } = await supabase
     .from("shoot_days")
-    .select("id, date_label, hours, talent_note, description")
+    .select("id, event_date, hours, talent_note, description")
     .eq("campaign_id", campaignId)
     .order("sort_order", { ascending: true });
   if (error || !data) return [];
   return (data as any[]).map((r) => ({
     id: r.id,
-    dateLabel: r.date_label ?? "",
+    eventDate: r.event_date ?? "",
     hours: r.hours ?? "",
     talentNote: r.talent_note ?? "",
     description: r.description ?? "",
@@ -34,12 +34,27 @@ export async function saveShootDays(campaignId: string, days: ShootDay[]): Promi
   const { error } = await supabase.from("shoot_days").insert(
     days.map((d, i) => ({
       campaign_id: campaignId,
-      date_label: d.dateLabel || null,
+      event_date: d.eventDate || null,
       hours: d.hours || null,
       talent_note: d.talentNote || null,
       description: d.description || null,
       sort_order: i,
     }))
   );
+  return { error: error?.message ?? null };
+}
+
+// One-off insert used by the Schedule calendar's quick-add — the
+// whole-list replace above would wipe every other shoot day on that
+// campaign, which is fine for the Deliverables tab's single bulk-edit
+// list but wrong for adding one date from a completely different screen.
+export async function createShootDay(params: {
+  campaignId: string; eventDate: string; description?: string;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("shoot_days").insert({
+    campaign_id: params.campaignId,
+    event_date: params.eventDate,
+    description: params.description || null,
+  });
   return { error: error?.message ?? null };
 }
