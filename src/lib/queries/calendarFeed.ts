@@ -1,7 +1,5 @@
 import { supabase } from "../supabaseClient";
 
-const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-
 export async function fetchCalendarFeedToken(orgId: string): Promise<string | null> {
   const { data, error } = await supabase.from("organizations").select("calendar_feed_token").eq("id", orgId).maybeSingle();
   if (error || !data) return null;
@@ -18,9 +16,14 @@ export async function regenerateCalendarFeedToken(orgId: string): Promise<{ toke
   return { token, error: null };
 }
 
+// A dvure.com URL, not the underlying Supabase project's own domain —
+// vercel.json proxies /calendar/:token.ics through to the real ics-feed
+// function so the link a user pastes into Apple/Google Calendar reads as
+// this product, not its infrastructure. Only resolves once deployed;
+// there's no equivalent rewrite layer in the local Vite dev server.
 export function icsFeedUrls(token: string): { httpsUrl: string; webcalUrl: string } {
-  const httpsUrl = `${FUNCTIONS_URL}/ics-feed?token=${token}`;
-  const webcalUrl = httpsUrl.replace(/^https?:\/\//, "webcal://");
+  const httpsUrl = `https://dvure.com/calendar/${token}.ics`;
+  const webcalUrl = `webcal://dvure.com/calendar/${token}.ics`;
   return { httpsUrl, webcalUrl };
 }
 

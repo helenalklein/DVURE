@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/calendar/:token.ics", "destination": "https://oinzkhpnivlisaqwsnuf.supabase.co/functions/v1/ics-feed?token=:token" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
