@@ -9,6 +9,7 @@ import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
 import { fetchAgencyInvitations, type AgencyInvitation } from "../../lib/queries/agencyInvitations";
+import { fetchPendingConfirmationsForAgency, confirmManualPayment, type ManualPayment, type ManualPaymentMethod } from "../../lib/queries/payments";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
@@ -592,6 +593,56 @@ function AgencyMessagingView() {
   );
 }
 
+const MANUAL_METHOD_LABEL: Record<ManualPaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash" };
+
+// Real check/wire/cash payments a brand recorded naming this agency as
+// payee — record_manual_payment/0046. Reconciliation is what makes those
+// real ("we know it took place"): confirming here is the agency's own
+// attestation that the money actually arrived, separate from the mock
+// commission-payout list below it.
+function ManualPaymentConfirmQueue() {
+  const { org } = useAuth();
+  const [pending, setPending] = useState<ManualPayment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [confirmingId, setConfirmingId] = useState<string|null>(null);
+
+  async function reload() {
+    if (!org) return;
+    setLoading(true);
+    setPending(await fetchPendingConfirmationsForAgency(org.id));
+    setLoading(false);
+  }
+
+  useEffect(() => { reload(); }, [org?.id]);
+
+  async function handleConfirm(id: string) {
+    setConfirmingId(id);
+    await confirmManualPayment(id);
+    setConfirmingId(null);
+    reload();
+  }
+
+  if (loading || pending.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Awaiting your confirmation</div>
+      {pending.map(p=>(
+        <div key={p.id} className="glass-subtle border border-[#D4A017]/30 bg-[#D4A017]/5 rounded-md p-4 flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold truncate">{p.campaignName}</div>
+            <div className="text-xs text-muted-foreground">{MANUAL_METHOD_LABEL[p.method]}{p.referenceNote ? ` · ${p.referenceNote}` : ""}</div>
+          </div>
+          <div className="font-mono text-sm font-semibold shrink-0">${p.amount.toLocaleString()}</div>
+          <Btn variant="primary" size="sm" disabled={confirmingId===p.id} onClick={()=>handleConfirm(p.id)}>
+            {confirmingId===p.id ? "Confirming…" : "Confirm Received"}
+          </Btn>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PaymentsView() {
   const currentUser = useCurrentUser();
   const [tab, setTab] = useState<"receivable"|"invoices">("receivable");
@@ -599,6 +650,7 @@ function PaymentsView() {
 
   return (
     <div className="max-w-2xl space-y-4">
+      <ManualPaymentConfirmQueue/>
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Pending payout" value={myBookings.filter(b=>b.paymentStatus==="pending").length}/>
         <Stat label="Processing" value={myBookings.filter(b=>b.paymentStatus==="processing").length}/>

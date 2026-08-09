@@ -19,6 +19,7 @@ import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distribute
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
+import { recordManualPayment, voidManualPayment, fetchManualPaymentsForBrand, type ManualPayment, type ManualPaymentMethod } from "../../lib/queries/payments";
 import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
@@ -2315,13 +2316,71 @@ function PaymentOutcomeOverlay({ outcome, campaign, amount, onClose, onAddCard }
 
 type PaymentState = "idle" | "processing" | "complete";
 
+const MANUAL_METHOD_LABEL: Record<ManualPaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash" };
+
+function ManualPaymentStatusBadge({ status }: { status: ManualPayment["status"] }) {
+  if (status === "paid") return <Badge label="Confirmed" variant="active"/>;
+  if (status === "canceled") return <Badge label="Void" variant="draft"/>;
+  return <Badge label="Awaiting confirmation" variant="pending"/>;
+}
+
+// The brand's own record of every check/wire/cash payment it's sent —
+// real, persisted (record_manual_payment/0046), so this is what actually
+// answers "did that payment take place," not a demo animation.
+function ManualPaymentsPanel({ payments, loading, onVoid }: {
+  payments: ManualPayment[]; loading: boolean; onVoid: (p: ManualPayment) => void;
+}) {
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="glass-subtle border rounded-md p-4 flex items-start gap-2.5 mb-5">
+        <AlertCircle size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
+        <div className="text-xs text-muted-foreground leading-relaxed">
+          Check, wire, and cash payments never touch a processor — recording one here doesn't move money, it's your record of a payment sent outside DVURE. The receiving agency confirms receipt on their end; until they do, it stays "Awaiting confirmation" and can still be voided if it was recorded in error.
+        </div>
+      </div>
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      ) : payments.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No check, wire, or cash payments recorded yet — use "Authorize Payment" on the Payments tab and choose a method other than Card.</div>
+      ) : (
+        <div className="glass-subtle border rounded-md overflow-hidden">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border bg-muted/30">{["Campaign","Agency","Method","Reference","Amount","Status","Recorded",""].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}</tr></thead>
+            <tbody>
+              {payments.map(p=>(
+                <tr key={p.id} className="border-b border-border last:border-0">
+                  <td className="px-4 py-3 font-medium">{p.campaignName}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{p.agencyName}</td>
+                  <td className="px-4 py-3 text-xs">{MANUAL_METHOD_LABEL[p.method]}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{p.referenceNote || "—"}</td>
+                  <td className="px-4 py-3 font-mono text-sm">${p.amount.toLocaleString()}</td>
+                  <td className="px-4 py-3"><ManualPaymentStatusBadge status={p.status}/></td>
+                  <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</td>
+                  <td className="px-4 py-3">
+                    {p.status==="pending" && (
+                      <button onClick={()=>onVoid(p)} className="text-xs text-[#C0392B] hover:underline cursor-pointer">Void</button>
+                    )}
+                    {p.status==="canceled" && p.voidReason && (
+                      <span className="text-[10px] text-muted-foreground" title={p.voidReason}>Voided</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GlobalPayments() {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
   const meName = currentUser?.name ?? "";
   const { org: accountOrg } = useAuth();
   const accessGate = getAccessGate(accountOrg);
-  const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices">("payments");
+  const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices"|"manual">("payments");
   const [showPayModal, setShowPayModal] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showSigModal, setShowSigModal] = useState(false);
@@ -2336,6 +2395,49 @@ function GlobalPayments() {
   // fail a card, so this lets every outcome (not just the happy path)
   // be previewed on demand instead of only ever being described.
   const [simulateOutcome, setSimulateOutcome] = useState<PaymentOutcome>("success");
+
+  // Check/wire/cash — real, persisted (record_manual_payment/0046), unlike
+  // everything above which is still mock pending a real Stripe key. Kept
+  // as its own state/fetch block rather than threading through the mock
+  // card state, since the two paths genuinely don't share a data source.
+  const [paymentMethod, setPaymentMethod] = useState<"card"|ManualPaymentMethod>("card");
+  const [realCampaigns, setRealCampaigns] = useState<{ id: string; name: string }[]>([]);
+  const [partneredAgencies, setPartneredAgencies] = useState<{ id: string; name: string }[]>([]);
+  const [manualCampaignId, setManualCampaignId] = useState("");
+  const [manualAgencyId, setManualAgencyId] = useState("");
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualNote, setManualNote] = useState("");
+  const [manualRecording, setManualRecording] = useState(false);
+  const [manualError, setManualError] = useState<string|null>(null);
+  const [manualRecorded, setManualRecorded] = useState(false);
+  const [manualPayments, setManualPayments] = useState<ManualPayment[]>([]);
+  const [manualPaymentsLoading, setManualPaymentsLoading] = useState(true);
+  const [voidTarget, setVoidTarget] = useState<ManualPayment|null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidSubmitting, setVoidSubmitting] = useState(false);
+
+  async function reloadManualPayments() {
+    if (!accountOrg) return;
+    setManualPaymentsLoading(true);
+    setManualPayments(await fetchManualPaymentsForBrand(accountOrg.id));
+    setManualPaymentsLoading(false);
+  }
+
+  useEffect(() => {
+    if (!accountOrg) return;
+    let active = true;
+    (async () => {
+      const [{ campaigns, realIdShim }, agencies] = await Promise.all([
+        fetchBrandCampaigns(accountOrg.id),
+        fetchPartneredAgencies(accountOrg.id),
+      ]);
+      if (!active) return;
+      setRealCampaigns(campaigns.map(c => ({ id: realIdShim.get(c.id) ?? "", name: c.name })).filter(c => c.id));
+      setPartneredAgencies(agencies);
+    })();
+    reloadManualPayments();
+    return () => { active = false; };
+  }, [accountOrg?.id]);
 
   // Sorted: red (overdue) first, yellow (≤3 days) second, green last
   const invoices = [
@@ -2383,10 +2485,44 @@ function GlobalPayments() {
   }
 
   function attemptClose() {
-    if (payAmount || selectedCampaign) { setShowDiscardConfirm(true); } else { setShowPayModal(false); }
+    if (payAmount || selectedCampaign || manualAmount || manualCampaignId) { setShowDiscardConfirm(true); } else { setShowPayModal(false); }
   }
 
-  const canAuthorize = !!(selectedCampaign && payAmount && signature) && !accessGate.gated;
+  function resetManualForm() {
+    setManualCampaignId(""); setManualAgencyId(""); setManualAmount(""); setManualNote(""); setManualError(null); setManualRecorded(false);
+  }
+
+  async function handleManualRecord() {
+    if (paymentMethod === "card") return;
+    setManualRecording(true);
+    setManualError(null);
+    const { error } = await recordManualPayment({
+      campaignId: manualCampaignId,
+      agencyOrgId: manualAgencyId,
+      amount: Number(manualAmount),
+      method: paymentMethod,
+      referenceNote: manualNote,
+    });
+    setManualRecording(false);
+    if (error) { setManualError(error); return; }
+    setManualRecorded(true);
+    reloadManualPayments();
+  }
+
+  async function handleVoidConfirm() {
+    if (!voidTarget || !voidReason.trim()) return;
+    setVoidSubmitting(true);
+    const { error } = await voidManualPayment(voidTarget.id, voidReason.trim());
+    setVoidSubmitting(false);
+    if (error) { setManualError(error); return; }
+    setVoidTarget(null);
+    setVoidReason("");
+    reloadManualPayments();
+  }
+
+  const canAuthorize = paymentMethod === "card"
+    ? !!(selectedCampaign && payAmount && signature) && !accessGate.gated
+    : !!(manualCampaignId && manualAgencyId && manualAmount && Number(manualAmount) > 0 && signature) && !accessGate.gated;
 
   // Gold button style for Authorize Payment + Authorize — plain sentence
   // case, matching every other button's Instrument Sans treatment rather
@@ -2397,16 +2533,23 @@ function GlobalPayments() {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Payments" sub={`${org} · Payment methods and invoices`}/>
       <GateBanner org={accountOrg}/>
-      {/* Tab bar: Payments | Invoices */}
+      {/* Tab bar: Payments | Invoices | Check/Wire/Cash */}
       <div className="bg-card border-b border-border px-6 flex items-center shrink-0">
-        {(["payments","invoices"] as const).map(t=>(
-          <button key={t} onClick={()=>setPaymentsTab(t)}
-            className={cx("px-5 py-3 text-sm capitalize border-b-2 -mb-px transition-colors cursor-pointer",
-              paymentsTab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
-            )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+        {([{id:"payments" as const,label:"Payments"},{id:"invoices" as const,label:"Invoices"},{id:"manual" as const,label:"Check / Wire / Cash"}]).map(t=>(
+          <button key={t.id} onClick={()=>setPaymentsTab(t.id)}
+            className={cx("px-5 py-3 text-sm border-b-2 -mb-px transition-colors cursor-pointer",
+              paymentsTab===t.id?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
+            )}>{t.label}</button>
         ))}
       </div>
       {paymentsTab==="invoices" && <InvoicesPanel/>}
+      {paymentsTab==="manual" && (
+        <ManualPaymentsPanel
+          payments={manualPayments}
+          loading={manualPaymentsLoading}
+          onVoid={(p)=>{ setVoidTarget(p); setVoidReason(""); }}
+        />
+      )}
       {paymentsTab==="payments" && <div className="flex-1 flex min-h-0">
       {/* Full-height layout — button pinned to bottom */}
       <div className="flex-1 flex min-h-0 p-6 gap-5">
@@ -2550,23 +2693,45 @@ function GlobalPayments() {
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card border border-border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden relative">
             {/* Header row */}
-            <div className="px-6 py-4 border-b border-border">
+            <div className="px-6 py-4 border-b border-border space-y-3">
+              {/* Payment Method */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mr-1">Method</span>
+                {(["card","check","wire","cash"] as const).map(m=>(
+                  <button key={m} onClick={()=>setPaymentMethod(m)}
+                    className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors cursor-pointer capitalize",
+                      paymentMethod===m?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
+                    )}>{m}</button>
+                ))}
+              </div>
               <div className="flex items-center gap-3">
-                {/* Campaign selector */}
-                <div className="flex-1 relative">
-                  <select value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}
-                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
-                    <option value="">Select campaign…</option>
-                    <option>AW25 Womenswear Campaign</option>
-                    <option>SS25 Fragrance Launch</option>
-                    <option>Resort Lookbook 2025</option>
-                  </select>
-                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
-                </div>
-                {/* Due date — same row as date picker */}
-                <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-muted-foreground shrink-0 whitespace-nowrap">
-                  Due: {selectedCampaign ? "06/20/2025" : "—"}
-                </div>
+                {paymentMethod==="card" ? (<>
+                  {/* Campaign selector (demo) */}
+                  <div className="flex-1 relative">
+                    <select value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}
+                      className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+                      <option value="">Select campaign…</option>
+                      <option>AW25 Womenswear Campaign</option>
+                      <option>SS25 Fragrance Launch</option>
+                      <option>Resort Lookbook 2025</option>
+                    </select>
+                    <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
+                  </div>
+                  {/* Due date — same row as date picker */}
+                  <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-muted-foreground shrink-0 whitespace-nowrap">
+                    Due: {selectedCampaign ? "06/20/2025" : "—"}
+                  </div>
+                </>) : (
+                  /* Real campaign selector — check/wire/cash records against your actual campaigns */
+                  <div className="flex-1 relative">
+                    <select value={manualCampaignId} onChange={e=>setManualCampaignId(e.target.value)}
+                      className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+                      <option value="">Select campaign…</option>
+                      {realCampaigns.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
+                  </div>
+                )}
                 {/* Payment Date — labeled, defaults to today */}
                 <div className="flex flex-col gap-1 shrink-0">
                   <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Payment Date</div>
@@ -2582,6 +2747,7 @@ function GlobalPayments() {
             {/* Body */}
             <div className="px-6 py-5 space-y-5">
               {/* Amount row */}
+              {paymentMethod==="card" ? (
               <div className="flex items-stretch gap-4">
                 <div className="flex-1">
                   <FieldLabel>Payment Amount</FieldLabel>
@@ -2603,6 +2769,37 @@ function GlobalPayments() {
                   <div className="text-2xl font-semibold font-mono">{selectedCampaign ? "$2,850" : "—"}</div>
                 </div>
               </div>
+              ) : (
+              <div className="space-y-4">
+                <div className="flex items-stretch gap-4">
+                  <div className="flex-1">
+                    <FieldLabel>Agency</FieldLabel>
+                    <div className="relative">
+                      <select value={manualAgencyId} onChange={e=>setManualAgencyId(e.target.value)}
+                        className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
+                        <option value="">Select agency…</option>
+                        {partneredAgencies.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <FieldLabel>Payment Amount</FieldLabel>
+                    <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden">
+                      <span className="px-3 py-2 text-sm text-muted-foreground border-r border-border">$</span>
+                      <input value={manualAmount} onChange={e=>setManualAmount(e.target.value)} placeholder="0.00"
+                        className="flex-1 px-3 py-2 text-sm bg-transparent focus:outline-none"/>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel>Reference note (optional)</FieldLabel>
+                  <input value={manualNote} onChange={e=>setManualNote(e.target.value)}
+                    placeholder={paymentMethod==="check" ? "Check #1042" : paymentMethod==="wire" ? "Wire confirmation #" : "e.g. Handed to Sophie in person"}
+                    className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+                </div>
+              </div>
+              )}
 
               {/* Payer + timestamp */}
               <div className="flex items-center gap-4">
@@ -2635,9 +2832,11 @@ function GlobalPayments() {
                 </div>
               </div>
 
-              {/* Demo-only outcome preview — no real processor sits behind
-                  this yet, so every failure state is a deliberate choice
-                  here rather than something only the happy path shows. */}
+              {/* Demo-only outcome preview — card only. Check/wire/cash has
+                  no processor to decline it in the first place, so there's
+                  no outcome to simulate; manualError below covers its one
+                  real failure mode (an RPC rejection). */}
+              {paymentMethod==="card" && (
               <div className="border border-dashed border-border rounded-md px-3 py-2.5">
                 <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Demo — simulate outcome</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -2654,6 +2853,10 @@ function GlobalPayments() {
                   ))}
                 </div>
               </div>
+              )}
+              {paymentMethod!=="card" && manualError && (
+                <div className="text-xs text-[#C0392B]">{manualError}</div>
+              )}
             </div>
 
             {/* Footer */}
@@ -2668,25 +2871,27 @@ function GlobalPayments() {
               {/* Row 2: Authorize — always visible, gold when ready */}
               <div className="px-6 py-4">
                 <button
-                  onClick={canAuthorize ? handleComplete : undefined}
+                  onClick={canAuthorize ? (paymentMethod==="card" ? handleComplete : handleManualRecord) : undefined}
                   className={cx("w-full py-3.5 rounded-md text-sm transition-all",
                     canAuthorize
                       ? `${goldBtn} cursor-pointer`
                       : "bg-gold/30 text-foreground/40 cursor-not-allowed"
                   )}
                 >
-                  Authorize
+                  {paymentMethod==="card" ? "Authorize" : manualRecording ? "Recording…" : "Record Payment"}
                 </button>
                 {!canAuthorize && (
                   <div className="text-center text-[10px] text-muted-foreground mt-2">
-                    {!selectedCampaign ? "Select a campaign to continue" : !payAmount ? "Enter payment amount" : "Add e-signature to authorize"}
+                    {paymentMethod==="card"
+                      ? (!selectedCampaign ? "Select a campaign to continue" : !payAmount ? "Enter payment amount" : "Add e-signature to authorize")
+                      : (!manualCampaignId ? "Select a campaign to continue" : !manualAgencyId ? "Select an agency" : !manualAmount ? "Enter payment amount" : "Add e-signature to authorize")}
                   </div>
                 )}
               </div>
             </div>
 
             {/* Processing / outcome overlay */}
-            {payState !== "idle" && (
+            {paymentMethod==="card" && payState !== "idle" && (
               <PaymentOutcomeOverlay
                 outcome={simulateOutcome}
                 campaign={selectedCampaign || "AW25 Womenswear Campaign"}
@@ -2695,6 +2900,44 @@ function GlobalPayments() {
                 onAddCard={()=>{ setPayState("idle"); setShowPayModal(false); setShowAddCard(true); }}
               />
             )}
+            {paymentMethod!=="card" && (manualRecording || manualRecorded) && (
+              <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-5 rounded-xl z-50 px-8">
+                {manualRecording ? (<>
+                  <div className="w-14 h-14 border-2 border-border border-t-foreground rounded-full animate-spin"/>
+                  <div className="text-heading text-base text-foreground">Recording payment…</div>
+                </>) : (<>
+                  <div className="w-14 h-14 rounded-full bg-foreground text-primary-foreground flex items-center justify-center">
+                    <Check size={22}/>
+                  </div>
+                  <div className="text-center space-y-1.5 max-w-sm">
+                    <div className="text-heading text-base text-foreground">Payment Recorded</div>
+                    <div className="text-sm text-muted-foreground leading-relaxed">
+                      ${Number(manualAmount).toLocaleString()} via {MANUAL_METHOD_LABEL[paymentMethod]} — awaiting confirmation from the agency.
+                    </div>
+                  </div>
+                  <button onClick={()=>{ setShowPayModal(false); setPaymentMethod("card"); resetManualForm(); }} className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer">Close</button>
+                </>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Void manual payment */}
+      {voidTarget && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-md w-96 p-6 shadow-xl">
+            <div className="text-sm font-semibold mb-1">Void this payment?</div>
+            <div className="text-xs text-muted-foreground mb-4">
+              ${voidTarget.amount.toLocaleString()} via {MANUAL_METHOD_LABEL[voidTarget.method]} to {voidTarget.agencyName} for {voidTarget.campaignName}. This can only be done before {voidTarget.agencyName} confirms receipt — once voided, it no longer counts as an outstanding payment.
+            </div>
+            <FieldLabel>Reason (required)</FieldLabel>
+            <textarea value={voidReason} onChange={e=>setVoidReason(e.target.value)} rows={2} placeholder="e.g. Entered wrong amount"
+              className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground mb-4 resize-none"/>
+            <div className="flex gap-2">
+              <Btn variant="primary" fullWidth disabled={!voidReason.trim() || voidSubmitting} onClick={handleVoidConfirm}>{voidSubmitting ? "Voiding…" : "Void Payment"}</Btn>
+              <Btn variant="outline" fullWidth onClick={()=>{ setVoidTarget(null); setVoidReason(""); }}>Cancel</Btn>
+            </div>
           </div>
         </div>
       )}
@@ -2706,7 +2949,7 @@ function GlobalPayments() {
             <div className="text-sm font-semibold mb-2">Discard payment draft?</div>
             <div className="text-xs text-muted-foreground mb-5">This payment draft will be lost. This action cannot be undone.</div>
             <div className="flex gap-2">
-              <Btn variant="primary" fullWidth onClick={()=>{ setShowDiscardConfirm(false); setShowPayModal(false); setSelectedCampaign(""); setPayAmount(""); }}>Discard</Btn>
+              <Btn variant="primary" fullWidth onClick={()=>{ setShowDiscardConfirm(false); setShowPayModal(false); setSelectedCampaign(""); setPayAmount(""); setPaymentMethod("card"); resetManualForm(); }}>Discard</Btn>
               <Btn variant="outline" fullWidth onClick={()=>setShowDiscardConfirm(false)}>Keep editing</Btn>
             </div>
           </div>
