@@ -8,7 +8,7 @@ import {
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone, RefreshCw
+  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
@@ -101,26 +101,6 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
   { id:"directory",        label:"Directory",  Icon:User                   },
 ];
 
-// Re-pulls the signed-in identity (org verification/subscription status,
-// access level, etc.) from Supabase — the one thing every screen reads
-// from cached AuthProvider state, which otherwise only updates on
-// sign-in or a full page reload.
-function HeaderRefreshButton() {
-  const { refreshIdentity } = useAuth();
-  const [refreshing, setRefreshing] = useState(false);
-  async function handleRefresh() {
-    setRefreshing(true);
-    await refreshIdentity();
-    setRefreshing(false);
-  }
-  return (
-    <button onClick={handleRefresh} title="Refresh" disabled={refreshing}
-      className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer disabled:cursor-wait">
-      <RefreshCw size={13} className={refreshing ? "animate-spin" : undefined}/>
-    </button>
-  );
-}
-
 function BrandSidebar({ active, onNav, onLogout, leadsNeededCount }: {
   active: GlobalView; onNav: (v: GlobalView) => void; onLogout: () => void; leadsNeededCount: number;
 }) {
@@ -139,7 +119,6 @@ function BrandSidebar({ active, onNav, onLogout, leadsNeededCount }: {
           </div>
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <HeaderRefreshButton/>
         <button onClick={()=>onNav("campaigns")} title="Projects"
           className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={13}/>
@@ -225,7 +204,6 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
           </div>
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
         </div>
-        <HeaderRefreshButton/>
         <button onClick={onHome} title="Projects"
           className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={13}/>
