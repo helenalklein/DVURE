@@ -7,6 +7,15 @@
 -- login -- not three disconnected mock representations of the same person.
 -- Run after 0044 (fictional agency names), so it references the new names.
 --
+-- handle_new_user() (tightened in 0021_signup_role_lock_and_admin_lockout_
+-- guard.sql) only auto-creates a profiles row straight from raw_user_meta_data
+-- for role in ('brand_staff','agency_staff') -- anything else, including
+-- 'model', falls through to its invite-lookup branch and requires a real
+-- pending invites row matching the email, or it raises. So each model gets a
+-- real invites row inserted first (status defaults to 'pending'), exactly
+-- the same mechanism createModelInvite() uses in the live app -- this isn't
+-- a workaround, it's going through the front door.
+--
 -- Petra Novak and Priya Sharma (the model) are deliberately left out of
 -- this pass: Petra's mother/boutique split doesn't map onto these three
 -- agencies without losing that nuance, and Priya Sharma the model would
@@ -28,6 +37,9 @@ declare
   v_model_id uuid;
 begin
   select id into v_agency_id from organizations where name = 'Vantage Model Mgmt.';
+
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('zara.okafor@elitetalent.example', 'model', v_agency_id, 'mother');
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
@@ -74,6 +86,9 @@ declare
 begin
   select id into v_agency_id from organizations where name = 'Vantage Model Mgmt.';
 
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('amara.diallo@elitetalent.example', 'model', v_agency_id, 'mother');
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -119,6 +134,9 @@ declare
 begin
   select id into v_agency_id from organizations where name = 'Vantage Model Mgmt.';
 
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('james.whitfield@elitetalent.example', 'model', v_agency_id, 'mother');
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -160,6 +178,9 @@ declare
   v_model_id uuid;
 begin
   select id into v_agency_id from organizations where name = 'Vantage Model Mgmt.';
+
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('maya.chen@elitetalent.example', 'model', v_agency_id, 'mother');
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
@@ -203,6 +224,9 @@ declare
 begin
   select id into v_agency_id from organizations where name = 'Meridian Models';
 
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('mila.tran@imgmodels.example', 'model', v_agency_id, 'mother');
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -244,6 +268,9 @@ declare
   v_model_id uuid;
 begin
   select id into v_agency_id from organizations where name = 'Meridian Models';
+
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('lena.vogel@imgmodels.example', 'model', v_agency_id, 'mother');
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
@@ -287,6 +314,9 @@ declare
 begin
   select id into v_agency_id from organizations where name = 'Meridian Models';
 
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('ines.ferreira@imgmodels.example', 'model', v_agency_id, 'mother');
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -328,6 +358,9 @@ declare
   v_model_id uuid;
 begin
   select id into v_agency_id from organizations where name = 'Meridian Models';
+
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('sofia.brandt@imgmodels.example', 'model', v_agency_id, 'mother');
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
@@ -371,6 +404,9 @@ declare
 begin
   select id into v_agency_id from organizations where name = 'Solenne';
 
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('caleb.stone@wilhelmina.example', 'model', v_agency_id, 'mother');
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -412,6 +448,9 @@ declare
   v_model_id uuid;
 begin
   select id into v_agency_id from organizations where name = 'Solenne';
+
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('amir.hassan@wilhelmina.example', 'model', v_agency_id, 'mother');
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
@@ -455,6 +494,9 @@ declare
 begin
   select id into v_agency_id from organizations where name = 'Solenne';
 
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('nadia.petrov@wilhelmina.example', 'model', v_agency_id, 'mother');
+
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -496,6 +538,9 @@ declare
   v_model_id uuid;
 begin
   select id into v_agency_id from organizations where name = 'Solenne';
+
+  insert into invites (email, role, org_id, agency_relationship_type)
+  values ('chiara.russo@wilhelmina.example', 'model', v_agency_id, 'mother');
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
