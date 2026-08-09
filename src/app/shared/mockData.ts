@@ -1,27 +1,30 @@
 import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, Look, CrewMember, CampaignThreadMessage } from "./types";
 import { formatCampaignDue } from "../../lib/formatDue";
 import coverCrystalPalaceTransept from "../../assets/cover-crystal-palace-transept.jpg";
-import galleryDP138588 from "../../assets/gallery/DP138588.jpg";
-import galleryDP240624 from "../../assets/gallery/DP240624.jpg";
-import galleryDP223650 from "../../assets/gallery/DP223650.jpg";
-import galleryDP43768001 from "../../assets/gallery/DP-43768-001.jpg";
 import galleryDP152207 from "../../assets/gallery/DP152207.jpg";
-import galleryDP273004 from "../../assets/gallery/DP273004.jpg";
-import galleryDP113942 from "../../assets/gallery/DP113942.jpg";
-import galleryDP200352 from "../../assets/gallery/DP200352.jpg";
-import galleryDT1165 from "../../assets/gallery/DT1165.jpg";
-import galleryDT4002 from "../../assets/gallery/DT4002.jpg";
 import galleryDP70292 from "../../assets/gallery/DP70292.jpg";
-import galleryDT223780 from "../../assets/gallery/DT223780.jpg";
-import galleryDP139275 from "../../assets/gallery/DP139275.jpg";
 import galleryDP139298 from "../../assets/gallery/DP139298.jpg";
-import galleryDP221452 from "../../assets/gallery/DP221452.jpg";
-import galleryDP115235 from "../../assets/gallery/DP115235.jpg";
-import galleryDP107953 from "../../assets/gallery/DP107953.jpg";
-import galleryDP107961 from "../../assets/gallery/DP107961.jpg";
-import galleryDP17115001 from "../../assets/gallery/DP-17115-001.jpg";
-import galleryDP112689 from "../../assets/gallery/DP112689.jpg";
-import seuratCover from "../../assets/gallery/seurat-cover.jpg";
+import coverBierstadt from "../../assets/gallery2/bierstadt-european-landscape.jpg";
+import coverChurchMoonlight from "../../assets/gallery2/church-moonlight-alpine-village.jpg";
+import coverBirchSedgeleyPark from "../../assets/gallery2/birch-sedgeley-park.jpg";
+import coverGuimardFacade from "../../assets/gallery2/guimard-facade-detail.jpg";
+import coverGuardiCanalVenice from "../../assets/gallery2/guardi-canal-venice.jpg";
+import coverBellottoCampo from "../../assets/gallery2/bellotto-campo-santi-giovanni-paolo.jpg";
+import coverGuardiCapriccio from "../../assets/gallery2/guardi-capriccio-harbor.jpg";
+import coverCanalettoCapriccio from "../../assets/gallery2/canaletto-english-capriccio.jpg";
+import coverHobbemaWoodedLandscape from "../../assets/gallery2/hobbema-wooded-landscape.jpg";
+import coverGainsboroughMountain from "../../assets/gallery2/gainsborough-mountain-landscape.jpg";
+import coverTurnerMortlakeTerrace from "../../assets/gallery2/turner-mortlake-terrace.jpg";
+import coverCorotForestCoubron from "../../assets/gallery2/corot-forest-of-coubron.jpg";
+import coverBaldusLouvre from "../../assets/gallery2/baldus-view-of-louvre.jpg";
+import coverCanevaRome from "../../assets/gallery2/caneva-view-of-rome.jpg";
+import coverLeGrayPontCarrousel from "../../assets/gallery2/legray-pont-du-carrousel.jpg";
+import coverBissonChaletHandeck from "../../assets/gallery2/bisson-chalet-de-handeck.jpg";
+import coverAtgetHotelAmbassadeurs from "../../assets/gallery2/atget-hotel-ambassadeurs.jpg";
+import coverMarvilleCloudPantheon from "../../assets/gallery2/marville-cloud-study-pantheon.jpg";
+import coverVanDerHeydenAmsterdam from "../../assets/gallery2/vanderheyden-nieuwe-zijds-voorburgwal.jpg";
+import coverRichardsRockyCoast from "../../assets/gallery2/richards-rocky-coast.jpg";
+import coverWhampoaAnchorage from "../../assets/gallery2/unknown-whampoa-anchorage.jpg";
 import photoZaraOkafor from "../../assets/talent/zara-okafor.jpg";
 import photoAmaraDiallo from "../../assets/talent/amara-diallo.jpg";
 import photoMilaTran from "../../assets/talent/mila-tran.jpg";
@@ -171,28 +174,36 @@ export const NOTIFS = [
 // source, so the live gallery was showing sepia, not black-and-white.
 // Any future addition MUST go through the same local-convert-then-
 // import step, never a raw metmuseum.org URL.
+// Hand-picked by the user from a 287-piece Smithsonian/Met/NGA/Rijksmuseum
+// open-access picker, plus 4 keepers from the original set — 25 total,
+// force-converted to true grayscale locally (no auto-contrast stretch;
+// that made some pieces look worse, per direct feedback).
 const CAMPAIGN_COVER_GALLERY: string[] = [
-  galleryDP138588, // Felix Teynard, "Esneh, Dattiers, Sycomore et Cafe Sur le Bord du Nil", 1851-54
-  galleryDP240624, // Gustave Le Gray, "Brig on the Water", 1856
-  galleryDP223650, // Gustave Le Gray, "[The Great Wave, Sete]", 1857
-  galleryDP43768001, // Edouard Baldus, "Panorama de la Cite", 1860s
-  coverCrystalPalaceTransept, // Hugh Owen, "View of Transept, Looking South", 1851
-  galleryDP152207, // Carleton E. Watkins, "South Dome, 6,000 feet", ca. 1872
-  galleryDP273004, // Charles Marville, "[Cloud Study over Paris]", 1856-57
-  galleryDP113942, // Alfred Capel Cure, "Haughmond Abbey", 1858
-  galleryDP200352, // Charles Marville, "La Bievre", ca. 1862
-  galleryDT1165, // Edouard Baldus, "[Entrance to the Port of Boulogne]", 1855
-  galleryDT4002, // Gustave Le Gray, "Mediterranean with Mount Agde", 1857
-  galleryDP70292, // Charles Marville, "Allee bordee d'arbres", 1850-53
-  galleryDT223780, // Constant Alexandre Famin, "[Man in a Forest Landscape]", ca. 1870
-  galleryDP139275, // Edmond Bacot, "Vue generale de Rouen", 1852-54
-  galleryDP139298, // Edmond Bacot, "Rue des Petits Murs, Caen", 1852-54
-  galleryDP221452, // Joseph Vigier, "Sentier du chaos, St-Sauveur", 1853
-  galleryDP115235, // Unknown, "[St. Pierre, Caen]", 1850s
-  galleryDP107953, // Roger Fenton, "[Landscape with Clouds]", probably 1856
-  galleryDP107961, // Roger Fenton, "Wharfe and Pool, Below the Strid", 1854
-  galleryDP17115001, // John Beasley Greene, "[The Nile in front of the Theban Hills]", 1853-54
-  galleryDP112689, // Francis Bedford, "Clovelly, The New Inn and Street", 1870s
+  coverCrystalPalaceTransept, // Hugh Owen, "View of Transept, Looking South", 1851 — Smithsonian
+  galleryDP152207, // Carleton E. Watkins, "South Dome, 6,000 feet", ca. 1872 — Smithsonian
+  galleryDP70292, // Charles Marville, "Allee bordee d'arbres", 1850-53 — Smithsonian
+  galleryDP139298, // Edmond Bacot, "Rue des Petits Murs, Caen", 1852-54 — Smithsonian
+  coverBierstadt, // Albert Bierstadt, "European Landscape", c. 1856-57 — Smithsonian
+  coverChurchMoonlight, // Frederic Edwin Church, "Moonlight over an Alpine Village" — Smithsonian
+  coverBirchSedgeleyPark, // Thomas Birch, "Southeast View of Sedgeley Park" — Smithsonian
+  coverGuimardFacade, // Hector Guimard (architect), facade detail, no. 122 — Smithsonian (cropped: source was a full scanned book page with border/caption)
+  coverGuardiCanalVenice, // Follower of Francesco Guardi, "Canal in Venice" — Smithsonian
+  coverBellottoCampo, // Bernardo Bellotto, "The Campo di SS. Giovanni e Paolo, Venice" — NGA
+  coverGuardiCapriccio, // Francesco Guardi, "Capriccio of a Harbor" — NGA
+  coverCanalettoCapriccio, // Canaletto, "English Landscape Capriccio with a Palace" — NGA
+  coverHobbemaWoodedLandscape, // Meindert Hobbema, "A Wooded Landscape" — NGA
+  coverGainsboroughMountain, // Thomas Gainsborough, "Mountain Landscape with Bridge" — NGA
+  coverTurnerMortlakeTerrace, // J.M.W. Turner, "Mortlake Terrace" — NGA
+  coverCorotForestCoubron, // Jean-Baptiste-Camille Corot, "The Forest of Coubron" — NGA
+  coverBaldusLouvre, // Edouard-Denis Baldus, "View of the Louvre" — NGA
+  coverCanevaRome, // Giacomo Caneva, "View of Rome" — NGA
+  coverLeGrayPontCarrousel, // Gustave Le Gray, "The Pont du Carrousel, Paris" — NGA
+  coverBissonChaletHandeck, // Bisson Freres, "Chalet de Handeck, Hasli Valley" — NGA
+  coverAtgetHotelAmbassadeurs, // Eugene Atget, "Hotel des Ambassadeurs de Hollande" — NGA
+  coverMarvilleCloudPantheon, // Charles Marville, "Cloud Study over the Pantheon, Paris" — NGA
+  coverVanDerHeydenAmsterdam, // Jan van der Heyden, "The Nieuwe Zijds Voorburgwal, Amsterdam" — Rijksmuseum
+  coverRichardsRockyCoast, // William Trost Richards, "A Rocky Coast" — The Met
+  coverWhampoaAnchorage, // Unknown artist, "View of the Whampoa Anchorage" — The Met
 ];
 
 // Assigns every campaign in one rendered list a DISTINCT photo — not just
@@ -215,7 +226,7 @@ export function assignCampaignCovers(ids: number[]): Map<number, string> {
 }
 
 export const CAMPAIGNS: Campaign[] = [
-  { id:1, name:"AW25 Womenswear Campaign", type:"Campaign",     status:"active",   due:formatCampaignDue("2026-07-22", MOCK_NOW), dueDateISO:"2026-07-22", dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850, submissionOpen:"May 1, 2026",  submissionClose:"Aug 15, 2026", coverPhoto:seuratCover /* Seurat, "Landscape at Saint-Ouen" — The Met, public domain — force-converted to true grayscale locally, same as the rest of the gallery (the raw file has a visible color cast) */ },
+  { id:1, name:"AW25 Womenswear Campaign", type:"Campaign",     status:"active",   due:formatCampaignDue("2026-07-22", MOCK_NOW), dueDateISO:"2026-07-22", dueLabel:"Due tomorrow",     dueUrgency:"high",   submitted:14, approved:6,  booked:2, talentNeeded:4, budget:18000, committed:5150,  remaining:12850, submissionOpen:"May 1, 2026",  submissionClose:"Aug 15, 2026" },
   { id:2, name:"SS25 Fragrance Launch",    type:"Campaign",     status:"active",   due:formatCampaignDue("2026-07-26", MOCK_NOW), dueDateISO:"2026-07-26", dueLabel:"5 days remaining", dueUrgency:"medium", submitted:9,  approved:4,  booked:0, talentNeeded:2, budget:10000, committed:0,     remaining:10000, submissionOpen:"May 15, 2026", submissionClose:"Jul 25, 2026" },
   { id:3, name:"Resort Lookbook 2025",     type:"Campaign",     status:"active",   due:formatCampaignDue("2026-08-04", MOCK_NOW), dueDateISO:"2026-08-04", dueLabel:"14 days",          dueUrgency:"low",    submitted:21, approved:7,  booked:0, talentNeeded:3, budget:7000,  committed:0,     remaining:7000,  submissionOpen:"Jun 1, 2026",  submissionClose:"Aug 10, 2026" },
   { id:4, name:"FW24 Campaign",            type:"Campaign",     status:"archived", due:formatCampaignDue("2025-12-20", MOCK_NOW), dueDateISO:"2025-12-20", dueLabel:"Archived",         dueUrgency:"low",    submitted:41, approved:11, booked:3, talentNeeded:4, budget:15000, committed:15000, remaining:0,     submissionOpen:"Nov 1, 2025",  submissionClose:"Dec 15, 2025" },
