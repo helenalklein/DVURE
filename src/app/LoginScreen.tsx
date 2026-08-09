@@ -191,7 +191,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
               </div>
               <div className="space-y-3 pt-1">
                 <TextInput label={signupRole==="brand"?"Brand Name":"Agency Name"} value={companyName} onChange={e=>setCompanyName(e.target.value)}
-                  placeholder={signupRole==="brand"?"e.g. Acne Studios":"e.g. Elite Model Management"}/>
+                  placeholder={signupRole==="brand"?"e.g. Vellani":"e.g. Vantage Model Management"}/>
                 <TextInput label="Your Name" value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="e.g. Jordan Lee"/>
                 <TextInput label="Work Email" type="email" value={workEmail} onChange={e=>setWorkEmail(e.target.value)} placeholder="you@company.com"/>
                 <TextInput label="Password" type="password" value={signupPassword} onChange={e=>setSignupPassword(e.target.value)} placeholder="••••••••"/>

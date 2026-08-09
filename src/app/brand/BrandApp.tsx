@@ -36,7 +36,7 @@ type GlobalView = "campaigns" | "urgent" | "schedule" | "contracts-global" | "pa
 type AppView = GlobalView | "campaign" | "create-campaign";
 type CampaignSection = "overview" | "moodboard" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "activity" | "collaboration" | "users";
 
-const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
+const PARTNERED_AGENCIES = ["Vantage Model Management","Meridian Models","Solenne","Vector Models"];
 
 // ─── CONTRACT MODAL ────────────────────────────────────────────────────────
 
@@ -1827,7 +1827,8 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
   const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
   // Assigned per the currently-visible set, not per campaign in isolation —
   // guarantees no two cards on screen at once ever show the same photo.
-  const covers = assignCampaignCovers(filtered.map(c=>c.id));
+  // AW26 Runway Presentation (id 5) deliberately gets no cover — direct request.
+  const covers = assignCampaignCovers(filtered.map(c=>c.id).filter(id=>id!==5));
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`}/>
@@ -1863,7 +1864,9 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
                   {/* Natural color, deliberately — the app's own chrome is
                       black and white now, so whatever a brand picks for
                       their own cover is the only color on the page. */}
-                  <img src={c.coverPhoto ?? covers.get(c.id)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
+                  {(c.coverPhoto ?? covers.get(c.id)) && (
+                    <img src={c.coverPhoto ?? covers.get(c.id)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
+                  )}
                   <div className="absolute top-2.5 left-2.5">
                     <Badge label={c.status==="archived"?"Archived":"Active"} variant={c.status==="archived"?"draft":"active"}/>
                   </div>
@@ -2209,10 +2212,10 @@ function GlobalContracts() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-border bg-muted/30">{["Reference","Talent","Agency","Campaign","Value","Status","Actions"].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}</tr></thead>
             <tbody>
-              {[["CF-2025-0841","James Whitfield","Elite Model Mgmt.","AW25 Womenswear","$2,850","Fully Executed"],
-                ["CF-2025-0842","Amara Diallo","Elite Model Mgmt.","AW25 Womenswear","$2,300","Awaiting Signature"],
-                ["CF-2025-0843","Zara Okafor","Elite Model Mgmt.","AW25 Womenswear","$1,960","Draft — Not Sent"],
-                ["CF-2025-0791","Mila Tran","IMG Models","SS25 Fragrance","$1,100","Fully Executed"]].map((r,i)=>(
+              {[["CF-2025-0841","James Whitfield","Vantage Model Mgmt.","AW25 Womenswear","$2,850","Fully Executed"],
+                ["CF-2025-0842","Amara Diallo","Vantage Model Mgmt.","AW25 Womenswear","$2,300","Awaiting Signature"],
+                ["CF-2025-0843","Zara Okafor","Vantage Model Mgmt.","AW25 Womenswear","$1,960","Draft — Not Sent"],
+                ["CF-2025-0791","Mila Tran","Meridian Models","SS25 Fragrance","$1,100","Fully Executed"]].map((r,i)=>(
                 <tr key={i} className="border-b border-border last:border-0 hover:bg-secondary cursor-pointer">
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{r[0]}</td>
                   <td className="px-4 py-3 font-medium">{r[1]}</td>
@@ -2825,21 +2828,21 @@ function GlobalPayments() {
 // ─── INVOICES PANEL ─────────────────────────────────────────────────────────
 
 const INVOICE_DATA = [
-  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"James Whitfield", dayRate:950,  days:3, amount:2850,  due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"Amara Diallo",    dayRate:1150, days:2, amount:2300,  due:"06/24/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    agency:"IMG Models",        talent:"Mila Tran",       dayRate:1100, days:1, amount:1100,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0768", campaign:"FW24 Campaign",            agency:"DNA Models",        talent:"Sofia Brandt",    dayRate:1200, days:3, amount:3600,  due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0804", campaign:"Resort Lookbook 2025",     agency:"Storm Models",      talent:"Ines Ferreira",   dayRate:1340, days:2, amount:2680,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Next Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", agency:"Vantage Model Mgmt.", talent:"James Whitfield", dayRate:950,  days:3, amount:2850,  due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", agency:"Vantage Model Mgmt.", talent:"Amara Diallo",    dayRate:1150, days:2, amount:2300,  due:"06/24/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    agency:"Meridian Models",        talent:"Mila Tran",       dayRate:1100, days:1, amount:1100,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0768", campaign:"FW24 Campaign",            agency:"Vector Models",        talent:"Sofia Brandt",    dayRate:1200, days:3, amount:3600,  due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0804", campaign:"Resort Lookbook 2025",     agency:"Halcyon Models",      talent:"Ines Ferreira",   dayRate:1340, days:2, amount:2680,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Anthem Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
 ];
 
 // Already-authorized invoices — same shape as an outstanding one, plus
 // when it was paid, so the fee breakdown modal keeps working unchanged.
 const PAID_INVOICE_DATA = [
-  { id:"INV-0729", campaign:"AW26 Runway Presentation", agency:"Wilhelmina",   talent:"Priya Anand",     dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
-  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    agency:"Next Models",  talent:"Chiara Russo",    dayRate:900,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
-  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"James Whitfield", dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
-  { id:"INV-0655", campaign:"Resort Lookbook 2025",     agency:"Storm Models", talent:"Ines Ferreira",   dayRate:460,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
+  { id:"INV-0729", campaign:"AW26 Runway Presentation", agency:"Solenne",   talent:"Priya Anand",     dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
+  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    agency:"Anthem Models",  talent:"Chiara Russo",    dayRate:900,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
+  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", agency:"Vantage Model Mgmt.", talent:"James Whitfield", dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
+  { id:"INV-0655", campaign:"Resort Lookbook 2025",     agency:"Halcyon Models", talent:"Ines Ferreira",   dayRate:460,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
 ];
 
 function InvoicesPanel() {
@@ -3027,18 +3030,18 @@ function InvoicesPanel() {
 // ─── MESSAGING ─────────────────────────────────────────────────────────────
 
 const INBOX_MSGS = [
-  { id:1,  urgent:true,  date:"Jun 19, 2:14 PM", subject:"Payout requested — Booking #0841",              sender:"Sophie Chen",   org:"Elite Model Mgmt.", title:"Senior Agent",      campaign:"AW25 Womenswear",     read:false, body:"Please review and authorize payment for the AW25 Womenswear booking. Let us know if you have any questions." },
-  { id:2,  urgent:false, date:"Jun 18, 10:30 AM",subject:"Talent availability confirmed — Amara Diallo",  sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:false, body:"Amara has confirmed availability for the full window, 07/14–07/15. Please proceed with the contract." },
-  { id:3,  urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Following up on rates for Mila's booking. Please advise." },
-  { id:4,  urgent:true,  date:"Jun 17, 11:52 AM",subject:"Fitting rescheduled — need sign-off today",      sender:"Priya Anand",   org:"Wilhelmina",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:false, body:"The 2pm fitting slot moved to 4pm due to a venue conflict. Need your sign-off on the new call sheet before we notify talent." },
-  { id:5,  urgent:false, date:"Jun 16, 5:40 PM", subject:"Usage terms question — Resort Lookbook",         sender:"Marcus Reyes",  org:"DNA Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Client is asking whether the lookbook usage extends to paid social. Can you confirm before we sign?" },
-  { id:6,  urgent:false, date:"Jun 16, 9:15 AM", subject:"Comp cards attached — 3 new submissions",        sender:"Sophie Chen",   org:"Elite Model Mgmt.", title:"Senior Agent",      campaign:"SS25 Fragrance",      read:true,  body:"Sending over three additional comp cards for consideration ahead of Friday's deadline." },
-  { id:7,  urgent:false, date:"Jun 15, 3:22 PM", subject:"Contract executed — Ines Ferreira",              sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW26 Runway Presentation", read:true,  body:"Signed contract attached. Let us know if wardrobe needs measurements ahead of the fitting." },
-  { id:8,  urgent:true,  date:"Jun 15, 8:03 AM", subject:"Overdue invoice — please advise",                sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:false, body:"Invoice #4471 is now five days past due. Can you let us know the status on your end?" },
-  { id:9,  urgent:false, date:"Jun 14, 6:48 PM", subject:"Travel confirmation needed",                     sender:"Marcus Reyes",  org:"DNA Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Can you confirm flight details for the location shoot are finalized on your side?" },
-  { id:10, urgent:false, date:"Jun 14, 1:10 PM", subject:"New talent for consideration — Runway",          sender:"Priya Anand",   org:"Wilhelmina",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:true,  body:"Adding two new faces to the roster ahead of casting. Comp cards to follow shortly." },
-  { id:11, urgent:false, date:"Jun 13, 4:30 PM", subject:"Re: Rate question — SS25 Fragrance",             sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Thanks for confirming — we'll move forward at the quoted rate." },
-  { id:12, urgent:false, date:"Jun 12, 9:55 AM", subject:"Deliverables received — Womenswear",             sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:true,  body:"All deliverables for the shoot have been received and logged on our end. Thank you." },
+  { id:1,  urgent:true,  date:"Jun 19, 2:14 PM", subject:"Payout requested — Booking #0841",              sender:"Sophie Chen",   org:"Vantage Model Mgmt.", title:"Senior Agent",      campaign:"AW25 Womenswear",     read:false, body:"Please review and authorize payment for the AW25 Womenswear booking. Let us know if you have any questions." },
+  { id:2,  urgent:false, date:"Jun 18, 10:30 AM",subject:"Talent availability confirmed — Amara Diallo",  sender:"James Kirk",    org:"Vantage Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:false, body:"Amara has confirmed availability for the full window, 07/14–07/15. Please proceed with the contract." },
+  { id:3,  urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",    org:"Meridian Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Following up on rates for Mila's booking. Please advise." },
+  { id:4,  urgent:true,  date:"Jun 17, 11:52 AM",subject:"Fitting rescheduled — need sign-off today",      sender:"Priya Anand",   org:"Solenne",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:false, body:"The 2pm fitting slot moved to 4pm due to a venue conflict. Need your sign-off on the new call sheet before we notify talent." },
+  { id:5,  urgent:false, date:"Jun 16, 5:40 PM", subject:"Usage terms question — Resort Lookbook",         sender:"Marcus Reyes",  org:"Vector Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Client is asking whether the lookbook usage extends to paid social. Can you confirm before we sign?" },
+  { id:6,  urgent:false, date:"Jun 16, 9:15 AM", subject:"Comp cards attached — 3 new submissions",        sender:"Sophie Chen",   org:"Vantage Model Mgmt.", title:"Senior Agent",      campaign:"SS25 Fragrance",      read:true,  body:"Sending over three additional comp cards for consideration ahead of Friday's deadline." },
+  { id:7,  urgent:false, date:"Jun 15, 3:22 PM", subject:"Contract executed — Ines Ferreira",              sender:"James Kirk",    org:"Vantage Model Mgmt.", title:"Booking Agent",    campaign:"AW26 Runway Presentation", read:true,  body:"Signed contract attached. Let us know if wardrobe needs measurements ahead of the fitting." },
+  { id:8,  urgent:true,  date:"Jun 15, 8:03 AM", subject:"Overdue invoice — please advise",                sender:"Diana Park",    org:"Meridian Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:false, body:"Invoice #4471 is now five days past due. Can you let us know the status on your end?" },
+  { id:9,  urgent:false, date:"Jun 14, 6:48 PM", subject:"Travel confirmation needed",                     sender:"Marcus Reyes",  org:"Vector Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Can you confirm flight details for the location shoot are finalized on your side?" },
+  { id:10, urgent:false, date:"Jun 14, 1:10 PM", subject:"New talent for consideration — Runway",          sender:"Priya Anand",   org:"Solenne",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:true,  body:"Adding two new faces to the roster ahead of casting. Comp cards to follow shortly." },
+  { id:11, urgent:false, date:"Jun 13, 4:30 PM", subject:"Re: Rate question — SS25 Fragrance",             sender:"Diana Park",    org:"Meridian Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Thanks for confirming — we'll move forward at the quoted rate." },
+  { id:12, urgent:false, date:"Jun 12, 9:55 AM", subject:"Deliverables received — Womenswear",             sender:"James Kirk",    org:"Vantage Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:true,  body:"All deliverables for the shoot have been received and logged on our end. Thank you." },
 ];
 
 // Split view — an inbox list on the left, a persistent compose/detail pane
@@ -3602,12 +3605,12 @@ function Reports() {
 // ─── NETWORK ──────────────────────────────────────────────────────────────────
 
 function Network() {
-  const [added, setAdded] = useState(["Elite Model Management","IMG Models"]);
+  const [added, setAdded] = useState(["Vantage Model Management","Meridian Models"]);
   const agencies = [
-    { name:"Elite Model Management", loc:"New York · London · Paris", talent:420, bookings:8, spend:"$24,500", lastSub:"2 days ago",  responseRate:"94%", preferred:true  },
-    { name:"IMG Models",             loc:"New York · London · Milan",  talent:380, bookings:5, spend:"$11,100", lastSub:"5 days ago",  responseRate:"87%", preferred:false },
-    { name:"Wilhelmina",             loc:"New York · Los Angeles",     talent:210, bookings:2, spend:"$4,400",  lastSub:"12 days ago", responseRate:"76%", preferred:false },
-    { name:"DNA Models",             loc:"New York",                   talent:180, bookings:1, spend:"$3,600",  lastSub:"3 days ago",  responseRate:"91%", preferred:false },
+    { name:"Vantage Model Management", loc:"New York · London · Paris", talent:420, bookings:8, spend:"$24,500", lastSub:"2 days ago",  responseRate:"94%", preferred:true  },
+    { name:"Meridian Models",             loc:"New York · London · Milan",  talent:380, bookings:5, spend:"$11,100", lastSub:"5 days ago",  responseRate:"87%", preferred:false },
+    { name:"Solenne",             loc:"New York · Los Angeles",     talent:210, bookings:2, spend:"$4,400",  lastSub:"12 days ago", responseRate:"76%", preferred:false },
+    { name:"Vector Models",             loc:"New York",                   talent:180, bookings:1, spend:"$3,600",  lastSub:"3 days ago",  responseRate:"91%", preferred:false },
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0">
