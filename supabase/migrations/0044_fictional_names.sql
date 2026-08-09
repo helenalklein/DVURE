@@ -32,6 +32,22 @@
 -- for this one statement is the standard Postgres pattern for a
 -- deliberate administrative cleanup like this, not a workaround for a
 -- bug.
+-- audit_log.org_id, bookings.brand_org_id, and invites.org_id all
+-- reference organizations without ON DELETE CASCADE (deliberately, in
+-- audit_log's case — an audit trail shouldn't silently vanish when its
+-- org does). That's the right call for a real org's real history; this
+-- stray org's history is just test noise, so it's fine to clear here.
+-- campaigns/org_memberships/brand_agency_partnerships etc. do cascade,
+-- so nothing else needs an explicit delete first.
+delete from audit_log
+where org_id in (select id from organizations where org_type = 'brand' and name <> 'Acne Studios');
+
+delete from bookings
+where brand_org_id in (select id from organizations where org_type = 'brand' and name <> 'Acne Studios');
+
+delete from invites
+where org_id in (select id from organizations where org_type = 'brand' and name <> 'Acne Studios');
+
 alter table org_memberships disable trigger org_memberships_prevent_last_admin_lockout;
 
 delete from organizations
