@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles, AlertCircle } from "lucide-react";
 import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
 import { useAuth } from "./shared/auth";
-import dvureLogo from "../assets/dvure-logo-dark.png";
+import dvureMarkD from "../assets/dvure-mark-d.png";
+import dvureMarkWordmark from "../assets/dvure-mark-wordmark.png";
 
 type SignupStep = "role" | "form" | "provisioning" | "success";
 type SignupRole = "brand" | "agency";
@@ -82,9 +83,10 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   return (
     <div className="h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <img src={dvureLogo} alt="DVURE" className="w-56 mx-auto"/>
-          <div className="text-[11px] uppercase tracking-[0.25em] text-foreground/80 mt-3 italic">Make It Possible.</div>
+        <div className="text-center mb-8 flex flex-col items-center">
+          <img src={dvureMarkD} alt="" className="h-[76px] w-auto"/>
+          <img src={dvureMarkWordmark} alt="DVURE" className="h-[27px] w-auto mt-4"/>
+          <div className="text-[7.7px] uppercase tracking-[0.3em] text-foreground/80 mt-3">Make It Possible.</div>
         </div>
 
         <div className="glass-strong border rounded-xl p-6 shadow-xl space-y-4">
