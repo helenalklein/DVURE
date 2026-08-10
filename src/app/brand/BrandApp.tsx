@@ -127,14 +127,14 @@ function BrandSidebar({ active, onNav, onLogout }: {
   };
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-3 h-14 flex items-center border-b border-border gap-2">
-        <OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/>
-        <div className="min-w-0 flex-1 flex items-baseline gap-1.5">
-          <span className="text-sm font-medium truncate">{orgName}</span>
+      <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2">
+        <div className="shrink-0 mt-0.5"><OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
+        <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
+          <span className="text-sm font-medium break-words">{orgName}</span>
           <span className="text-heading text-xs shrink-0 text-muted-foreground">Brand</span>
         </div>
         <button onClick={()=>onNav("campaigns")} title="Projects"
-          className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+          className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={13}/>
         </button>
       </div>
@@ -224,14 +224,14 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
   const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-3 h-14 flex items-center border-b border-border gap-2">
-        <OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/>
-        <div className="min-w-0 flex-1 flex items-baseline gap-1.5">
-          <span className="text-sm font-medium truncate">{orgName}</span>
+      <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2">
+        <div className="shrink-0 mt-0.5"><OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
+        <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
+          <span className="text-sm font-medium break-words">{orgName}</span>
           <span className="text-heading text-xs shrink-0 text-muted-foreground">Brand</span>
         </div>
         <button onClick={onHome} title="Projects"
-          className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
+          className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={13}/>
         </button>
       </div>
@@ -1474,7 +1474,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           {section==="call-sheet" && (
             realCampaignId
               ? <CallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">Call Sheet isn't available on this demo campaign — create a new campaign to use it.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Call Sheet and has no saved project record to attach roles to — create a new campaign to use Call Sheet.</div>
           )}
 
           {section==="looks" && <LooksScreen campaignId={campaign.id}/>}

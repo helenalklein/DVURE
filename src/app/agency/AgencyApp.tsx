@@ -736,10 +736,10 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
     <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:agencyName, email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic" }}>
       <div className="h-screen flex bg-background overflow-hidden">
         <aside className="w-52 shrink-0 glass border-r flex flex-col">
-          <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
-            <OrgLogoBox org={org} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/>
-            <div className="min-w-0 flex-1 flex items-baseline gap-1.5">
-              <span className="text-sm font-medium truncate flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></span>
+          <div className="px-4 py-2.5 min-h-14 flex items-start border-b border-border gap-2.5">
+            <div className="shrink-0 mt-0.5"><OrgLogoBox org={org} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
+            <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
+              <span className="text-sm font-medium break-words inline-flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></span>
               <span className="text-heading text-xs shrink-0 text-muted-foreground">Agency</span>
             </div>
           </div>
