@@ -25,6 +25,8 @@ import coverMarvilleCloudPantheon from "../../assets/gallery2/marville-cloud-stu
 import coverVanDerHeydenAmsterdam from "../../assets/gallery2/vanderheyden-nieuwe-zijds-voorburgwal.jpg";
 import coverRichardsRockyCoast from "../../assets/gallery2/richards-rocky-coast.jpg";
 import coverWhampoaAnchorage from "../../assets/gallery2/unknown-whampoa-anchorage.jpg";
+import coverAtgetLuxembourg from "../../assets/gallery2/atget-luxembourg-anne-brittany.jpg";
+import coverLaurentBridgeJalon from "../../assets/gallery2/laurent-bridge-tunnel-jalon.jpg";
 import photoZaraOkafor from "../../assets/talent/zara-okafor.jpg";
 import photoAmaraDiallo from "../../assets/talent/amara-diallo.jpg";
 import photoMilaTran from "../../assets/talent/mila-tran.jpg";
@@ -204,6 +206,8 @@ const CAMPAIGN_COVER_GALLERY: string[] = [
   coverVanDerHeydenAmsterdam, // Jan van der Heyden, "The Nieuwe Zijds Voorburgwal, Amsterdam" — Rijksmuseum
   coverRichardsRockyCoast, // William Trost Richards, "A Rocky Coast" — The Met
   coverWhampoaAnchorage, // Unknown artist, "View of the Whampoa Anchorage" — The Met
+  coverAtgetLuxembourg, // Eugene Atget, "Luxembourg, Anne of Brittany", 1923-1926 — NGA
+  coverLaurentBridgeJalon, // Juan Laurent, "Bridge and tunnel over Jalon, Madrid to Zaragoza", c. 1860-1865 — NGA
 ];
 
 // Assigns every campaign in one rendered list a DISTINCT photo — not just
