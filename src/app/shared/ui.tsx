@@ -323,14 +323,38 @@ function UserMenuButton() {
   );
 }
 
-export function TopBar({ title, sub, actions }: { title: string; sub?: string; actions?: JSX.Element }) {
+// "Updated Xs/m ago" — ticks its own display every 15s off a plain
+// timestamp, so a caller just needs to record when its data last loaded
+// rather than manage a live label itself. Stands in for the removed
+// header Refresh button: a reload already re-pulls the same state, this
+// just shows how fresh what's on screen already is.
+function relativeUpdated(updatedAt: number, nowMs: number): string {
+  const secs = Math.max(0, Math.round((nowMs - updatedAt) / 1000));
+  if (secs < 10) return "Updated just now";
+  if (secs < 60) return `Updated ${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `Updated ${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  return `Updated ${hours}h ago`;
+}
+
+export function TopBar({ title, sub, actions, updatedAt }: { title: string; sub?: string; actions?: JSX.Element; updatedAt?: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (updatedAt == null) return;
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [updatedAt]);
   return (
     <div className="h-14 border-b glass flex items-center px-6 gap-4 shrink-0 z-20 relative">
       <div className="flex-1 min-w-0">
         <div className="text-heading text-lg truncate">{title}</div>
         {sub && <div className="text-subtext text-xs">{sub}</div>}
       </div>
-      <div className="flex items-center gap-2 shrink-0">{actions}<UserMenuButton/><BellButton/></div>
+      <div className="flex items-center gap-3 shrink-0">
+        {updatedAt != null && <span className="text-[10px] font-mono text-muted-foreground">{relativeUpdated(updatedAt, now)}</span>}
+        {actions}<UserMenuButton/><BellButton/>
+      </div>
     </div>
   );
 }

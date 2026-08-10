@@ -15,7 +15,7 @@ import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextI
 import { getAccessGate } from "../shared/accessGate";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
-import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
+import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
@@ -33,7 +33,7 @@ import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "../../lib/q
 import { fetchOrgMembers, updateOrgMember, type OrgMember, type AccessLevel } from "../../lib/queries/orgMembers";
 import { createOrgStaffInvite, fetchPendingOrgInvites, type PendingInvite } from "../../lib/queries/invites";
 
-type GlobalView = "campaigns" | "urgent" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
+type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
 type CampaignSection = "overview" | "moodboard" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "activity" | "collaboration" | "users";
 
@@ -92,7 +92,6 @@ function ExclamationIcon({ size = 15, className }: { size?: number; className?: 
 
 const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number }[] = [
   { id:"campaigns",        label:"Projects",   Icon:Camera                },
-  { id:"urgent",           label:"Pending Review", Icon:ExclamationIcon    },
   { id:"schedule",         label:"Calendar",   Icon:Calendar               },
   { id:"contracts-global", label:"Contracts",  Icon:FileCheck              },
   { id:"payments-global",  label:"Payments",   Icon:CreditCard             },
@@ -102,12 +101,21 @@ const GLOBAL_NAV: { id: GlobalView; label: string; Icon: IconFn; badge?: number 
   { id:"directory",        label:"Directory",  Icon:User                   },
 ];
 
-function BrandSidebar({ active, onNav, onLogout, leadsNeededCount }: {
-  active: GlobalView; onNav: (v: GlobalView) => void; onLogout: () => void; leadsNeededCount: number;
+function BrandSidebar({ active, onNav, onLogout }: {
+  active: GlobalView; onNav: (v: GlobalView) => void; onLogout: () => void;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
-  const urgentCount = CAMPAIGNS_ATTENTION.filter(a=>a.urgent).length + leadsNeededCount;
+  // Pending-review items live under the nav item they actually come from —
+  // a contract badge on Contracts, a payment badge on Payments — rather
+  // than a single catch-all "Pending Review" page. Review-type overdue
+  // items don't have a global nav home of their own (they're per-campaign
+  // submissions), so those still only surface via the floating Needs
+  // Attention widget below.
+  const navBadge: Partial<Record<GlobalView, number>> = {
+    "payments-global":  OVERDUE_ACTIONS.filter(a=>a.type==="Payment").length,
+    "contracts-global": OVERDUE_ACTIONS.filter(a=>a.type==="Contract").length,
+  };
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
       <div className="px-3 h-14 flex items-center border-b border-border gap-1.5">
@@ -125,16 +133,24 @@ function BrandSidebar({ active, onNav, onLogout, leadsNeededCount }: {
           <Home size={13}/>
         </button>
       </div>
-      <nav className="flex-1 px-2 py-3 space-y-0.5">
+      <nav className="flex-1 px-2 py-3 space-y-1.5">
         {GLOBAL_NAV.map(item => {
           const NavIcon = item.Icon;
+          const badgeCount = navBadge[item.id] ?? 0;
           return (
             <button key={item.id} onClick={() => onNav(item.id)}
-              className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left",
-                active===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
+              className={cx("w-full flex items-center gap-3 px-3 py-3 rounded-lg border text-sm transition-colors text-left cursor-pointer",
+                active===item.id
+                  ? "bg-secondary border-foreground/15 text-foreground font-medium shadow-sm"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary hover:border-border"
               )}>
-              <NavIcon size={15}/>{item.label}
-              {item.id==="urgent" && urgentCount>0 && <SidebarBadge count={urgentCount}/>}
+              <span className={cx("w-8 h-8 rounded-md flex items-center justify-center shrink-0 transition-colors",
+                active===item.id ? "bg-foreground text-primary-foreground" : "bg-secondary text-muted-foreground"
+              )}>
+                <NavIcon size={15}/>
+              </span>
+              {item.label}
+              {badgeCount>0 && <SidebarBadge count={badgeCount}/>}
             </button>
           );
         })}
@@ -161,7 +177,7 @@ function BrandSidebar({ active, onNav, onLogout, leadsNeededCount }: {
 
 const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] = [
   { id:"overview",      label:"Overview",      Icon:LayoutDashboard },
-  { id:"moodboard",     label:"Submissions",   Icon:PolaroidIcon    },
+  { id:"moodboard",     label:"Model Board",   Icon:PolaroidIcon    },
   { id:"requirements",  label:"Requirements",  Icon:BookOpen        },
   { id:"deliverables",  label:"Schedule",      Icon:Calendar        },
   { id:"contracts",     label:"Contracts",     Icon:FileCheck       },
@@ -185,9 +201,10 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
   return withCallSheet.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, onArchive }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
   onBack: () => void; onNewCampaign: () => void; onHome: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
+  isReal?: boolean; onArchive?: () => void;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
@@ -225,6 +242,12 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
             ? <span className="text-urgent font-semibold">Closed</span>
             : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
         </div>
+        {campaign.status!=="archived" && onArchive && (
+          <button onClick={onArchive} disabled={!isReal} title={isReal?undefined:"Demo campaigns can't be archived"}
+            className="w-full mt-2.5 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-muted-foreground border border-dashed border-border rounded-md hover:border-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground">
+            <Check size={11}/> Mark Complete & Archive
+          </button>
+        )}
       </div>
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         {nav.map(item => {
@@ -1086,10 +1109,14 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   );
 }
 
-function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome }: {
-  campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void;
+function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onArchived }: {
+  campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onArchived?: () => void;
 }) {
   const { profile, org } = useAuth();
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string|null>(null);
+  const [pendingManualCount, setPendingManualCount] = useState(0);
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [shim, setShim] = useState<SubmissionShim>(new Map());
@@ -1133,6 +1160,27 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
         <button onClick={onHome} className="underline cursor-pointer">Back to campaigns</button>
       </div>
     );
+  }
+
+  async function openArchiveConfirm() {
+    setArchiveError(null);
+    setPendingManualCount(0);
+    setShowArchiveConfirm(true);
+    if (org && realCampaignId) {
+      const manual = await fetchManualPaymentsForBrand(org.id);
+      setPendingManualCount(manual.filter(m => m.campaignId === realCampaignId && m.status === "pending").length);
+    }
+  }
+
+  async function handleArchive() {
+    if (!realCampaignId) return;
+    setArchiving(true);
+    setArchiveError(null);
+    const { error } = await archiveCampaign(realCampaignId);
+    setArchiving(false);
+    if (error) { setArchiveError(error); return; }
+    setShowArchiveConfirm(false);
+    onArchived?.();
   }
 
   function persistingSetTalent(fn: (prev: Talent[]) => Talent[]) {
@@ -1251,7 +1299,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined} isReal={!!realCampaignId} onArchive={openArchiveConfirm}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name}
           actions={viewingAgency ? <Btn variant="primary" size="sm" icon={<Send size={13}/>}
@@ -1320,7 +1368,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           {section==="call-sheet" && (
             realCampaignId
               ? <CallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">Call Sheet needs a real, saved campaign — publish this campaign first.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">Call Sheet isn't available on this demo campaign — create a new campaign to use it.</div>
           )}
 
           {section==="looks" && <LooksScreen campaignId={campaign.id}/>}
@@ -1436,6 +1484,27 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
       {showExtendModal && (
         <ExtendSubmissionModal campaign={campaign} onClose={()=>setShowExtendModal(false)}
           onGrant={ext=>{ setExtensions(prev=>[...prev, ext]); setShowExtendModal(false); }}/>
+      )}
+      {showArchiveConfirm && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-md w-96 p-6 shadow-xl">
+            <div className="text-sm font-semibold mb-1">Mark "{campaign.name}" complete & archive?</div>
+            <div className="text-xs text-muted-foreground mb-4">
+              This moves the campaign to Archived. It stays visible there — this isn't permanent deletion.
+            </div>
+            {pendingManualCount > 0 && (
+              <div className="flex items-start gap-2 text-xs text-[#D4A017] bg-[#D4A017]/10 border border-[#D4A017]/30 rounded-md px-3 py-2.5 mb-4">
+                <AlertCircle size={13} className="mt-0.5 shrink-0"/>
+                <span>{pendingManualCount} check/wire/cash payment{pendingManualCount===1?"":"s"} on this campaign {pendingManualCount===1?"is":"are"} still awaiting confirmation from the agency. You can still archive — just make sure that's intentional.</span>
+              </div>
+            )}
+            {archiveError && <div className="text-xs text-red-500 mb-4">{archiveError}</div>}
+            <div className="flex gap-2">
+              <Btn variant="primary" fullWidth disabled={archiving} onClick={handleArchive}>{archiving ? "Archiving…" : "Mark Complete & Archive"}</Btn>
+              <Btn variant="outline" fullWidth onClick={()=>setShowArchiveConfirm(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
@@ -1781,8 +1850,10 @@ const CAMPAIGNS_ATTENTION = [
 ];
 
 // Overdue actions — payment due dates and other time-sensitive items past
-// their deadline. Feeds both the standing-column metric and the
-// Urgent/Overdue nav page. Mock only; real due-date tracking comes later.
+// their deadline. Feeds the per-section nav badges (Contracts, Payments) —
+// each overdue item surfaces on the nav item it actually belongs to,
+// rather than a single catch-all page. Mock only; real due-date tracking
+// comes later.
 const OVERDUE_ACTIONS = [
   { id:1, type:"Payment",  msg:"Payment due for Zara Okafor booking — 3 days overdue.",             campaignId:1, due:"Jul 12, 2026" },
   { id:2, type:"Contract", msg:"Unsent contract for Zara Okafor pending signature.",                 campaignId:1, due:"Jul 10, 2026" },
@@ -1790,17 +1861,7 @@ const OVERDUE_ACTIONS = [
   { id:4, type:"Payment",  msg:"Payment due for Ines Ferreira booking — 1 day overdue.",              campaignId:2, due:"Jul 14, 2026" },
 ];
 
-// Quiet history column for Tasks — same idea as Payments' Recent
-// Activity: real completed items, not another queue to act on.
-const RECENTLY_COMPLETED = [
-  { type:"Payment",  label:"Payment sent — James Whitfield booking",      resolvedDate:"Jul 08" },
-  { type:"Contract", label:"Contract signed — Amara Diallo",              resolvedDate:"Jul 06" },
-  { type:"Review",   label:"SS25 Fragrance — 9 submissions reviewed",     resolvedDate:"Jul 04" },
-  { type:"Payment",  label:"Payment sent — Sofia Brandt booking",         resolvedDate:"Jun 30" },
-  { type:"Contract", label:"Contract signed — James Whitfield",          resolvedDate:"Jun 27" },
-];
-
-function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: Campaign[]; openCampaign: (id: number) => void; onNewCampaign: () => void }) {
+function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { campaigns: Campaign[]; openCampaign: (id: number) => void; onNewCampaign: () => void; updatedAt?: number }) {
   const currentUser = useCurrentUser();
   const [tab, setTab] = useState("active");
   const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
@@ -1810,7 +1871,7 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
   const covers = assignCampaignCovers(filtered.map(c=>c.id).filter(id=>id!==5));
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`}/>
+      <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`} updatedAt={updatedAt}/>
       <div className="flex items-center justify-between gap-1 px-6 pt-5 border-b border-border shrink-0">
         <div className="flex items-center gap-1">
           {["active","drafts","archived"].map(t=>(
@@ -1863,7 +1924,9 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
                     ))}
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-                    <div className="text-[10px] text-muted-foreground font-mono">{c.due ? `Due ${c.due}` : "Due —"}</div>
+                    <div className={cx("text-[10px] font-mono", c.dueLabel?.includes("overdue") ? "font-bold text-[#C0392B]/80" : "text-muted-foreground")}>
+                      {c.due ? `Due ${c.due}` : "Due —"}
+                    </div>
                     <ChevronRight size={13} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"/>
                   </div>
                 </div>
@@ -1871,100 +1934,6 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign }: { campaigns: 
             ))}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ─── URGENT / OVERDUE ─────────────────────────────────────────────────────────
-// Minimal first pass per spec — this is the landing spot for the "Overdue
-// Actions" metric on the Campaigns screen. Deeper filtering/sorting/snooze
-// behavior can be layered on later; today it just needs to exist and show
-// the same items the metric is counting.
-
-function UrgentOverdueScreen({ openCampaign, openCampaignCallSheet, leadsNeeded }: {
-  openCampaign: (id: number) => void; openCampaignCallSheet: (id: number) => void; leadsNeeded: (CampaignNeedingLeads & { shimId: number })[];
-}) {
-  const currentUser = useCurrentUser();
-  const byType = (t: string) => OVERDUE_ACTIONS.filter(a=>a.type===t).length;
-  const totalCount = OVERDUE_ACTIONS.length + leadsNeeded.length;
-  return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Pending Review" sub={`${currentUser?.org ?? ""} · ${totalCount} open`}/>
-      <div className="flex-1 overflow-auto p-6">
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-10">
-          <div className="flex-1 min-w-0 lg:max-w-3xl space-y-3">
-            {/* Real, DB-derived — not mock like the rest of this screen: a
-                filled call sheet role with no department lead set yet on
-                its whole campaign. */}
-            {leadsNeeded.map(l=>(
-              <div key={l.campaignId} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
-                <Star size={15} className="text-foreground mt-0.5 shrink-0"/>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge label="Leads" variant="info"/>
-                  </div>
-                  <div className="text-sm text-muted-foreground">{l.campaignName} — {l.filledCount} filled role{l.filledCount===1?"":"s"}, no department lead assigned yet.</div>
-                </div>
-                <Btn variant="primary" size="md" onClick={()=>openCampaignCallSheet(l.shimId)}>Pick leads</Btn>
-              </div>
-            ))}
-            {OVERDUE_ACTIONS.map(a=>(
-              <div key={a.id} className="glass-subtle border rounded-md p-4 flex items-start gap-3">
-                <ExclamationIcon size={15} className="text-foreground mt-0.5 shrink-0"/>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge label={a.type} variant="info"/>
-                    <span className="text-[11px] font-mono font-semibold text-foreground">Due {a.due}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">{a.msg}</div>
-                </div>
-                <Btn variant="primary" size="md" onClick={()=>openCampaign(a.campaignId)}>View</Btn>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-col sm:flex-row lg:flex-col gap-8 lg:gap-3 shrink-0">
-            {/* The only place an overdue/urgent count lives now — Campaigns
-                dropped its own copy of this metric entirely. */}
-            <div className="lg:w-48 shrink-0 lg:min-h-[24rem] lg:border-l border-border lg:pl-6 flex flex-col">
-              <div className="bg-foreground text-primary-foreground rounded-md px-4 py-4 mb-3">
-                <div className="text-3xl font-semibold tabular-nums tracking-tight">{totalCount}</div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.2em] mt-2 text-primary-foreground/70">Pending</div>
-              </div>
-              <div className="flex-1 flex flex-col">
-                {[
-                  { label:"Leads",     value:leadsNeeded.length },
-                  { label:"Payments",  value:byType("Payment") },
-                  { label:"Contracts", value:byType("Contract") },
-                  { label:"Talent Review", value:byType("Review") },
-                ].map((s,i)=>(
-                  <div key={i} className={cx("flex-1 flex flex-col justify-center py-2", i>0 && "border-t border-border")}>
-                    <div className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{s.value}</div>
-                    <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Recently Completed — quiet history column, same idea as
-                Payments' Recent Activity: real completed items, not
-                another queue demanding action. */}
-            <div className="lg:w-64 shrink-0 border-l border-border pl-6">
-              <h2 className="text-heading text-base mb-3">Recently Completed</h2>
-              <div className="space-y-3">
-                {RECENTLY_COMPLETED.map((r,i)=>(
-                  <div key={i} className="text-xs">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#27AE60] inline-block shrink-0"/>
-                      <span className="text-[10px] font-mono text-muted-foreground">{r.resolvedDate}</span>
-                      <Badge label={r.type} variant="info"/>
-                    </div>
-                    <div className="leading-snug">{r.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -4184,6 +4153,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [realIdShim, setRealIdShim] = useState<Map<number, string>>(new Map());
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [leadsNeededRaw, setLeadsNeededRaw] = useState<CampaignNeedingLeads[]>([]);
+  const [campaignsUpdatedAt, setCampaignsUpdatedAt] = useState<number>(Date.now());
   const allCampaigns = [...CAMPAIGNS, ...realCampaigns];
 
   async function refetchCampaigns() {
@@ -4192,12 +4162,22 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     setRealCampaigns(fetched);
     setRealIdShim(shim);
     setCampaignsLoading(false);
+    setCampaignsUpdatedAt(Date.now());
     fetchCampaignsNeedingLeads(org.id).then(setLeadsNeededRaw);
     return shim;
   }
 
   useEffect(() => {
     if (org) refetchCampaigns();
+  }, [org?.id]);
+
+  // Quiet background refresh — stands in for the removed header Refresh
+  // button. Silent (no loading flash), just keeps the list and the
+  // "Updated Xm ago" indicator honest without the user doing anything.
+  useEffect(() => {
+    if (!org) return;
+    const id = setInterval(() => { refetchCampaigns(); }, 90_000);
+    return () => clearInterval(id);
   }, [org?.id]);
 
   // Real campaign UUIDs mapped to the synthetic shim id routing already
@@ -4258,13 +4238,12 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:org?.name ?? "", email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>handleGlobalNav("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
         {activeCampaignId != null ? (
-          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")}/>
+          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onArchived={async()=>{ await refetchCampaigns(); backToCampaigns(); }}/>
         ) : (
           <>
-            <BrandSidebar active={globalNav} onNav={handleGlobalNav} onLogout={onLogout} leadsNeededCount={leadsNeeded.length}/>
+            <BrandSidebar active={globalNav} onNav={handleGlobalNav} onLogout={onLogout}/>
             <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }}/>}
-              {view==="urgent"           && <UrgentOverdueScreen openCampaign={openCampaign} openCampaignCallSheet={openCampaignCallSheet} leadsNeeded={leadsNeeded}/>}
+              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} updatedAt={campaignsUpdatedAt}/>}
               {view==="schedule"         && <ScheduleScreen campaigns={allCampaigns} realIdShim={realIdShim} openCampaign={openCampaign}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
               {view==="contracts-global" && <GlobalContracts/>}
@@ -4290,7 +4269,11 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
 
         {/* Needs Attention — stacked directly above the Activity widget in
             the same bottom-right corner. Lives here (not in CampaignsList)
-            so it stays visible inside a campaign too. */}
+            so it stays visible inside a campaign too. Absorbed the real,
+            DB-derived "leads needed" alert when the standalone Pending
+            Review nav page was removed — this floating widget was already
+            the one place surfacing this class of alert everywhere, so it's
+            the natural home rather than a page of its own. */}
         <div ref={attentionRef} className="fixed bottom-20 right-6 z-40">
           {attentionOpen ? (
             <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
@@ -4298,13 +4281,23 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
                 <div className="flex items-center gap-2">
                   <AlertCircle size={13} className="text-foreground shrink-0"/>
                   <span className="text-xs font-semibold">Needs Attention</span>
-                  <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length}</span>
+                  <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length + leadsNeeded.length}</span>
                 </div>
                 <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
                   <span className="text-sm font-bold leading-none">−</span>
                 </button>
               </div>
               <div className="divide-y divide-border">
+                {leadsNeeded.map(l=>(
+                  <div key={`leads-${l.campaignId}`} className="px-4 py-3 flex items-center gap-3 bg-muted/30">
+                    <Star size={14} className="text-foreground shrink-0"/>
+                    <span className="flex-1 text-sm">{l.campaignName} — {l.filledCount} filled role{l.filledCount===1?"":"s"}, no department lead assigned yet.</span>
+                    <button onClick={()=>{ openCampaignCallSheet(l.shimId); setAttentionOpen(false); }}
+                      className="text-xs font-medium px-3 py-1.5 rounded-md border shrink-0 transition-colors cursor-pointer bg-foreground text-primary-foreground border-foreground hover:bg-foreground/90">
+                      Pick leads
+                    </button>
+                  </div>
+                ))}
                 {CAMPAIGNS_ATTENTION.map((a,i)=>(
                   <div key={i} className={cx("px-4 py-3 flex items-center gap-3", a.urgent&&"bg-muted/30")}>
                     <a.Icon size={14} className="text-foreground shrink-0"/>
@@ -4321,6 +4314,11 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
             <button onClick={()=>setAttentionOpen(true)}
               className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
               <AlertCircle size={16}/>
+              {(CAMPAIGNS_ATTENTION.length + leadsNeeded.length) > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#C0392B] text-white text-[9px] font-mono font-semibold flex items-center justify-center">
+                  {CAMPAIGNS_ATTENTION.length + leadsNeeded.length}
+                </span>
+              )}
             </button>
           )}
         </div>

@@ -143,6 +143,16 @@ export async function createCampaign(params: {
   return { id: data.id as string, error: null };
 }
 
+// "Mark Complete" and "Archive" are the same action today — there's no
+// separate completed status in campaign_status (active/drafts/archived),
+// and the user's own framing was "mark a campaign as complete and
+// archive it," not two independent states — so this just moves a
+// campaign into the existing Archived tab.
+export async function archiveCampaign(campaignId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("campaigns").update({ status: "archived" }).eq("id", campaignId);
+  return { error: error?.message ?? null };
+}
+
 // Never call this for a draft — campaigns_select RLS has no status
 // filter, so a distribution row makes a campaign visible to that agency
 // regardless of status.
