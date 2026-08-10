@@ -5,7 +5,6 @@ import galleryDP152207 from "../../assets/gallery/DP152207.jpg";
 import galleryDP70292 from "../../assets/gallery/DP70292.jpg";
 import galleryDP139298 from "../../assets/gallery/DP139298.jpg";
 import coverBierstadt from "../../assets/gallery2/bierstadt-european-landscape.jpg";
-import coverChurchMoonlight from "../../assets/gallery2/church-moonlight-alpine-village.jpg";
 import coverBirchSedgeleyPark from "../../assets/gallery2/birch-sedgeley-park.jpg";
 import coverGuimardFacade from "../../assets/gallery2/guimard-facade-detail.jpg";
 import coverGuardiCanalVenice from "../../assets/gallery2/guardi-canal-venice.jpg";
@@ -20,13 +19,11 @@ import coverBaldusLouvre from "../../assets/gallery2/baldus-view-of-louvre.jpg";
 import coverCanevaRome from "../../assets/gallery2/caneva-view-of-rome.jpg";
 import coverLeGrayPontCarrousel from "../../assets/gallery2/legray-pont-du-carrousel.jpg";
 import coverBissonChaletHandeck from "../../assets/gallery2/bisson-chalet-de-handeck.jpg";
-import coverAtgetHotelAmbassadeurs from "../../assets/gallery2/atget-hotel-ambassadeurs.jpg";
 import coverMarvilleCloudPantheon from "../../assets/gallery2/marville-cloud-study-pantheon.jpg";
 import coverVanDerHeydenAmsterdam from "../../assets/gallery2/vanderheyden-nieuwe-zijds-voorburgwal.jpg";
 import coverRichardsRockyCoast from "../../assets/gallery2/richards-rocky-coast.jpg";
 import coverWhampoaAnchorage from "../../assets/gallery2/unknown-whampoa-anchorage.jpg";
 import coverAtgetLuxembourg from "../../assets/gallery2/atget-luxembourg-anne-brittany.jpg";
-import coverLaurentBridgeJalon from "../../assets/gallery2/laurent-bridge-tunnel-jalon.jpg";
 import photoZaraOkafor from "../../assets/talent/zara-okafor.jpg";
 import photoAmaraDiallo from "../../assets/talent/amara-diallo.jpg";
 import photoMilaTran from "../../assets/talent/mila-tran.jpg";
@@ -186,7 +183,6 @@ const CAMPAIGN_COVER_GALLERY: string[] = [
   galleryDP70292, // Charles Marville, "Allee bordee d'arbres", 1850-53 — Smithsonian
   galleryDP139298, // Edmond Bacot, "Rue des Petits Murs, Caen", 1852-54 — Smithsonian
   coverBierstadt, // Albert Bierstadt, "European Landscape", c. 1856-57 — Smithsonian
-  coverChurchMoonlight, // Frederic Edwin Church, "Moonlight over an Alpine Village" — Smithsonian
   coverBirchSedgeleyPark, // Thomas Birch, "Southeast View of Sedgeley Park" — Smithsonian
   coverGuimardFacade, // Hector Guimard (architect), facade detail, no. 122 — Smithsonian (cropped: source was a full scanned book page with border/caption)
   coverGuardiCanalVenice, // Follower of Francesco Guardi, "Canal in Venice" — Smithsonian
@@ -201,13 +197,11 @@ const CAMPAIGN_COVER_GALLERY: string[] = [
   coverCanevaRome, // Giacomo Caneva, "View of Rome" — NGA
   coverLeGrayPontCarrousel, // Gustave Le Gray, "The Pont du Carrousel, Paris" — NGA
   coverBissonChaletHandeck, // Bisson Freres, "Chalet de Handeck, Hasli Valley" — NGA
-  coverAtgetHotelAmbassadeurs, // Eugene Atget, "Hotel des Ambassadeurs de Hollande" — NGA
   coverMarvilleCloudPantheon, // Charles Marville, "Cloud Study over the Pantheon, Paris" — NGA
   coverVanDerHeydenAmsterdam, // Jan van der Heyden, "The Nieuwe Zijds Voorburgwal, Amsterdam" — Rijksmuseum
   coverRichardsRockyCoast, // William Trost Richards, "A Rocky Coast" — The Met
   coverWhampoaAnchorage, // Unknown artist, "View of the Whampoa Anchorage" — The Met
   coverAtgetLuxembourg, // Eugene Atget, "Luxembourg, Anne of Brittany", 1923-1926 — NGA
-  coverLaurentBridgeJalon, // Juan Laurent, "Bridge and tunnel over Jalon, Madrid to Zaragoza", c. 1860-1865 — NGA
 ];
 
 // Assigns every campaign in one rendered list a DISTINCT photo — not just
