@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark } from "../shared/ui";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage } from "../shared/types";
 import { useAuth } from "../shared/auth";
+import { updateOrgLogo } from "../../lib/queries/auth";
 import { fetchAgencyRoster, insertRosterModel } from "../../lib/queries/roster";
 import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
@@ -704,8 +705,14 @@ function PaymentsView() {
 }
 
 export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
-  const { profile, org } = useAuth();
+  const { profile, org, refreshIdentity } = useAuth();
   const agencyName = org?.name ?? "";
+  const canEditLogo = org?.accessLevel === "administrator";
+  async function handleLogoChange(dataUri: string) {
+    if (!org) return;
+    await updateOrgLogo(org.id, dataUri);
+    await refreshIdentity();
+  }
   const [view, setView] = useState<View>("invitations");
   const [roster, setRoster] = useState<RosterModel[]>([]);
   const [realInvitations, setRealInvitations] = useState<AgencyInvitation[]>([]);
@@ -730,12 +737,10 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
       <div className="h-screen flex bg-background overflow-hidden">
         <aside className="w-52 shrink-0 glass border-r flex flex-col">
           <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
-            <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center">
-              <span className="text-primary-foreground text-xs font-bold">{agencyName.trim()[0]?.toUpperCase() ?? "?"}</span>
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></div>
-              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Agency</div>
+            <OrgLogoBox org={org} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/>
+            <div className="min-w-0 flex-1 flex items-baseline gap-1.5">
+              <span className="text-sm font-medium truncate flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></span>
+              <span className="text-heading text-xs shrink-0 text-muted-foreground">Agency</span>
             </div>
           </div>
           <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">

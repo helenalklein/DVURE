@@ -7,10 +7,7 @@ import galleryDP139298 from "../../assets/gallery/DP139298.jpg";
 import coverBierstadt from "../../assets/gallery2/bierstadt-european-landscape.jpg";
 import coverBirchSedgeleyPark from "../../assets/gallery2/birch-sedgeley-park.jpg";
 import coverGuimardFacade from "../../assets/gallery2/guimard-facade-detail.jpg";
-import coverGuardiCanalVenice from "../../assets/gallery2/guardi-canal-venice.jpg";
-import coverBellottoCampo from "../../assets/gallery2/bellotto-campo-santi-giovanni-paolo.jpg";
 import coverGuardiCapriccio from "../../assets/gallery2/guardi-capriccio-harbor.jpg";
-import coverCanalettoCapriccio from "../../assets/gallery2/canaletto-english-capriccio.jpg";
 import coverHobbemaWoodedLandscape from "../../assets/gallery2/hobbema-wooded-landscape.jpg";
 import coverGainsboroughMountain from "../../assets/gallery2/gainsborough-mountain-landscape.jpg";
 import coverTurnerMortlakeTerrace from "../../assets/gallery2/turner-mortlake-terrace.jpg";
@@ -185,10 +182,7 @@ const CAMPAIGN_COVER_GALLERY: string[] = [
   coverBierstadt, // Albert Bierstadt, "European Landscape", c. 1856-57 — Smithsonian
   coverBirchSedgeleyPark, // Thomas Birch, "Southeast View of Sedgeley Park" — Smithsonian
   coverGuimardFacade, // Hector Guimard (architect), facade detail, no. 122 — Smithsonian (cropped: source was a full scanned book page with border/caption)
-  coverGuardiCanalVenice, // Follower of Francesco Guardi, "Canal in Venice" — Smithsonian
-  coverBellottoCampo, // Bernardo Bellotto, "The Campo di SS. Giovanni e Paolo, Venice" — NGA
   coverGuardiCapriccio, // Francesco Guardi, "Capriccio of a Harbor" — NGA
-  coverCanalettoCapriccio, // Canaletto, "English Landscape Capriccio with a Palace" — NGA
   coverHobbemaWoodedLandscape, // Meindert Hobbema, "A Wooded Landscape" — NGA
   coverGainsboroughMountain, // Thomas Gainsborough, "Mountain Landscape with Bridge" — NGA
   coverTurnerMortlakeTerrace, // J.M.W. Turner, "Mortlake Terrace" — NGA

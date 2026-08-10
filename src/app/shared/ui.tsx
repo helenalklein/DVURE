@@ -1,5 +1,5 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings, Lock } from "lucide-react";
+import { Bell, X, ChevronDown, Settings, Lock, Camera } from "lucide-react";
 import type { OrgInfo } from "./auth";
 import { getAccessGate } from "./accessGate";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
@@ -208,6 +208,92 @@ export function Chip({ children, active, onClick }: { children: string; active?:
 
 export function SidebarBadge({ count }: { count: number }) {
   return <span className="ml-auto min-w-[18px] h-[18px] bg-foreground text-primary-foreground text-[10px] font-mono font-semibold rounded-full flex items-center justify-center px-1">{count}</span>;
+}
+
+// Downscales in the browser before it ever reaches the database — a
+// logo doesn't need to be full camera-roll resolution, and this project
+// already stores images as plain data URIs on the row (model_profiles.
+// photo_url) rather than in a separate Storage bucket, so keeping the
+// upload itself small matters here more than it would behind a CDN.
+function resizeImageToDataUri(file: File, maxDim: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Couldn't read that image."));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas unavailable.")); return; }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// The sidebar's logo box — a real uploaded logo once an admin sets one,
+// falling back to the initial-letter square until then. canEdit gates
+// the upload affordance to org administrators (matches organizations_
+// update's RLS + the logo_url column grant, 0048) — anyone else just
+// sees the logo/fallback with no hover state at all.
+export function OrgLogoBox({ org, canEdit, onLogoChange, size = 28 }: {
+  org: OrgInfo | undefined; canEdit: boolean; onLogoChange: (dataUri: string) => void; size?: number;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const dataUri = await resizeImageToDataUri(file, 200);
+      onLogoChange(dataUri);
+    } catch {
+      setError("Couldn't read that image.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div
+      className={cx("relative rounded-sm shrink-0 overflow-hidden group", canEdit && "cursor-pointer")}
+      style={{ width: size, height: size }}
+      onClick={canEdit ? () => inputRef.current?.click() : undefined}
+      title={canEdit ? (error ?? "Change logo") : undefined}
+    >
+      {org?.logoUrl ? (
+        <img src={org.logoUrl} alt="" className="w-full h-full object-cover"/>
+      ) : (
+        <div className="w-full h-full bg-foreground flex items-center justify-center">
+          <span className="text-primary-foreground font-bold" style={{ fontSize: size * 0.42 }}>{org?.name?.trim()[0]?.toUpperCase() ?? "?"}</span>
+        </div>
+      )}
+      {canEdit && (
+        <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/55 transition-colors flex items-center justify-center">
+          <Camera size={Math.round(size * 0.42)} className="text-white opacity-0 group-hover:opacity-100 transition-opacity"/>
+        </div>
+      )}
+      {uploading && (
+        <div className="absolute inset-0 bg-foreground/70 flex items-center justify-center">
+          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+        </div>
+      )}
+      {canEdit && (
+        <input ref={inputRef} type="file" accept="image/*" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}/>
+      )}
+    </div>
+  );
 }
 
 // Capped height + its own scroll region, not "h-full" inside an

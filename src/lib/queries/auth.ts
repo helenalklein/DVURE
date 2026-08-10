@@ -14,9 +14,14 @@ export async function fetchProfile(userId: string) {
 export async function fetchOrgMembership(profileId: string) {
   return supabase
     .from("org_memberships")
-    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at)")
+    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at, logo_url)")
     .eq("profile_id", profileId)
     .maybeSingle();
+}
+
+export async function updateOrgLogo(orgId: string, dataUri: string | null): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("organizations").update({ logo_url: dataUri }).eq("id", orgId);
+  return { error: error?.message ?? null };
 }
 
 export async function fetchModelProfile(profileId: string) {

@@ -19,6 +19,7 @@ export interface OrgInfo {
   verificationStatus: VerificationStatus;
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: string | null;
+  logoUrl: string | null;
 }
 
 export interface ModelAgencyInfo {
@@ -130,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verificationStatus: orgRow.verification_status,
         subscriptionStatus: orgRow.subscription_status,
         trialEndsAt: orgRow.trial_ends_at,
+        logoUrl: orgRow.logo_url,
       },
     });
   }, []);

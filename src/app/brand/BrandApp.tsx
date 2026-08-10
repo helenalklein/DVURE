@@ -11,10 +11,11 @@ import {
   User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
+import { updateOrgLogo } from "../../lib/queries/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
@@ -106,6 +107,13 @@ function BrandSidebar({ active, onNav, onLogout }: {
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
+  const { org: accountOrg, refreshIdentity } = useAuth();
+  const canEditLogo = accountOrg?.accessLevel === "administrator";
+  async function handleLogoChange(dataUri: string) {
+    if (!accountOrg) return;
+    await updateOrgLogo(accountOrg.id, dataUri);
+    await refreshIdentity();
+  }
   // Pending-review items live under the nav item they actually come from —
   // a contract badge on Contracts, a payment badge on Payments — rather
   // than a single catch-all "Pending Review" page. Review-type overdue
@@ -118,15 +126,11 @@ function BrandSidebar({ active, onNav, onLogout }: {
   };
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-3 h-14 flex items-center border-b border-border gap-1.5">
-        <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
-          <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium min-w-0">
-            <span className="truncate block">{orgName}</span>
-          </div>
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
+      <div className="px-3 h-14 flex items-center border-b border-border gap-2">
+        <OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/>
+        <div className="min-w-0 flex-1 flex items-baseline gap-1.5">
+          <span className="text-sm font-medium truncate">{orgName}</span>
+          <span className="text-heading text-xs shrink-0 text-muted-foreground">Brand</span>
         </div>
         <button onClick={()=>onNav("campaigns")} title="Projects"
           className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
@@ -208,19 +212,22 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
+  const { org: accountOrg, refreshIdentity } = useAuth();
+  const canEditLogo = accountOrg?.accessLevel === "administrator";
+  async function handleLogoChange(dataUri: string) {
+    if (!accountOrg) return;
+    await updateOrgLogo(accountOrg.id, dataUri);
+    await refreshIdentity();
+  }
   const nav = campaignNavFor(campaign.type);
   const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
     <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
-      <div className="px-3 h-14 flex items-center border-b border-border gap-1.5">
-        <div className="w-7 h-7 bg-foreground rounded-sm flex items-center justify-center shrink-0">
-          <span className="text-primary-foreground text-xs font-bold">{orgName.trim()[0]?.toUpperCase() ?? "?"}</span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium min-w-0">
-            <span className="truncate block">{orgName}</span>
-          </div>
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Brand</div>
+      <div className="px-3 h-14 flex items-center border-b border-border gap-2">
+        <OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/>
+        <div className="min-w-0 flex-1 flex items-baseline gap-1.5">
+          <span className="text-sm font-medium truncate">{orgName}</span>
+          <span className="text-heading text-xs shrink-0 text-muted-foreground">Brand</span>
         </div>
         <button onClick={onHome} title="Projects"
           className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
@@ -4307,14 +4314,16 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           </>
         )}
 
-        <div ref={activityRef} className="fixed bottom-6 right-6 z-40 group">
-          {activityOpen ? (
-            <ActivityFeedPanel onClose={()=>setActivityOpen(false)}/>
-          ) : (
-            <button onClick={()=>setActivityOpen(true)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
-              <List size={16}/>
-            </button>
-          )}
+        {/* Button stays put and persists when its panel is open — click
+            toggles rather than the button being swapped out for the
+            panel — and the panel opens to the button's side (flex-row,
+            panel first) so it never covers the button, or the Needs
+            Attention button stacked above it. */}
+        <div ref={activityRef} className="fixed bottom-6 right-6 z-40 flex items-end gap-3">
+          {activityOpen && <ActivityFeedPanel onClose={()=>setActivityOpen(false)}/>}
+          <button onClick={()=>setActivityOpen(o=>!o)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
+            <List size={16}/>
+          </button>
         </div>
 
         {/* Needs Attention — stacked directly above the Activity widget in
@@ -4324,8 +4333,8 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
             Review nav page was removed — this floating widget was already
             the one place surfacing this class of alert everywhere, so it's
             the natural home rather than a page of its own. */}
-        <div ref={attentionRef} className="fixed bottom-20 right-6 z-40">
-          {attentionOpen ? (
+        <div ref={attentionRef} className="fixed bottom-20 right-6 z-40 flex items-end gap-3">
+          {attentionOpen && (
             <div className="w-80 glass-strong border rounded-md shadow-xl overflow-hidden">
               <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
@@ -4334,7 +4343,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
                   <span className="text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-sm">{CAMPAIGNS_ATTENTION.length + leadsNeeded.length}</span>
                 </div>
                 <button onClick={()=>setAttentionOpen(false)} className="text-muted-foreground hover:text-foreground w-5 h-5 flex items-center justify-center rounded hover:bg-secondary transition-colors cursor-pointer">
-                  <span className="text-sm font-bold leading-none">−</span>
+                  <X size={13}/>
                 </button>
               </div>
               <div className="divide-y divide-border">
@@ -4360,17 +4369,16 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
                 ))}
               </div>
             </div>
-          ) : (
-            <button onClick={()=>setAttentionOpen(true)}
-              className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer">
-              <AlertCircle size={16}/>
-              {(CAMPAIGNS_ATTENTION.length + leadsNeeded.length) > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#C0392B] text-white text-[9px] font-mono font-semibold flex items-center justify-center">
-                  {CAMPAIGNS_ATTENTION.length + leadsNeeded.length}
-                </span>
-              )}
-            </button>
           )}
+          <button onClick={()=>setAttentionOpen(o=>!o)}
+            className="relative w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
+            <AlertCircle size={16}/>
+            {(CAMPAIGNS_ATTENTION.length + leadsNeeded.length) > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[#C0392B] text-white text-[9px] font-mono font-semibold flex items-center justify-center">
+                {CAMPAIGNS_ATTENTION.length + leadsNeeded.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
     </CurrentUserProvider>
