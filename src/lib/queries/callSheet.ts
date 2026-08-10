@@ -6,6 +6,7 @@ export interface CallSheetAssignment {
   fullName: string;
   discipline: string | null;
   isDepartmentLead: boolean;
+  rate: number | null;
 }
 
 export type CallSheetPermission = "admin" | "producer" | "lead" | "viewer" | null;
@@ -20,7 +21,7 @@ export interface CrewDirectoryEntry {
 export async function fetchCallSheetSlots(campaignId: string): Promise<CallSheetAssignment[]> {
   const { data, error } = await supabase
     .from("campaign_crew_slots")
-    .select("role_key, crew_payee_id, is_department_lead, crew_payees(full_name, discipline)")
+    .select("role_key, crew_payee_id, is_department_lead, rate, crew_payees(full_name, discipline)")
     .eq("campaign_id", campaignId)
     .not("crew_payee_id", "is", null);
   if (error || !data) return [];
@@ -32,7 +33,18 @@ export async function fetchCallSheetSlots(campaignId: string): Promise<CallSheet
       fullName: r.crew_payees.full_name,
       discipline: r.crew_payees.discipline,
       isDepartmentLead: r.is_department_lead,
+      rate: r.rate != null ? Number(r.rate) : null,
     }));
+}
+
+// Rate lives on the slot (this specific role, this specific campaign),
+// not on crew_payees itself — the same person can charge differently
+// job to job. Editable by production up to and after the shoot for as
+// long as the campaign stays open (0051) -- deliberately looser than
+// the model rate workflow, which locks at booking.
+export async function updateCrewSlotRate(campaignId: string, roleKey: string, rate: number | null): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("update_crew_slot_rate", { p_campaign_id: campaignId, p_role_key: roleKey, p_rate: rate });
+  return { error: error?.message ?? null };
 }
 
 // The caller's effective permission for this campaign's call sheet as a

@@ -61,7 +61,7 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
                 <div className="text-xs text-muted-foreground">CF-2025-{900 + talent.id} · {talent.agency}</div>
               </div>
             </div>
-            {[["Day Rate", talent.rate],["Agency Commission","20%"],["Territory","United States"],["Duration","1 year"]].map(([k,v])=>(
+            {[["Day Rate", talent.rate],["Agency Commission", talent.agency==="Independent" ? "N/A — independent" : "20%"],["Territory","United States"],["Duration","1 year"]].map(([k,v])=>(
               <div key={k} className="flex justify-between text-xs py-1 border-b border-border last:border-0">
                 <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
               </div>
@@ -1758,7 +1758,15 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div>
               <div className="text-heading text-lg">Confirm booking</div>
               <div className="text-sm text-muted-foreground mt-0.5">
-                Day rate, days, and shoot date for {bookModal.ids.length === 1 ? "this model" : `these ${bookModal.ids.length} models`}. Agency and platform fees use DVURE's standard split ({DEFAULT_AGENCY_PCT}% / {DEFAULT_PLATFORM_PCT}%).
+                Day rate, days, and shoot date for {bookModal.ids.length === 1 ? "this model" : `these ${bookModal.ids.length} models`}.{" "}
+                {(() => {
+                  const selectedTalent = bookModal.ids.map(id => talent.find(t => t.id === id)).filter((t): t is Talent => !!t);
+                  const hasIndependent = selectedTalent.some(t => t.agency === "Independent");
+                  const hasRepped = selectedTalent.some(t => t.agency !== "Independent");
+                  if (hasIndependent && !hasRepped) return `No agency in the middle — just DVURE's platform fee (${DEFAULT_PLATFORM_PCT}%).`;
+                  if (hasIndependent && hasRepped) return `Repped models use DVURE's standard split (${DEFAULT_AGENCY_PCT}% / ${DEFAULT_PLATFORM_PCT}%); independent models pay only the platform fee (${DEFAULT_PLATFORM_PCT}%).`;
+                  return `Agency and platform fees use DVURE's standard split (${DEFAULT_AGENCY_PCT}% / ${DEFAULT_PLATFORM_PCT}%).`;
+                })()}
               </div>
             </div>
             <div className="space-y-3 max-h-72 overflow-y-auto">

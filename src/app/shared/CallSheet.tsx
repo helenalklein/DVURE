@@ -5,7 +5,7 @@ import { CALL_SHEET_CATEGORIES } from "./callSheetRoles";
 import { useAuth } from "./auth";
 import {
   fetchCallSheetSlots, fetchCrewDirectory, fetchMyCallSheetRole, assignCallSheetRole, clearCallSheetRole,
-  inviteCrewToCallSheet, setDepartmentLead,
+  inviteCrewToCallSheet, setDepartmentLead, updateCrewSlotRate,
   type CallSheetAssignment, type CrewDirectoryEntry, type CallSheetPermission,
 } from "../../lib/queries/callSheet";
 
@@ -144,7 +144,10 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
                       {r.label} {isLead && <Star size={9} className="fill-current shrink-0"/>}
                     </div>
                     {a ? (
-                      <div className="text-sm font-medium leading-snug line-clamp-3">{a.fullName}</div>
+                      <div>
+                        <div className="text-sm font-medium leading-snug line-clamp-2">{a.fullName}</div>
+                        {a.rate != null && <div className="text-[10px] font-mono text-muted-foreground mt-0.5">${a.rate.toLocaleString()}</div>}
+                      </div>
                     ) : editable ? (
                       <div className="text-xs text-muted-foreground flex items-center gap-1"><Plus size={11}/> Assign</div>
                     ) : (
@@ -201,6 +204,20 @@ function RolePickerModal({ role, campaignId, directory, current, canManageLeads,
   const [error, setError] = useState<string | null>(null);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [rateInput, setRateInput] = useState(current?.rate != null ? String(current.rate) : "");
+  const [rateSaving, setRateSaving] = useState(false);
+  const [rateSaved, setRateSaved] = useState(false);
+
+  async function saveRate() {
+    setRateSaving(true);
+    setError(null);
+    const n = rateInput.trim() === "" ? null : Number(rateInput);
+    const { error: err } = await updateCrewSlotRate(campaignId, role.key, n != null && Number.isFinite(n) ? n : null);
+    setRateSaving(false);
+    if (err) { setError(err); return; }
+    setRateSaved(true);
+    setTimeout(() => setRateSaved(false), 1500);
+  }
 
   const filtered = directory.filter((d) => d.fullName.toLowerCase().includes(query.toLowerCase()));
 
@@ -255,6 +272,28 @@ function RolePickerModal({ role, campaignId, directory, current, canManageLeads,
           <Star size={12} className={current.isDepartmentLead ? "fill-current" : ""}/>
           {current.isDepartmentLead ? "Department lead — click to remove" : "Make department lead"}
         </button>
+      )}
+
+      {/* Rate: production-only (same population as department-lead
+          management) — the RPC itself also only allows brand staff, so
+          this stays hidden from a department lead rather than showing a
+          control that would just error. Editable any time the campaign
+          stays open, not locked at booking like the model rate flow. */}
+      {current && canManageLeads && (
+        <div className="px-5 py-3 border-b border-border">
+          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Rate</div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center border border-border rounded-md bg-input-background overflow-hidden">
+              <span className="px-2.5 py-1.5 text-xs text-muted-foreground border-r border-border">$</span>
+              <input value={rateInput} onChange={e=>setRateInput(e.target.value)} placeholder="0.00"
+                className="flex-1 px-2.5 py-1.5 text-xs bg-transparent focus:outline-none"/>
+            </div>
+            <button onClick={saveRate} disabled={rateSaving}
+              className="text-xs font-medium px-3 py-1.5 rounded-md border border-border hover:bg-secondary cursor-pointer transition-colors shrink-0">
+              {rateSaving ? "Saving…" : rateSaved ? "Saved" : "Save"}
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="flex border-b border-border">
