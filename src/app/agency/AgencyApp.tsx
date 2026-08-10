@@ -10,7 +10,7 @@ import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
 import { fetchAgencyInvitations, type AgencyInvitation } from "../../lib/queries/agencyInvitations";
-import { fetchPendingConfirmationsForAgency, confirmManualPayment, type ManualPayment, type ManualPaymentMethod } from "../../lib/queries/payments";
+import { fetchPendingConfirmationsForAgency, confirmInvoicePayment, type PendingConfirmation, type ManualPaymentMethod } from "../../lib/queries/payments";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
@@ -603,7 +603,7 @@ const MANUAL_METHOD_LABEL: Record<ManualPaymentMethod, string> = { check: "Check
 // commission-payout list below it.
 function ManualPaymentConfirmQueue() {
   const { org } = useAuth();
-  const [pending, setPending] = useState<ManualPayment[]>([]);
+  const [pending, setPending] = useState<PendingConfirmation[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string|null>(null);
 
@@ -616,9 +616,9 @@ function ManualPaymentConfirmQueue() {
 
   useEffect(() => { reload(); }, [org?.id]);
 
-  async function handleConfirm(id: string) {
-    setConfirmingId(id);
-    await confirmManualPayment(id);
+  async function handleConfirm(paymentId: string) {
+    setConfirmingId(paymentId);
+    await confirmInvoicePayment(paymentId);
     setConfirmingId(null);
     reload();
   }
@@ -629,14 +629,14 @@ function ManualPaymentConfirmQueue() {
     <div className="space-y-2">
       <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Awaiting your confirmation</div>
       {pending.map(p=>(
-        <div key={p.id} className="glass-subtle border border-[#D4A017]/30 bg-[#D4A017]/5 rounded-md p-4 flex items-center gap-4">
+        <div key={p.paymentId} className="glass-subtle border border-[#D4A017]/30 bg-[#D4A017]/5 rounded-md p-4 flex items-center gap-4">
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold truncate">{p.campaignName}</div>
             <div className="text-xs text-muted-foreground">{MANUAL_METHOD_LABEL[p.method]}{p.referenceNote ? ` · ${p.referenceNote}` : ""}</div>
           </div>
           <div className="font-mono text-sm font-semibold shrink-0">${p.amount.toLocaleString()}</div>
-          <Btn variant="primary" size="sm" disabled={confirmingId===p.id} onClick={()=>handleConfirm(p.id)}>
-            {confirmingId===p.id ? "Confirming…" : "Confirm Received"}
+          <Btn variant="primary" size="sm" disabled={confirmingId===p.paymentId} onClick={()=>handleConfirm(p.paymentId)}>
+            {confirmingId===p.paymentId ? "Confirming…" : "Confirm Received"}
           </Btn>
         </div>
       ))}

@@ -20,7 +20,7 @@ import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distribute
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
-import { recordManualPayment, voidManualPayment, fetchManualPaymentsForBrand, type ManualPayment, type ManualPaymentMethod, type RecordManualPaymentParams } from "../../lib/queries/payments";
+import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
 import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries/outstandingPayments";
 import InvoicePaymentPanel from "./InvoicePayment";
@@ -982,10 +982,16 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
 const OUTSTANDING_STATUS_BADGE: Record<OutstandingPayee["status"], { label: string; variant: "default"|"active"|"pending"|"draft" }> = {
   unpaid: { label: "Unpaid", variant: "draft" },
   pending: { label: "Awaiting confirmation", variant: "pending" },
-  accepted: { label: "Paid & confirmed", variant: "active" },
-  voided: { label: "Voided", variant: "draft" },
+  partial: { label: "Partially paid", variant: "pending" },
+  paid: { label: "Paid & confirmed", variant: "active" },
 };
 
+// Pays each selected payee's remaining balance in one shot (one payment
+// event per payee, same method/note applied to all) — the batch path.
+// A second, partial, or follow-up payment against an already-open
+// invoice happens from InvoiceDetailModal's own "Add Payment" instead,
+// where a specific amount less than the full remaining balance makes
+// sense one payee at a time.
 function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
   campaignId: string; payees: OutstandingPayee[]; onClose: () => void; onDone: () => void;
 }) {
@@ -993,18 +999,18 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const total = payees.reduce((s,p)=>s+p.amount, 0);
+  const total = payees.reduce((s,p)=>s+p.remaining, 0);
 
   async function handleSubmit() {
     setSubmitting(true);
     setError(null);
     for (const p of payees) {
-      const params: RecordManualPaymentParams = p.kind === "crew"
-        ? { campaignId, amount: p.amount, method, referenceNote: note, payeeKind: "crew", crewPayeeId: p.crewPayeeId! }
+      const params: RecordInvoicePaymentParams = p.kind === "crew"
+        ? { campaignId, invoiceTotal: p.totalAmount, amount: p.remaining, method, referenceNote: note, payeeKind: "crew", crewPayeeId: p.crewPayeeId! }
         : p.kind === "independent-model"
-        ? { campaignId, amount: p.amount, method, referenceNote: note, payeeKind: "independent-model", modelId: p.modelId! }
-        : { campaignId, amount: p.amount, method, referenceNote: note, payeeKind: "agency", agencyOrgId: p.agencyOrgId! };
-      const { error } = await recordManualPayment(params);
+        ? { campaignId, invoiceTotal: p.totalAmount, amount: p.remaining, method, referenceNote: note, payeeKind: "independent-model", modelId: p.modelId! }
+        : { campaignId, invoiceTotal: p.totalAmount, amount: p.remaining, method, referenceNote: note, payeeKind: "agency", agencyOrgId: p.agencyOrgId! };
+      const { error } = await recordInvoicePayment(params);
       if (error) { setSubmitting(false); setError(`${p.name}: ${error}`); return; }
     }
     setSubmitting(false);
@@ -1026,7 +1032,7 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
             {payees.map(p=>(
               <div key={p.key} className="flex items-center justify-between text-xs">
                 <span>{p.name} <span className="text-muted-foreground">· {p.subLabel}</span></span>
-                <span className="font-mono">${p.amount.toLocaleString()}</span>
+                <span className="font-mono">${p.remaining.toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -1060,15 +1066,17 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
 // The spreadsheet — every real person the brand owes money to on this
 // campaign, one row each, selectable à la carte for a batch check/wire/
 // cash payment. Card stays on the separate InvoicePaymentPanel (Contracts
-// tab) — this tab is specifically for the manual, no-processor path.
+// tab) — this tab is specifically for the manual, no-processor path. A
+// row with any payment history at all (pending/partial/paid) opens the
+// full trail via InvoiceDetailModal — that's also where a follow-up or
+// partial payment gets added, and where a still-pending one gets voided.
 function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null }) {
   const [payees, setPayees] = useState<OutstandingPayee[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [payModal, setPayModal] = useState<OutstandingPayee[] | null>(null);
-  const [voidTarget, setVoidTarget] = useState<OutstandingPayee | null>(null);
-  const [voidReason, setVoidReason] = useState("");
-  const [voidSubmitting, setVoidSubmitting] = useState(false);
+  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   async function reload() {
     if (!realCampaignId) return;
@@ -1079,6 +1087,12 @@ function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null
   }
 
   useEffect(() => { reload(); }, [realCampaignId]);
+
+  async function openDetail(invoiceId: string) {
+    setDetailLoading(true);
+    setDetailInvoice(await fetchInvoiceById(invoiceId));
+    setDetailLoading(false);
+  }
 
   if (!realCampaignId) {
     return <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates real bookings and crew slots and has no saved project record to pay against — create a new campaign to use Payments.</div>;
@@ -1093,10 +1107,10 @@ function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null
     });
   }
 
-  const allUnpaidKeys = payees.filter(p=>p.status==="unpaid").map(p=>p.key);
-  const allSelected = allUnpaidKeys.length > 0 && allUnpaidKeys.every(k=>selected.has(k));
-  const payableSelected = payees.filter(p => selected.has(p.key) && p.status==="unpaid");
-  const selectedTotal = payableSelected.reduce((s,p)=>s+p.amount, 0);
+  const allPayableKeys = payees.filter(p=>p.remaining>0).map(p=>p.key);
+  const allSelected = allPayableKeys.length > 0 && allPayableKeys.every(k=>selected.has(k));
+  const payableSelected = payees.filter(p => selected.has(p.key) && p.remaining>0);
+  const selectedTotal = payableSelected.reduce((s,p)=>s+p.remaining, 0);
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -1115,7 +1129,7 @@ function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="px-4 py-2.5 w-8">
-                    <input type="checkbox" checked={allSelected} onChange={()=>setSelected(allSelected ? new Set() : new Set(allUnpaidKeys))}/>
+                    <input type="checkbox" checked={allSelected} onChange={()=>setSelected(allSelected ? new Set() : new Set(allPayableKeys))}/>
                   </th>
                   {["Name","Role","Amount","Status",""].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}
                 </tr>
@@ -1124,19 +1138,30 @@ function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null
                 {payees.map(p=>(
                   <tr key={p.key} className="border-b border-border last:border-0">
                     <td className="px-4 py-3">
-                      {p.status==="unpaid" && <input type="checkbox" checked={selected.has(p.key)} onChange={()=>toggle(p.key)}/>}
+                      {p.remaining>0 && <input type="checkbox" checked={selected.has(p.key)} onChange={()=>toggle(p.key)}/>}
                     </td>
                     <td className="px-4 py-3 font-medium">{p.name}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{p.subLabel}</td>
-                    <td className="px-4 py-3 font-mono">${p.amount.toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-mono">${p.totalAmount.toLocaleString()}</div>
+                      {(p.acceptedAmount > 0 || p.pendingAmount > 0) && (
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                          {p.acceptedAmount > 0 && `$${p.acceptedAmount.toLocaleString()} paid`}
+                          {p.acceptedAmount > 0 && p.pendingAmount > 0 && " · "}
+                          {p.pendingAmount > 0 && `$${p.pendingAmount.toLocaleString()} pending`}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><Badge label={OUTSTANDING_STATUS_BADGE[p.status].label} variant={OUTSTANDING_STATUS_BADGE[p.status].variant}/></td>
                     <td className="px-4 py-3">
-                      {p.status==="unpaid" && (
-                        <button onClick={()=>setPayModal([p])} className="text-xs text-foreground hover:underline cursor-pointer">Record Payment</button>
-                      )}
-                      {p.status==="pending" && p.invoiceId && (
-                        <button onClick={()=>setVoidTarget(p)} className="text-xs text-[#C0392B] hover:underline cursor-pointer">Void</button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {p.remaining>0 && (
+                          <button onClick={()=>setPayModal([p])} className="text-xs text-foreground hover:underline cursor-pointer">Record Payment</button>
+                        )}
+                        {p.invoiceId && (
+                          <button onClick={()=>openDetail(p.invoiceId!)} className="text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer">View</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1157,27 +1182,16 @@ function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null
         <RecordPaymentModal campaignId={realCampaignId} payees={payModal} onClose={()=>setPayModal(null)} onDone={()=>{ setPayModal(null); reload(); }}/>
       )}
 
-      {voidTarget && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-card border border-border rounded-md w-96 p-6 shadow-xl">
-            <div className="text-sm font-semibold mb-1">Void this payment?</div>
-            <div className="text-xs text-muted-foreground mb-4">${voidTarget.amount.toLocaleString()} to {voidTarget.name}. This can only be done before they confirm receipt.</div>
-            <FieldLabel>Reason (required)</FieldLabel>
-            <textarea value={voidReason} onChange={e=>setVoidReason(e.target.value)} rows={2} placeholder="e.g. Entered wrong amount"
-              className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground mb-4 resize-none"/>
-            <div className="flex gap-2">
-              <Btn variant="primary" fullWidth disabled={!voidReason.trim() || voidSubmitting} onClick={async()=>{
-                if (!voidTarget.invoiceId) return;
-                setVoidSubmitting(true);
-                await voidManualPayment(voidTarget.invoiceId, voidReason.trim());
-                setVoidSubmitting(false);
-                setVoidTarget(null); setVoidReason("");
-                reload();
-              }}>{voidSubmitting ? "Voiding…" : "Void Payment"}</Btn>
-              <Btn variant="outline" fullWidth onClick={()=>{ setVoidTarget(null); setVoidReason(""); }}>Cancel</Btn>
-            </div>
-          </div>
+      {detailLoading && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50">
+          <div className="text-sm text-primary-foreground">Loading…</div>
         </div>
+      )}
+      {detailInvoice && (
+        <InvoiceDetailModal invoice={detailInvoice} onClose={()=>setDetailInvoice(null)} onChanged={async()=>{
+          await reload();
+          setDetailInvoice(await fetchInvoiceById(detailInvoice.id));
+        }}/>
       )}
     </div>
   );
@@ -1481,8 +1495,11 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     setPendingManualCount(0);
     setShowArchiveConfirm(true);
     if (org && realCampaignId) {
-      const manual = await fetchManualPaymentsForBrand(org.id);
-      setPendingManualCount(manual.filter(m => m.campaignId === realCampaignId && m.status === "pending").length);
+      const invoices = await fetchInvoicesForBrand(org.id);
+      const count = invoices
+        .filter(inv => inv.campaignId === realCampaignId)
+        .reduce((n, inv) => n + inv.payments.filter(p => p.status === "pending").length, 0);
+      setPendingManualCount(count);
     }
   }
 
@@ -2630,7 +2647,7 @@ function fmtDate(iso: string | null): string {
 // confirm receipt, so it stays at Pending until the agency itself
 // confirms, at which point Paid and Accepted land together too — see
 // 0047's migration header for the full reasoning.
-function PaymentTimeline({ payment }: { payment: ManualPayment }) {
+function PaymentTimeline({ payment }: { payment: InvoicePayment }) {
   if (payment.status === "voided") {
     return (
       <div className="flex items-center gap-2 text-xs">
@@ -2664,7 +2681,7 @@ function PaymentTimeline({ payment }: { payment: ManualPayment }) {
 // The audit trail the void action promised — who recorded it, who
 // confirmed or voided it, and when, spelled out rather than left to a
 // tooltip.
-function PaymentAuditTrail({ payment }: { payment: ManualPayment }) {
+function PaymentAuditTrail({ payment }: { payment: InvoicePayment }) {
   return (
     <div className="text-[10px] text-muted-foreground font-mono space-y-0.5">
       <div>Recorded {fmtDateTime(payment.createdAt)}</div>
@@ -2678,6 +2695,152 @@ function PaymentAuditTrail({ payment }: { payment: ManualPayment }) {
   );
 }
 
+const INVOICE_STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: "default"|"active"|"pending"|"draft" }> = {
+  outstanding: { label: "Outstanding", variant: "draft" },
+  partially_paid: { label: "Partially paid", variant: "pending" },
+  paid: { label: "Paid", variant: "active" },
+};
+
+// The actual "trail" — every payment event ever recorded against one
+// invoice, oldest first, each with its own timeline/audit trail and a
+// void action while still pending. Shared by the spreadsheet (Payments
+// tab) and the Invoices tab so a payee's balance reads identically no
+// matter which screen it's opened from. Includes a lightweight "add a
+// payment" control so a second, third... payment can be recorded
+// against the same open balance without leaving this view.
+function InvoiceDetailModal({ invoice, onClose, onChanged }: {
+  invoice: Invoice; onClose: () => void; onChanged: () => void;
+}) {
+  const [voidTarget, setVoidTarget] = useState<InvoicePayment | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidSubmitting, setVoidSubmitting] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addAmount, setAddAmount] = useState("");
+  const [addMethod, setAddMethod] = useState<ManualPaymentMethod>("check");
+  const [addNote, setAddNote] = useState("");
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const committed = invoice.payments.filter(p => p.status !== "voided").reduce((s, p) => s + p.amount, 0);
+  const remaining = Math.max(0, invoice.totalAmount - committed);
+
+  async function handleVoidConfirm() {
+    if (!voidTarget || !voidReason.trim()) return;
+    setVoidSubmitting(true);
+    const { error } = await voidInvoicePayment(voidTarget.id, voidReason.trim());
+    setVoidSubmitting(false);
+    if (error) return;
+    setVoidTarget(null);
+    setVoidReason("");
+    onChanged();
+  }
+
+  async function handleAddPayment() {
+    const amount = Number(addAmount);
+    if (!(amount > 0)) { setAddError("Enter an amount."); return; }
+    setAddSubmitting(true);
+    setAddError(null);
+    const params: RecordInvoicePaymentParams = invoice.payeeKind === "crew"
+      ? { campaignId: invoice.campaignId, invoiceTotal: invoice.totalAmount, amount, method: addMethod, referenceNote: addNote, payeeKind: "crew", crewPayeeId: invoice.payeeId }
+      : invoice.payeeKind === "independent-model"
+      ? { campaignId: invoice.campaignId, invoiceTotal: invoice.totalAmount, amount, method: addMethod, referenceNote: addNote, payeeKind: "independent-model", modelId: invoice.payeeId }
+      : { campaignId: invoice.campaignId, invoiceTotal: invoice.totalAmount, amount, method: addMethod, referenceNote: addNote, payeeKind: "agency", agencyOrgId: invoice.payeeId };
+    const { error } = await recordInvoicePayment(params);
+    setAddSubmitting(false);
+    if (error) { setAddError(error); return; }
+    setShowAdd(false);
+    setAddAmount(""); setAddNote("");
+    onChanged();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-border flex items-start justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <Badge label={INVOICE_STATUS_BADGE[invoice.status].label} variant={INVOICE_STATUS_BADGE[invoice.status].variant}/>
+            </div>
+            <div className="text-sm font-semibold truncate">{invoice.payeeName}</div>
+            <div className="text-xs text-muted-foreground">{invoice.campaignName}</div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground shrink-0"><X size={16}/></button>
+        </div>
+
+        <div className="px-6 py-4 border-b border-border shrink-0 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] text-muted-foreground font-mono">Paid / Total</div>
+            <div className="text-lg font-semibold font-mono">${invoice.acceptedAmount.toLocaleString()} <span className="text-muted-foreground font-normal">/ ${invoice.totalAmount.toLocaleString()}</span></div>
+          </div>
+          {remaining > 0 && (
+            <Btn variant="outline" size="sm" onClick={()=>{ setShowAdd(o=>!o); setAddAmount(String(remaining)); }}>
+              {showAdd ? "Cancel" : "Add Payment"}
+            </Btn>
+          )}
+        </div>
+
+        {showAdd && (
+          <div className="px-6 py-4 border-b border-border shrink-0 space-y-3 bg-secondary/30">
+            <div className="text-xs text-muted-foreground">${remaining.toLocaleString()} remaining</div>
+            <div className="flex gap-2">
+              <input value={addAmount} onChange={e=>setAddAmount(e.target.value)} type="number" min="0" max={remaining}
+                className="w-28 bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-foreground"/>
+              <div className="flex gap-1.5">
+                {(["check","wire","cash"] as const).map(m=>(
+                  <button key={m} onClick={()=>setAddMethod(m)}
+                    className={cx("text-xs px-3 py-2 rounded-full border transition-colors cursor-pointer capitalize",
+                      addMethod===m?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
+                    )}>{m}</button>
+                ))}
+              </div>
+            </div>
+            <input value={addNote} onChange={e=>setAddNote(e.target.value)} placeholder="Reference note (optional)"
+              className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+            {addError && <div className="text-xs text-red-500">{addError}</div>}
+            <Btn variant="primary" size="sm" disabled={addSubmitting} onClick={handleAddPayment}>{addSubmitting ? "Recording…" : "Record Payment"}</Btn>
+          </div>
+        )}
+
+        <div className="px-6 py-4 overflow-y-auto space-y-3">
+          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Payment Trail · {invoice.payments.length}</div>
+          {invoice.payments.map(p => (
+            <div key={p.id} className="glass-subtle border rounded-md p-3">
+              <div className="flex items-start justify-between gap-4 mb-2.5">
+                <div className="text-xs text-muted-foreground">{MANUAL_METHOD_LABEL[p.method]}{p.referenceNote ? ` · ${p.referenceNote}` : ""}</div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="font-mono text-sm font-semibold">${p.amount.toLocaleString()}</div>
+                  {p.status === "pending" && (
+                    <button onClick={()=>{ setVoidTarget(p); setVoidReason(""); }} className="text-xs text-[#C0392B] hover:underline cursor-pointer">Void</button>
+                  )}
+                </div>
+              </div>
+              <div className="max-w-md mb-2"><PaymentTimeline payment={p}/></div>
+              <PaymentAuditTrail payment={p}/>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {voidTarget && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-md w-96 p-6 shadow-xl">
+            <div className="text-sm font-semibold mb-1">Void this payment?</div>
+            <div className="text-xs text-muted-foreground mb-4">
+              ${voidTarget.amount.toLocaleString()} via {MANUAL_METHOD_LABEL[voidTarget.method]} to {invoice.payeeName}. This can only be done before {invoice.payeeName} confirms receipt — once voided, it no longer counts toward the balance.
+            </div>
+            <FieldLabel>Reason (required)</FieldLabel>
+            <textarea value={voidReason} onChange={e=>setVoidReason(e.target.value)} rows={2} placeholder="e.g. Entered wrong amount"
+              className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground mb-4 resize-none"/>
+            <div className="flex gap-2">
+              <Btn variant="primary" fullWidth disabled={!voidReason.trim() || voidSubmitting} onClick={handleVoidConfirm}>{voidSubmitting ? "Voiding…" : "Void Payment"}</Btn>
+              <Btn variant="outline" fullWidth onClick={()=>{ setVoidTarget(null); setVoidReason(""); }}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function GlobalPayments() {
   const currentUser = useCurrentUser();
@@ -2704,35 +2867,34 @@ function GlobalPayments() {
 
   // Check/wire/cash is initiated per-campaign now (the Payments tab on
   // each real campaign, sourced from fetchOutstandingPayees) — this tab
-  // is the cross-campaign audit list of everything recorded that way,
-  // real and persisted (0046/0051), unlike the card flow above which is
-  // still mock pending a real Stripe key.
-  const [manualPayments, setManualPayments] = useState<ManualPayment[]>([]);
-  const [manualPaymentsLoading, setManualPaymentsLoading] = useState(true);
-  const [voidTarget, setVoidTarget] = useState<ManualPayment|null>(null);
-  const [voidReason, setVoidReason] = useState("");
-  const [voidSubmitting, setVoidSubmitting] = useState(false);
+  // is the cross-campaign list of every invoice built that way, real and
+  // persisted (0046/0051/0053), unlike the card flow above which is
+  // still mock pending a real Stripe key. Void/confirm/add-payment all
+  // live inside InvoiceDetailModal now, not here — GlobalPayments just
+  // loads the list and hands off to it.
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
 
-  async function reloadManualPayments() {
+  async function reloadInvoices() {
     if (!accountOrg) return;
-    setManualPaymentsLoading(true);
-    setManualPayments(await fetchManualPaymentsForBrand(accountOrg.id));
-    setManualPaymentsLoading(false);
+    setInvoicesLoading(true);
+    setInvoices(await fetchInvoicesForBrand(accountOrg.id));
+    setInvoicesLoading(false);
   }
 
   useEffect(() => {
-    reloadManualPayments();
+    reloadInvoices();
   }, [accountOrg?.id]);
 
-  // Same merged (mock card + real manual) list the Invoices tab itself
+  // Same merged (mock card + real invoice) list the Invoices tab itself
   // renders from, so a card seen here looks and reads identically there —
   // outstanding only, overdue-first.
   const outstandingInvoices = useMemo(() => {
     const overdueOrder = (inv: UnifiedInvoice) => inv.overdue ? 0 : 1;
-    return buildUnifiedInvoices(manualPayments)
+    return buildUnifiedInvoices(invoices)
       .filter(inv => inv.status === "outstanding")
       .sort((a,b) => overdueOrder(a)-overdueOrder(b));
-  }, [manualPayments]);
+  }, [invoices]);
 
   function openInvoice(inv: UnifiedInvoice) {
     setSelectedInvoice(inv);
@@ -2773,17 +2935,6 @@ function GlobalPayments() {
     if (payAmount || selectedCampaign) { setShowDiscardConfirm(true); } else { setShowPayModal(false); }
   }
 
-  async function handleVoidConfirm() {
-    if (!voidTarget || !voidReason.trim()) return;
-    setVoidSubmitting(true);
-    const { error } = await voidManualPayment(voidTarget.id, voidReason.trim());
-    setVoidSubmitting(false);
-    if (error) { return; }
-    setVoidTarget(null);
-    setVoidReason("");
-    reloadManualPayments();
-  }
-
   const canAuthorize = !!(selectedCampaign && payAmount && signature) && !accessGate.gated;
 
   // Gold button style for Authorize Payment + Authorize — plain sentence
@@ -2806,9 +2957,9 @@ function GlobalPayments() {
       </div>
       {paymentsTab==="invoices" && (
         <InvoicesPanel
-          manualPayments={manualPayments}
-          manualPaymentsLoading={manualPaymentsLoading}
-          onVoidManual={(p)=>{ setVoidTarget(p); setVoidReason(""); }}
+          invoices={invoices}
+          invoicesLoading={invoicesLoading}
+          onChanged={reloadInvoices}
           selected={selectedInvoice}
           onSelect={setSelectedInvoice}
         />
@@ -3095,25 +3246,6 @@ function GlobalPayments() {
         </div>
       )}
 
-      {/* Void manual payment */}
-      {voidTarget && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-card border border-border rounded-md w-96 p-6 shadow-xl">
-            <div className="text-sm font-semibold mb-1">Void this payment?</div>
-            <div className="text-xs text-muted-foreground mb-4">
-              ${voidTarget.amount.toLocaleString()} via {MANUAL_METHOD_LABEL[voidTarget.method]} to {voidTarget.payeeName} for {voidTarget.campaignName}. This can only be done before {voidTarget.payeeName} confirms receipt — once voided, it no longer counts as an outstanding payment.
-            </div>
-            <FieldLabel>Reason (required)</FieldLabel>
-            <textarea value={voidReason} onChange={e=>setVoidReason(e.target.value)} rows={2} placeholder="e.g. Entered wrong amount"
-              className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground mb-4 resize-none"/>
-            <div className="flex gap-2">
-              <Btn variant="primary" fullWidth disabled={!voidReason.trim() || voidSubmitting} onClick={handleVoidConfirm}>{voidSubmitting ? "Voiding…" : "Void Payment"}</Btn>
-              <Btn variant="outline" fullWidth onClick={()=>{ setVoidTarget(null); setVoidReason(""); }}>Cancel</Btn>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Discard Confirm */}
       {showDiscardConfirm && (
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
@@ -3255,7 +3387,7 @@ function calcBreakdown(inv: { dayRate: number; days: number; agencyPct: number; 
 
 // One shape for every invoice card on the brand side, whichever system it
 // actually came from — the still-mock card/ACH invoices above (no live
-// Stripe key yet) and the real check/wire/cash payments (0046/0051).
+// Stripe key yet) and the real, multi-payment invoices (0046/0051/0053).
 // Outstanding Invoices (Payments tab) and the Invoices tab both build
 // from this and render with the same <InvoiceCard/>, so they can't drift
 // apart in look or info (a real requirement, not a coincidence).
@@ -3269,12 +3401,12 @@ interface UnifiedInvoice {
   amount: number;
   dateLabel: string;
   overdue: boolean;
-  status: "outstanding" | "paid" | "voided";
+  status: InvoiceStatus;
   card?: typeof INVOICE_DATA[number] | typeof PAID_INVOICE_DATA[number];
-  manual?: ManualPayment;
+  invoice?: Invoice;
 }
 
-function buildUnifiedInvoices(manualPayments: ManualPayment[]): UnifiedInvoice[] {
+function buildUnifiedInvoices(invoices: Invoice[]): UnifiedInvoice[] {
   const cardOutstanding: UnifiedInvoice[] = INVOICE_DATA.map(inv => ({
     key: inv.id, kind: "card", id: inv.id, campaign: inv.campaign, payee: inv.agency, detail: inv.talent,
     amount: calcBreakdown(inv).total, dateLabel: inv.due, overdue: inv.urgency === "red", status: "outstanding", card: inv,
@@ -3283,24 +3415,32 @@ function buildUnifiedInvoices(manualPayments: ManualPayment[]): UnifiedInvoice[]
     key: inv.id, kind: "card", id: inv.id, campaign: inv.campaign, payee: inv.agency, detail: inv.talent,
     amount: calcBreakdown(inv).total, dateLabel: `Paid ${inv.paidDate}`, overdue: false, status: "paid", card: inv,
   }));
-  const manual: UnifiedInvoice[] = manualPayments.map(p => ({
-    key: p.id, kind: "manual", id: `PMT-${p.id.slice(0, 8).toUpperCase()}`, campaign: p.campaignName, payee: p.payeeName,
-    detail: `${MANUAL_METHOD_LABEL[p.method]}${p.referenceNote ? ` · ${p.referenceNote}` : ""}`,
-    amount: p.amount,
-    dateLabel: p.status === "voided" ? `Voided ${fmtDate(p.voidedAt)}` : p.status === "accepted" ? `Paid ${fmtDate(p.acceptedAt)}` : `Recorded ${fmtDate(p.createdAt)}`,
-    overdue: false,
-    status: p.status === "accepted" ? "paid" : p.status === "voided" ? "voided" : "outstanding",
-    manual: p,
-  }));
+  const manual: UnifiedInvoice[] = invoices.map(inv => {
+    const pendingAmount = inv.payments.filter(p => p.status === "pending").reduce((s, p) => s + p.amount, 0);
+    const lastAccepted = [...inv.payments].reverse().find(p => p.status === "accepted");
+    const detail = inv.payments.length === 1
+      ? `${MANUAL_METHOD_LABEL[inv.payments[0].method]}${inv.payments[0].referenceNote ? ` · ${inv.payments[0].referenceNote}` : ""}`
+      : `${inv.payments.length} payments`;
+    const dateLabel = inv.status === "paid"
+      ? `Paid ${fmtDate(lastAccepted?.acceptedAt ?? null)}`
+      : inv.status === "partially_paid"
+      ? `$${inv.acceptedAmount.toLocaleString()} of $${inv.totalAmount.toLocaleString()}`
+      : pendingAmount > 0 ? "Pending confirmation" : "";
+    return {
+      key: inv.id, kind: "manual", id: `INV-${inv.id.slice(0, 8).toUpperCase()}`, campaign: inv.campaignName, payee: inv.payeeName,
+      detail, amount: inv.totalAmount, dateLabel, overdue: false, status: inv.status, invoice: inv,
+    };
+  });
   return [...cardOutstanding, ...cardPaid, ...manual];
 }
 
-// The one card look every invoice uses, mock or real, outstanding or
-// paid — a single colored dot (red only if actually overdue, the
-// established convention, no yellow/green tiering) instead of the old
-// three-way urgency legend.
+// The one card look every invoice uses, mock or real, outstanding,
+// partially paid, or paid — a single colored dot (red only if actually
+// overdue, the established convention, no yellow/green due-date
+// tiering; gold specifically means "some money has landed," a genuinely
+// different signal from urgency) instead of the old three-way legend.
 function InvoiceCard({ inv, onClick }: { inv: UnifiedInvoice; onClick: () => void }) {
-  const dotClass = inv.status === "paid" ? "bg-[#27AE60]" : inv.overdue ? "bg-[#C0392B]" : "bg-muted-foreground/40";
+  const dotClass = inv.status === "paid" ? "bg-[#27AE60]" : inv.status === "partially_paid" ? "bg-[#D4A017]" : inv.overdue ? "bg-[#C0392B]" : "bg-muted-foreground/40";
   return (
     <div
       onClick={onClick}
@@ -3314,7 +3454,7 @@ function InvoiceCard({ inv, onClick }: { inv: UnifiedInvoice; onClick: () => voi
           <span className={cx("w-2 h-2 rounded-full shrink-0", dotClass)}/>
           <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
         </div>
-        {inv.status === "outstanding" && <span className="text-[10px] font-mono text-muted-foreground">{inv.dateLabel}</span>}
+        {inv.status !== "paid" && <span className="text-[10px] font-mono text-muted-foreground">{inv.dateLabel}</span>}
       </div>
       <div className="mb-4">
         <div className="text-sm font-semibold leading-snug mb-0.5">{inv.campaign}</div>
@@ -3323,8 +3463,8 @@ function InvoiceCard({ inv, onClick }: { inv: UnifiedInvoice; onClick: () => voi
       </div>
       <div className="border-t border-border pt-3 flex items-end justify-between">
         <div>
-          <div className="text-[10px] text-muted-foreground font-mono">{inv.status === "outstanding" ? "Total Due" : inv.dateLabel}</div>
-          <div className={cx("text-xl font-semibold font-mono", inv.status === "outstanding" && inv.overdue && "font-bold text-[#C0392B]/80", inv.status === "voided" && "line-through text-muted-foreground")}>
+          <div className="text-[10px] text-muted-foreground font-mono">{inv.status !== "paid" ? "Total Due" : inv.dateLabel}</div>
+          <div className={cx("text-xl font-semibold font-mono", inv.status === "outstanding" && inv.overdue && "font-bold text-[#C0392B]/80")}>
             ${inv.amount.toLocaleString()}
           </div>
         </div>
@@ -3334,27 +3474,32 @@ function InvoiceCard({ inv, onClick }: { inv: UnifiedInvoice; onClick: () => voi
   );
 }
 
-function InvoicesPanel({ manualPayments, manualPaymentsLoading, onVoidManual, selected, onSelect }: {
-  manualPayments: ManualPayment[]; manualPaymentsLoading: boolean; onVoidManual: (p: ManualPayment) => void;
+function InvoicesPanel({ invoices, invoicesLoading, onChanged, selected, onSelect }: {
+  invoices: Invoice[]; invoicesLoading: boolean; onChanged: () => void;
   selected: UnifiedInvoice | null; onSelect: (inv: UnifiedInvoice | null) => void;
 }) {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
 
-  const all = useMemo(() => buildUnifiedInvoices(manualPayments), [manualPayments]);
+  const all = useMemo(() => buildUnifiedInvoices(invoices), [invoices]);
+  // "Outstanding" covers both untouched and partially-paid invoices —
+  // both still owe money, they just differ in how much (InvoiceCard's
+  // gold dot + progress line is what tells them apart). "Paid" is the
+  // only fully-settled bucket now; there's no invoice-level "voided"
+  // anymore (0053) — a voided payment just never counted, so an invoice
+  // with only voided payments is simply outstanding.
   const outstanding = useMemo(() => {
     const order = (i: UnifiedInvoice) => (i.overdue ? 0 : 1);
-    return all.filter(i => i.status === "outstanding").sort((a, b) => order(a) - order(b));
+    return all.filter(i => i.status !== "paid").sort((a, b) => order(a) - order(b));
   }, [all]);
   const paid = useMemo(() => all.filter(i => i.status === "paid"), [all]);
-  const voided = useMemo(() => all.filter(i => i.status === "voided"), [all]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Invoices" sub={`All invoices · ${org}`}/>
       <div className="flex-1 overflow-auto p-6">
-        {manualPaymentsLoading && <div className="text-sm text-muted-foreground mb-4">Loading…</div>}
-        {outstanding.length === 0 && !manualPaymentsLoading ? (
+        {invoicesLoading && <div className="text-sm text-muted-foreground mb-4">Loading…</div>}
+        {outstanding.length === 0 && !invoicesLoading ? (
           <div className="text-sm text-muted-foreground">No outstanding invoices.</div>
         ) : (
           <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
@@ -3368,29 +3513,12 @@ function InvoicesPanel({ manualPayments, manualPaymentsLoading, onVoidManual, se
             {paid.map(inv => <InvoiceCard key={inv.key} inv={inv} onClick={() => onSelect(inv)}/>)}
           </div>
         </>)}
-
-        {voided.length > 0 && (<>
-          <h2 className="text-heading text-base mt-8 mb-4">Voided</h2>
-          <div className="space-y-2">
-            {voided.map(inv => (
-              <div key={inv.key} onClick={() => onSelect(inv)}
-                className="glass-subtle border rounded-md px-4 py-3 flex items-center justify-between gap-4 cursor-pointer hover:border-foreground/40 transition-colors text-xs">
-                <div className="min-w-0 truncate">
-                  <span className="font-medium">{inv.campaign}</span>
-                  <span className="text-muted-foreground"> · {inv.payee} · {inv.detail}</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0 text-muted-foreground font-mono">
-                  <span className="line-through">${inv.amount.toLocaleString()}</span>
-                  <span>{inv.dateLabel}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>)}
       </div>
 
-      {/* Invoice Detail Modal */}
-      {selected && (
+      {/* Card/ACH invoices (still mock — no live Stripe key) keep their
+          own fee-breakdown modal; real invoices open the shared trail
+          view, same one the Payments-tab spreadsheet opens. */}
+      {selected && selected.kind === "card" && (
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card border border-border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
@@ -3404,100 +3532,79 @@ function InvoicesPanel({ manualPayments, manualPaymentsLoading, onVoidManual, se
               <button onClick={() => onSelect(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
             </div>
 
-            {selected.kind === "card" ? (<>
-              <div className="px-6 py-5">
-                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">Fee Breakdown</div>
-                {(() => {
-                  const inv = selected.card!;
-                  const bd = calcBreakdown(inv);
-                  const paidDate = "paidDate" in inv ? inv.paidDate : null;
-                  return (
-                    <div className="space-y-1">
+            <div className="px-6 py-5">
+              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">Fee Breakdown</div>
+              {(() => {
+                const inv = selected.card!;
+                const bd = calcBreakdown(inv);
+                const paidDate = "paidDate" in inv ? inv.paidDate : null;
+                return (
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between py-2.5 border-b border-border">
+                      <div>
+                        <div className="text-sm">{inv.payeeKind === "crew" ? "Day Rate" : "Model Fee"} — {inv.talent}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">{inv.days} day{inv.days > 1 ? "s" : ""} × ${inv.dayRate.toLocaleString()}/day</div>
+                      </div>
+                      <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
+                    </div>
+                    {inv.payeeKind !== "crew" && (
                       <div className="flex items-baseline justify-between py-2.5 border-b border-border">
                         <div>
-                          <div className="text-sm">{inv.payeeKind === "crew" ? "Day Rate" : "Model Fee"} — {inv.talent}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{inv.days} day{inv.days > 1 ? "s" : ""} × ${inv.dayRate.toLocaleString()}/day</div>
+                          <div className="text-sm">Agency Fee — {inv.agency}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{inv.payeeKind === "independent-model" ? "N/A — independent" : `${inv.agencyPct}% of model fee`}</div>
                         </div>
-                        <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
+                        <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
                       </div>
-                      {inv.payeeKind !== "crew" && (
-                        <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                          <div>
-                            <div className="text-sm">Agency Fee — {inv.agency}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono">{inv.payeeKind === "independent-model" ? "N/A — independent" : `${inv.agencyPct}% of model fee`}</div>
-                          </div>
-                          <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between py-2.5 border-b border-border">
-                        <div className="flex items-center gap-2">
-                          <div className="text-sm">Fees &amp; Taxes</div>
-                          <div className="relative group/tooltip">
-                            <span className="w-4 h-4 rounded-full border border-border bg-secondary text-[9px] font-mono text-muted-foreground flex items-center justify-center cursor-default select-none">i</span>
-                            <div className="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block z-20 w-56 bg-foreground text-primary-foreground rounded-md shadow-lg p-3 text-[10px] font-mono space-y-1.5">
-                              <div className="flex justify-between gap-4"><span><DvureWordmark size={9}/> transaction (3%)</span><span>${bd.dvureFee.toLocaleString()}</span></div>
-                              <div className="flex justify-between gap-4"><span>Processing (2.9% + $0.30)</span><span>${bd.processingFee.toLocaleString()}</span></div>
-                              <div className="border-t border-primary-foreground/20 pt-1.5 flex justify-between gap-4 font-semibold"><span>Total fees</span><span>${bd.totalFees.toLocaleString()}</span></div>
-                            </div>
+                    )}
+                    <div className="flex items-center justify-between py-2.5 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm">Fees &amp; Taxes</div>
+                        <div className="relative group/tooltip">
+                          <span className="w-4 h-4 rounded-full border border-border bg-secondary text-[9px] font-mono text-muted-foreground flex items-center justify-center cursor-default select-none">i</span>
+                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block z-20 w-56 bg-foreground text-primary-foreground rounded-md shadow-lg p-3 text-[10px] font-mono space-y-1.5">
+                            <div className="flex justify-between gap-4"><span><DvureWordmark size={9}/> transaction (3%)</span><span>${bd.dvureFee.toLocaleString()}</span></div>
+                            <div className="flex justify-between gap-4"><span>Processing (2.9% + $0.30)</span><span>${bd.processingFee.toLocaleString()}</span></div>
+                            <div className="border-t border-primary-foreground/20 pt-1.5 flex justify-between gap-4 font-semibold"><span>Total fees</span><span>${bd.totalFees.toLocaleString()}</span></div>
                           </div>
                         </div>
-                        <div className="font-mono text-sm font-medium">${(bd.dvureFee + bd.processingFee + bd.tax).toLocaleString()}</div>
                       </div>
-                      <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
-                        <div className="text-sm font-semibold">Invoice Total</div>
-                        <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground font-mono text-right">
-                        {paidDate ? `Paid ${paidDate}` : `Due ${(inv as typeof INVOICE_DATA[number]).due}`}
-                      </div>
+                      <div className="font-mono text-sm font-medium">${(bd.dvureFee + bd.processingFee + bd.tax).toLocaleString()}</div>
                     </div>
-                  );
-                })()}
-              </div>
-              <div className="px-6 pb-5 flex gap-2">
-                {selected.status === "paid" ? (
-                  <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
-                    <PaidStamp size={18} animate={false}/> Paid in Full
+                    <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
+                      <div className="text-sm font-semibold">Invoice Total</div>
+                      <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono text-right">
+                      {paidDate ? `Paid ${paidDate}` : `Due ${(inv as typeof INVOICE_DATA[number]).due}`}
+                    </div>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => onSelect(null)}
-                    className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
-                    Authorize Payment
-                  </button>
-                )}
-                <Btn variant="outline" onClick={() => onSelect(null)}>Message Agency →</Btn>
-              </div>
-            </>) : (<>
-              <div className="px-6 py-5 space-y-4">
-                <div>
-                  <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider mb-1">{selected.detail}</div>
-                  <div className="text-2xl font-semibold font-mono">${selected.amount.toLocaleString()}</div>
+                );
+              })()}
+            </div>
+            <div className="px-6 pb-5 flex gap-2">
+              {selected.status === "paid" ? (
+                <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
+                  <PaidStamp size={18} animate={false}/> Paid in Full
                 </div>
-                <PaymentTimeline payment={selected.manual!}/>
-                <PaymentAuditTrail payment={selected.manual!}/>
-              </div>
-              <div className="px-6 pb-5 flex gap-2">
-                {selected.manual!.status === "pending" && (
-                  <button
-                    onClick={() => { onVoidManual(selected.manual!); onSelect(null); }}
-                    className="flex-1 py-3 rounded-md text-sm font-semibold border border-[#C0392B]/40 text-[#C0392B] hover:bg-[#C0392B]/5 transition-all cursor-pointer">
-                    Void Payment
-                  </button>
-                )}
-                {selected.manual!.status === "accepted" && (
-                  <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
-                    <PaidStamp size={18} animate={false}/> Paid in Full
-                  </div>
-                )}
-                {selected.manual!.status === "voided" && (
-                  <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center">Voided</div>
-                )}
-                <Btn variant="outline" onClick={() => onSelect(null)}>Close</Btn>
-              </div>
-            </>)}
+              ) : (
+                <button
+                  onClick={() => onSelect(null)}
+                  className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
+                  Authorize Payment
+                </button>
+              )}
+              <Btn variant="outline" onClick={() => onSelect(null)}>Message Agency →</Btn>
+            </div>
           </div>
         </div>
+      )}
+
+      {selected && selected.kind === "manual" && selected.invoice && (
+        <InvoiceDetailModal
+          invoice={selected.invoice}
+          onClose={() => onSelect(null)}
+          onChanged={async () => { onChanged(); onSelect(null); }}
+        />
       )}
     </div>
   );
