@@ -14,8 +14,12 @@
 -- payment recorded against a payee who doesn't have an open invoice yet
 -- creates one, with the total supplied by the caller (the same
 -- booking/crew-rate amount fetchOutstandingPayees already computes).
+--
+-- Written idempotent throughout (IF EXISTS / IF NOT EXISTS, guarded
+-- backfill, DO-block type creation) so a failed partial run can just be
+-- re-run from the top rather than requiring manual cleanup first.
 
-create table invoice_payments (
+create table if not exists invoice_payments (
   id uuid primary key default gen_random_uuid(),
   invoice_id uuid not null references invoices(id) on delete cascade,
   amount numeric not null check (amount > 0),
@@ -32,24 +36,32 @@ create table invoice_payments (
   voided_by_profile_id uuid references profiles(id),
   void_reason text
 );
-create index invoice_payments_invoice_idx on invoice_payments (invoice_id);
+create index if not exists invoice_payments_invoice_idx on invoice_payments (invoice_id);
 
 -- Backfill: every invoice ever created (manual payments only -- card has
 -- never been wired to a real charge) becomes its own single payment
 -- event, carrying over its full history so nothing already recorded is
--- lost.
-insert into invoice_payments (
-  invoice_id, amount, payment_method, reference_note, status,
-  created_by_profile_id, created_at, pending_at, accepted_at, paid_at,
-  payee_confirmed_by_profile_id, voided_at, voided_by_profile_id, void_reason
-)
-select
-  i.id, i.total_amount, i.payment_method, i.reference_note, i.status,
-  i.created_by_profile_id, i.created_at, i.pending_at, i.accepted_at, i.paid_at,
-  (select li.payee_confirmed_by_profile_id from invoice_line_items li where li.invoice_id = i.id limit 1),
-  i.voided_at, i.voided_by_profile_id, i.void_reason
-from invoices i
-where i.payment_method <> 'card';
+-- lost. Guarded two ways: skipped entirely once invoices.payment_method
+-- no longer exists (the rest of this migration already ran and dropped
+-- it), and per-row NOT EXISTS so a partial rerun never double-inserts.
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_name = 'invoices' and column_name = 'payment_method') then
+    insert into invoice_payments (
+      invoice_id, amount, payment_method, reference_note, status,
+      created_by_profile_id, created_at, pending_at, accepted_at, paid_at,
+      payee_confirmed_by_profile_id, voided_at, voided_by_profile_id, void_reason
+    )
+    select
+      i.id, i.total_amount, i.payment_method, i.reference_note, i.status,
+      i.created_by_profile_id, i.created_at, i.pending_at, i.accepted_at, i.paid_at,
+      (select li.payee_confirmed_by_profile_id from invoice_line_items li where li.invoice_id = i.id limit 1),
+      i.voided_at, i.voided_by_profile_id, i.void_reason
+    from invoices i
+    where i.payment_method <> 'card'
+      and not exists (select 1 from invoice_payments p where p.invoice_id = i.id);
+  end if;
+end $$;
 
 -- invoices.status changes meaning: was "this one payment's lifecycle,"
 -- becomes "this bill's balance, derived from its accepted payments."
@@ -57,33 +69,44 @@ where i.payment_method <> 'card';
 -- never counted toward the balance; if every payment on an invoice ends
 -- up voided, that invoice is simply outstanding again, not in some
 -- separate voided state of its own.
-create type invoice_balance_status as enum ('outstanding', 'partially_paid', 'paid');
+do $$
+begin
+  create type invoice_balance_status as enum ('outstanding', 'partially_paid', 'paid');
+exception when duplicate_object then null;
+end $$;
 
-alter table invoices add column balance_status invoice_balance_status;
-update invoices set balance_status = case when status = 'accepted' then 'paid' else 'outstanding' end;
-alter table invoices alter column balance_status set not null;
-alter table invoices alter column balance_status set default 'outstanding';
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_name = 'invoices' and column_name = 'payment_method') then
+    -- Old schema still present -- do the one-time column swap.
+    alter table invoices add column if not exists balance_status invoice_balance_status;
+    update invoices set balance_status = (case when status = 'accepted' then 'paid' else 'outstanding' end)::invoice_balance_status
+      where balance_status is null;
+    alter table invoices alter column balance_status set not null;
+    alter table invoices alter column balance_status set default 'outstanding';
 
-alter table invoices
-  drop column status,
-  drop column payment_method,
-  drop column reference_note,
-  drop column voided_at,
-  drop column voided_by_profile_id,
-  drop column void_reason,
-  drop column pending_at,
-  drop column accepted_at,
-  drop column paid_at,
-  drop column failed_at,
-  drop column refunded_at,
-  drop column disputed_at;
-alter table invoices rename column balance_status to status;
+    alter table invoices
+      drop column if exists status,
+      drop column if exists payment_method,
+      drop column if exists reference_note,
+      drop column if exists voided_at,
+      drop column if exists voided_by_profile_id,
+      drop column if exists void_reason,
+      drop column if exists pending_at,
+      drop column if exists accepted_at,
+      drop column if exists paid_at,
+      drop column if exists failed_at,
+      drop column if exists refunded_at,
+      drop column if exists disputed_at;
+    alter table invoices rename column balance_status to status;
+  end if;
+end $$;
 
 -- Superseded by invoice_payments.payee_confirmed_by_profile_id -- a
 -- payee confirms each payment as it lands, not the line item once.
 alter table invoice_line_items
-  drop column payee_confirmed_at,
-  drop column payee_confirmed_by_profile_id;
+  drop column if exists payee_confirmed_at,
+  drop column if exists payee_confirmed_by_profile_id;
 
 -- Keeps invoices.status in sync with its payments on every insert/
 -- update/delete -- callers never set it directly, it's a pure function
@@ -111,6 +134,7 @@ begin
 end;
 $$;
 
+drop trigger if exists invoice_payments_status_sync on invoice_payments;
 create trigger invoice_payments_status_sync
 after insert or update or delete on invoice_payments
 for each row execute function recompute_invoice_status();
@@ -125,6 +149,7 @@ update invoices i set status = (case
 end)::invoice_balance_status;
 
 alter table invoice_payments enable row level security;
+drop policy if exists invoice_payments_select on invoice_payments;
 create policy invoice_payments_select on invoice_payments for select using (
   invoice_brand_org(invoice_id) = my_org_id()
   or exists (
