@@ -12,6 +12,14 @@
 // signing secret, not a shared one. STRIPE_WEBHOOK_SECRETS holds all of
 // them, comma-separated; verification tries each in turn since there's
 // no way to know in advance which destination sent a given request.
+//
+// invoice_payments rows for card only ever get written HERE, never at
+// PaymentIntent-creation time (see 0054's header) — a card payment
+// marked 'pending' up front has no way to leave that state if the
+// charge is declined or the brand just abandons the form, since
+// void_invoice_payment/confirm_invoice_payment both refuse card. Until
+// Stripe confirms success, the real per-booking split just sits staged
+// in invoice_card_payment_lines.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
 
@@ -54,26 +62,16 @@ Deno.serve(async (req) => {
 
   try {
     switch (event.type) {
-      // The brand's card was actually charged for the invoice total.
-      // This is the moment the platform fee is "collected" — not a
-      // separate step, just every dollar this function doesn't transfer
-      // out below.
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
 
-        const { data: invoice } = await supabaseAdmin
-          .from("invoices")
-          .select("id, campaign_id, status")
-          .eq("stripe_payment_intent_id", pi.id)
-          .maybeSingle();
-        if (!invoice || invoice.status === "paid") break; // not ours, or already handled
+        const { data: stagedLines } = await supabaseAdmin
+          .from("invoice_card_payment_lines")
+          .select("id, invoice_id, booking_id, gross_amount, payout_amount")
+          .eq("stripe_payment_intent_id", pi.id);
+        if (!stagedLines || stagedLines.length === 0) break; // not ours, or already handled (delivery retried)
 
-        const { data: lineItems } = await supabaseAdmin
-          .from("invoice_line_items")
-          .select("id, booking_id, payee_org_id, gross_amount, payout_amount")
-          .eq("invoice_id", invoice.id);
-
-        for (const line of lineItems ?? []) {
+        for (const line of stagedLines) {
           // Each booking still gets its own payments-table row (the
           // per-booking ledger predates invoices and other surfaces —
           // e.g. a campaign's own booking detail — still read from it).
@@ -84,67 +82,132 @@ Deno.serve(async (req) => {
             stripe_payment_intent_id: pi.id,
           });
           await supabaseAdmin.from("bookings").update({ payment_status: "paid" }).eq("id", line.booking_id);
-
-          // Transfer this line's payout to the agency's connected
-          // account — only if they've actually finished onboarding.
-          // Money that can't be transferred yet simply stays in DVURE's
-          // own balance until the agency completes Connect onboarding;
-          // it is NOT lost, and this is logged so it can be followed up.
-          const { data: payee } = await supabaseAdmin
-            .from("organizations")
-            .select("stripe_connect_account_id, stripe_connect_payouts_enabled")
-            .eq("id", line.payee_org_id)
-            .single();
-
-          if (payee?.stripe_connect_account_id && payee.stripe_connect_payouts_enabled && line.payout_amount > 0) {
-            try {
-              const transfer = await stripe.transfers.create({
-                amount: Math.round(Number(line.payout_amount) * 100),
-                currency: "usd",
-                destination: payee.stripe_connect_account_id,
-                source_transaction: typeof pi.latest_charge === "string" ? pi.latest_charge : undefined,
-                metadata: { invoice_id: invoice.id, booking_id: line.booking_id },
-              });
-              await supabaseAdmin
-                .from("invoice_line_items")
-                .update({ stripe_transfer_id: transfer.id, transfer_status: "transferred" })
-                .eq("id", line.id);
-            } catch (transferErr) {
-              console.error(`Transfer failed for line ${line.id}:`, transferErr);
-              await supabaseAdmin
-                .from("invoice_line_items")
-                .update({ transfer_status: "failed" })
-                .eq("id", line.id);
-            }
-          } else {
-            await supabaseAdmin
-              .from("invoice_line_items")
-              .update({ transfer_status: "awaiting_payee_onboarding" })
-              .eq("id", line.id);
-          }
         }
 
-        await supabaseAdmin
+        // One invoice_payments row per invoice, not per booking — a
+        // brand paying two bookings for the same agency in one charge
+        // is one payment event against that agency's invoice, same as
+        // how a manual payment is one event regardless of what it's for.
+        const invoiceIds = [...new Set(stagedLines.map((l) => l.invoice_id))];
+        const { data: invoicesData } = await supabaseAdmin
           .from("invoices")
-          .update({ status: "paid", paid_at: new Date().toISOString() })
-          .eq("id", invoice.id);
+          .select("id, campaign_id")
+          .in("id", invoiceIds);
+        const campaignByInvoice = new Map((invoicesData ?? []).map((i) => [i.id, i.campaign_id]));
 
-        await supabaseAdmin.rpc("record_audit_event", {
-          p_action: "invoice.paid",
-          p_object_type: "invoice",
-          p_object_id: invoice.id,
-          p_campaign_id: invoice.campaign_id,
-          p_new_value: { stripe_payment_intent_id: pi.id, line_count: (lineItems ?? []).length, source: "stripe_webhook" },
-        });
+        for (const invoiceId of invoiceIds) {
+          const linesForInvoice = stagedLines.filter((l) => l.invoice_id === invoiceId);
+          const grossTotal = linesForInvoice.reduce((sum, l) => sum + Number(l.gross_amount), 0);
+          const payoutTotal = linesForInvoice.reduce((sum, l) => sum + Number(l.payout_amount), 0);
+          const now = new Date().toISOString();
+
+          await supabaseAdmin.from("invoice_payments").insert({
+            invoice_id: invoiceId,
+            amount: grossTotal,
+            payment_method: "card",
+            status: "accepted",
+            pending_at: now,
+            accepted_at: now,
+            paid_at: now,
+            stripe_payment_intent_id: pi.id,
+          });
+          // recompute_invoice_status (0053's trigger) derives
+          // invoices.status from the row just inserted — no direct
+          // write to invoices here.
+
+          const { data: line } = await supabaseAdmin
+            .from("invoice_line_items")
+            .select("id, payee_org_id")
+            .eq("invoice_id", invoiceId)
+            .maybeSingle();
+
+          if (line) {
+            // Transfer this invoice's payout to the agency's connected
+            // account — only if they've actually finished onboarding.
+            // An independent model (payee_org_id null — no Connect
+            // account concept exists for individuals in this pass) and
+            // a not-yet-onboarded agency land in the same place: money
+            // stays in DVURE's own balance, not lost, flagged for
+            // follow-up rather than transferred.
+            if (line.payee_org_id) {
+              const { data: payee } = await supabaseAdmin
+                .from("organizations")
+                .select("stripe_connect_account_id, stripe_connect_payouts_enabled")
+                .eq("id", line.payee_org_id)
+                .single();
+
+              if (payee?.stripe_connect_account_id && payee.stripe_connect_payouts_enabled && payoutTotal > 0) {
+                try {
+                  const transfer = await stripe.transfers.create({
+                    amount: Math.round(payoutTotal * 100),
+                    currency: "usd",
+                    destination: payee.stripe_connect_account_id,
+                    source_transaction: typeof pi.latest_charge === "string" ? pi.latest_charge : undefined,
+                    metadata: { invoice_id: invoiceId },
+                  });
+                  await supabaseAdmin
+                    .from("invoice_line_items")
+                    .update({ stripe_transfer_id: transfer.id, transfer_status: "transferred" })
+                    .eq("id", line.id);
+                } catch (transferErr) {
+                  console.error(`Transfer failed for invoice ${invoiceId}:`, transferErr);
+                  await supabaseAdmin
+                    .from("invoice_line_items")
+                    .update({ transfer_status: "failed" })
+                    .eq("id", line.id);
+                }
+              } else {
+                await supabaseAdmin
+                  .from("invoice_line_items")
+                  .update({ transfer_status: "awaiting_payee_onboarding" })
+                  .eq("id", line.id);
+              }
+            } else {
+              await supabaseAdmin
+                .from("invoice_line_items")
+                .update({ transfer_status: "awaiting_payee_onboarding" })
+                .eq("id", line.id);
+            }
+          }
+
+          await supabaseAdmin.rpc("record_audit_event", {
+            p_action: "invoice.card_payment_accepted",
+            p_object_type: "invoice",
+            p_object_id: invoiceId,
+            p_campaign_id: campaignByInvoice.get(invoiceId) ?? null,
+            p_new_value: { stripe_payment_intent_id: pi.id, gross_amount: grossTotal, source: "stripe_webhook" },
+          });
+        }
+
+        await supabaseAdmin.from("invoice_card_payment_lines").delete().eq("stripe_payment_intent_id", pi.id);
         break;
       }
 
+      // Nothing was ever persisted to invoice_payments for this PI (see
+      // the file header), so there's nothing to mark failed and nothing
+      // to void — just drop the staged reservation, freeing that
+      // payee's remaining balance for a retry, and leave an audit trail
+      // for follow-up.
       case "payment_intent.payment_failed": {
         const pi = event.data.object as Stripe.PaymentIntent;
-        await supabaseAdmin
-          .from("invoices")
-          .update({ status: "failed" })
+
+        const { data: stagedLines } = await supabaseAdmin
+          .from("invoice_card_payment_lines")
+          .select("invoice_id")
           .eq("stripe_payment_intent_id", pi.id);
+
+        if (stagedLines && stagedLines.length > 0) {
+          const invoiceIds = [...new Set(stagedLines.map((l) => l.invoice_id))];
+          for (const invoiceId of invoiceIds) {
+            await supabaseAdmin.rpc("record_audit_event", {
+              p_action: "invoice.card_payment_failed",
+              p_object_type: "invoice",
+              p_object_id: invoiceId,
+              p_new_value: { stripe_payment_intent_id: pi.id, source: "stripe_webhook" },
+            });
+          }
+          await supabaseAdmin.from("invoice_card_payment_lines").delete().eq("stripe_payment_intent_id", pi.id);
+        }
         break;
       }
 

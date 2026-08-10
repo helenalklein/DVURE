@@ -20,10 +20,11 @@ import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distribute
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
-import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
+import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
+import { createInvoicePayment } from "../../lib/queries/stripe";
+import CardPaymentStep from "./CardPaymentStep";
 import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries/outstandingPayments";
-import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
@@ -951,8 +952,6 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
         ))}
       </div>
 
-      {realCampaignId && <InvoicePaymentPanel campaignId={realCampaignId} key={realCampaignId}/>}
-
       {showPicker && (
         <Modal onClose={()=>setShowPicker(false)} maxWidth="max-w-sm">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -1002,16 +1001,27 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
   campaignId: string; payees: OutstandingPayee[]; onClose: () => void; onDone: () => void;
 }) {
   const isSingle = payees.length === 1;
-  const [method, setMethod] = useState<ManualPaymentMethod>("check");
+  const anyCrew = payees.some(p => p.bookingId == null);
+  const [method, setMethod] = useState<PaymentMethod>("check");
   const [note, setNote] = useState("");
   const [amountInput, setAmountInput] = useState(isSingle ? String(payees[0].remaining) : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cardClientSecret, setCardClientSecret] = useState<string | null>(null);
   const singleAmount = isSingle ? Number(amountInput) : 0;
   const total = isSingle ? singleAmount : payees.reduce((s,p)=>s+p.remaining, 0);
   const canSubmit = isSingle ? singleAmount > 0 && singleAmount <= payees[0].remaining : true;
 
+  function selectMethod(m: PaymentMethod) {
+    setMethod(m);
+    // Card charges the real, server-recomputed booking amount — never
+    // let the client assert a partial figure for it, even though manual
+    // methods allow editing a single payee's amount down.
+    if (m === "card" && isSingle) setAmountInput(String(payees[0].remaining));
+  }
+
   async function handleSubmit() {
+    if (method === "card") return; // card goes through handleStartCardPayment instead
     if (!canSubmit) { setError("Enter an amount up to the remaining balance."); return; }
     setSubmitting(true);
     setError(null);
@@ -1029,25 +1039,47 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
     onDone();
   }
 
+  async function handleStartCardPayment() {
+    setSubmitting(true);
+    setError(null);
+    const bookingIds = payees.map(p => p.bookingId).filter((id): id is string => id != null);
+    const { clientSecret, error: err } = await createInvoicePayment(bookingIds, campaignId);
+    setSubmitting(false);
+    if (err || !clientSecret) { setError(err ?? "Couldn't start payment."); return; }
+    setCardClientSecret(clientSecret);
+  }
+
   return (
     <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
       <div className="bg-card border border-border rounded-md w-full max-w-md shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div>
-            <div className="text-heading text-sm">Record Payment</div>
+            <div className="text-heading text-sm">{cardClientSecret ? "Confirm payment" : "Record Payment"}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{payees.length} {payees.length===1?"person":"people"} · ${total.toLocaleString()} total</div>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={16}/></button>
         </div>
+        {cardClientSecret ? (
+          <div className="p-5">
+            <CardPaymentStep
+              clientSecret={cardClientSecret}
+              totalCents={Math.round(total * 100)}
+              onBack={()=>setCardClientSecret(null)}
+              onDone={onDone}
+            />
+          </div>
+        ) : (
         <div className="p-5 space-y-4">
           {isSingle ? (
             <div>
               <FieldLabel>Amount</FieldLabel>
               <div className="flex items-center gap-2">
                 <input value={amountInput} onChange={e=>setAmountInput(e.target.value)} type="number" min="0" max={payees[0].remaining}
-                  className="w-32 bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-foreground"/>
+                  disabled={method==="card"}
+                  className="w-32 bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-foreground disabled:opacity-60"/>
                 <span className="text-xs text-muted-foreground">of ${payees[0].remaining.toLocaleString()} owed to {payees[0].name}</span>
               </div>
+              {method==="card" && <div className="text-[10px] text-muted-foreground mt-1">Card payments are for the full remaining balance.</div>}
             </div>
           ) : (
             <div className="max-h-32 overflow-y-auto space-y-1">
@@ -1062,37 +1094,50 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
           <div>
             <FieldLabel>Method</FieldLabel>
             <div className="flex gap-1.5">
-              {(["check","wire","cash"] as const).map(m=>(
-                <button key={m} onClick={()=>setMethod(m)}
-                  className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors cursor-pointer capitalize",
-                    method===m?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
-                  )}>{m}</button>
-              ))}
+              {(["check","wire","cash","card"] as const).map(m=>{
+                const disabled = m==="card" && anyCrew;
+                return (
+                  <button key={m} disabled={disabled} onClick={()=>selectMethod(m)}
+                    title={disabled ? "Card isn't available for crew yet — use check, wire, or cash" : undefined}
+                    className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors capitalize",
+                      disabled ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+                        : method===m ? "bg-foreground text-primary-foreground border-foreground cursor-pointer" : "border-border text-muted-foreground hover:border-foreground cursor-pointer"
+                    )}>{m}</button>
+                );
+              })}
             </div>
           </div>
-          <div>
-            <FieldLabel>Reference note (optional)</FieldLabel>
-            <input value={note} onChange={e=>setNote(e.target.value)}
-              placeholder={method==="check" ? "Check #1042" : method==="wire" ? "Wire confirmation #" : "e.g. Handed to them in person"}
-              className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
-          </div>
+          {method!=="card" && (
+            <div>
+              <FieldLabel>Reference note (optional)</FieldLabel>
+              <input value={note} onChange={e=>setNote(e.target.value)}
+                placeholder={method==="check" ? "Check #1042" : method==="wire" ? "Wire confirmation #" : "e.g. Handed to them in person"}
+                className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+            </div>
+          )}
           {error && <div className="text-xs text-red-500">{error}</div>}
-          <Btn variant="primary" fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
-            {submitting ? "Recording…" : `Record Payment${payees.length>1?"s":""}`}
-          </Btn>
+          {method==="card" ? (
+            <Btn variant="primary" fullWidth disabled={submitting} onClick={handleStartCardPayment}>
+              {submitting ? "Preparing payment…" : "Continue to card payment"}
+            </Btn>
+          ) : (
+            <Btn variant="primary" fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
+              {submitting ? "Recording…" : `Record Payment${payees.length>1?"s":""}`}
+            </Btn>
+          )}
         </div>
+        )}
       </div>
     </div>
   );
 }
 
 // The spreadsheet — every real person the brand owes money to on this
-// campaign, one row each, selectable à la carte for a batch check/wire/
-// cash payment. Card stays on the separate InvoicePaymentPanel (Contracts
-// tab) — this tab is specifically for the manual, no-processor path. A
-// row with any payment history at all (pending/partial/paid) opens the
-// full trail via InvoiceDetailModal — that's also where a follow-up or
-// partial payment gets added, and where a still-pending one gets voided.
+// campaign, one row each, selectable à la carte for check/wire/cash or
+// card (0054) in one unified flow (RecordPaymentModal). A row with any
+// payment history at all (pending/partial/paid) opens the full trail
+// via InvoiceDetailModal — that's also where a follow-up or partial
+// payment gets added, and where a still-pending one gets voided.
 function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null }) {
   const [payees, setPayees] = useState<OutstandingPayee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2572,84 +2617,7 @@ function PaidStamp({ size = 120, animate = true }: { size?: number; animate?: bo
 // its own state rather than "declined" being an afterthought bolted onto
 // the success path. Each has its own color, icon, and a next step that
 // actually gets someone unblocked, not just an apology.
-type PaymentOutcome = "success" | "declined" | "failed" | "subscription-expired";
-
-function PaymentOutcomeOverlay({ outcome, campaign, amount, onClose, onAddCard }: {
-  outcome: PaymentOutcome; campaign: string; amount: string; onClose: () => void; onAddCard: () => void;
-}) {
-  const [phase, setPhase] = useState<"processing"|"stamp"|"done">("processing");
-  useState(() => {
-    setTimeout(() => setPhase("stamp"), 800);
-    setTimeout(() => setPhase("done"), 2000);
-    if (outcome === "success") setTimeout(() => onClose(), 5000);
-  });
-
-  if (outcome !== "success") {
-    const copy = {
-      declined: {
-        Icon: XCircle, color: "#C0392B",
-        title: "Card Declined",
-        detail: `Your card ending 4242 was declined for ${amount} on ${campaign}. No charge was made.`,
-        primary: { label: "Try a Different Card", onClick: onAddCard },
-      },
-      failed: {
-        Icon: AlertCircle, color: "#C0392B",
-        title: "Payment Failed",
-        detail: `${amount} for ${campaign} couldn't be processed — your bank returned an error. Nothing was charged.`,
-        primary: { label: "Try Again", onClick: onClose },
-      },
-      "subscription-expired": {
-        Icon: Lock, color: "#D4A017",
-        title: "Subscription Expired",
-        detail: `Your DVURE Brand subscription lapsed on Jul 3, 2026. Renew to keep authorizing payments.`,
-        primary: { label: "Renew Subscription", onClick: onClose },
-      },
-    }[outcome];
-    const CopyIcon = copy.Icon;
-    return (
-      <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-5 rounded-xl z-50 px-8">
-        {phase === "processing" ? (<>
-          <div className="w-14 h-14 border-2 border-border border-t-foreground rounded-full animate-spin"/>
-          <div className="text-heading text-base text-foreground">Processing payment…</div>
-          <div className="text-xs text-muted-foreground font-mono">{campaign}</div>
-        </>) : (<>
-          <CopyIcon size={48} style={{ color: copy.color }}/>
-          <div className="text-center space-y-1.5 max-w-sm">
-            <div className="text-heading text-base text-foreground">{copy.title}</div>
-            <div className="text-sm text-muted-foreground leading-relaxed">{copy.detail}</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Btn variant="primary" size="sm" onClick={copy.primary.onClick}>{copy.primary.label}</Btn>
-            <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer">Close</button>
-          </div>
-        </>)}
-      </div>
-    );
-  }
-
-  return (
-    <div className="absolute inset-0 bg-card/85 backdrop-blur-xl flex flex-col items-center justify-center gap-6 rounded-xl z-50">
-      {phase === "processing" && (<>
-        <div className="w-14 h-14 border-2 border-border border-t-foreground rounded-full animate-spin"/>
-        <div className="text-heading text-base text-foreground">Processing payment…</div>
-        <div className="text-xs text-muted-foreground font-mono">{campaign}</div>
-      </>)}
-      {(phase === "stamp" || phase === "done") && (<>
-        <div className={cx("transition-all duration-500", phase === "stamp" ? "scale-150 opacity-0" : "scale-100 opacity-100")}><PaidStamp size={140}/></div>
-        <div className="text-center space-y-1">
-          <div className="text-heading text-base text-foreground">Payment Authorized</div>
-          <div className="text-sm text-[#16a34a] font-semibold">{amount} — Paid in Full</div>
-          <div className="text-xs text-muted-foreground font-mono">{campaign}</div>
-        </div>
-        {phase === "done" && <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer">Close</button>}
-      </>)}
-    </div>
-  );
-}
-
-type PaymentState = "idle" | "processing" | "complete";
-
-const MANUAL_METHOD_LABEL: Record<ManualPaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash" };
+const MANUAL_METHOD_LABEL: Record<PaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash", card: "Card" };
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -2870,31 +2838,17 @@ function GlobalPayments() {
   const org = currentUser?.org ?? "";
   const meName = currentUser?.name ?? "";
   const { org: accountOrg } = useAuth();
-  const accessGate = getAccessGate(accountOrg);
   const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices">("payments");
   const [selectedInvoice, setSelectedInvoice] = useState<UnifiedInvoice | null>(null);
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const [showSigModal, setShowSigModal] = useState(false);
   const [showAddCard, setShowAddCard] = useState(false);
   const [showAddBank, setShowAddBank] = useState(false);
-  const [signature, setSignature] = useState<string|null>(null);
-  const [sigInput, setSigInput] = useState("");
-  const [payState, setPayState] = useState<PaymentState>("idle");
-  const [selectedCampaign, setSelectedCampaign] = useState("");
-  const [payAmount, setPayAmount] = useState("");
-  // Demo-only — there's no real processor behind this yet to actually
-  // fail a card, so this lets every outcome (not just the happy path)
-  // be previewed on demand instead of only ever being described.
-  const [simulateOutcome, setSimulateOutcome] = useState<PaymentOutcome>("success");
 
-  // Check/wire/cash is initiated per-campaign now (the Payments tab on
-  // each real campaign, sourced from fetchOutstandingPayees) — this tab
-  // is the cross-campaign list of every invoice built that way, real and
-  // persisted (0046/0051/0053), unlike the card flow above which is
-  // still mock pending a real Stripe key. Void/confirm/add-payment all
-  // live inside InvoiceDetailModal now, not here — GlobalPayments just
-  // loads the list and hands off to it.
+  // Both check/wire/cash and card now go through the same real,
+  // per-campaign Payments tab (fetchOutstandingPayees + RecordPaymentModal)
+  // — this screen is the cross-campaign list of every invoice built that
+  // way, real and persisted (0046/0051/0053/0054). Void/confirm/add-
+  // payment all live inside InvoiceDetailModal now, not here —
+  // GlobalPayments just loads the list and hands off to it.
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
 
@@ -2941,28 +2895,10 @@ function GlobalPayments() {
   const [pendingBankAdded, setPendingBankAdded] = useState(false);
 
   const hasCard = true;
-  const amountDue = selectedCampaign ? "2850" : "";
 
-  function handleComplete() {
-    setPayState("processing");
-    setTimeout(()=>setPayState("complete"), 2500);
-    // Only the success path auto-dismisses — a declined/failed/expired
-    // outcome needs to stay on screen until the user acts on it (retry,
-    // add a new card, etc.), not vanish on a timer underneath them.
-    if (simulateOutcome === "success") {
-      setTimeout(()=>{ setPayState("idle"); setShowPayModal(false); }, 5000);
-    }
-  }
-
-  function attemptClose() {
-    if (payAmount || selectedCampaign) { setShowDiscardConfirm(true); } else { setShowPayModal(false); }
-  }
-
-  const canAuthorize = !!(selectedCampaign && payAmount && signature) && !accessGate.gated;
-
-  // Gold button style for Authorize Payment + Authorize — plain sentence
-  // case, matching every other button's Instrument Sans treatment rather
-  // than the bespoke uppercase/tracking-widest look these used to have.
+  // Gold button style, shared by the (still decorative) Add Card/Add
+  // Bank actions — plain sentence case, matching every other button's
+  // Instrument Sans treatment.
   const goldBtn = "bg-gold hover:bg-gold/90 text-gold-foreground font-semibold transition-all shadow-md hover:shadow-lg";
 
   return (
@@ -3081,14 +3017,6 @@ function GlobalPayments() {
             )}
           </div>
 
-          {/* Authorize Payment — gold with white text, back to its original weight */}
-          <button
-            onClick={()=>setShowPayModal(true)}
-            disabled={accessGate.gated}
-            className={`w-full py-10 mt-4 rounded-md ${goldBtn} text-lg disabled:opacity-40 disabled:cursor-not-allowed`}
-          >
-            Authorize Payment
-          </button>
         </div>
 
         {/* RIGHT — Recent Activity, small quiet column */}
@@ -3114,196 +3042,6 @@ function GlobalPayments() {
         </div>
       </div>{/* end payments flex */}
       </div>}{/* end paymentsTab==="payments" */}
-
-      {/* ── AUTHORIZE PAYMENT MODAL ── */}
-      {showPayModal && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden relative">
-            {/* Header row */}
-            <div className="px-6 py-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                {/* Campaign selector (demo) */}
-                <div className="flex-1 relative">
-                  <select value={selectedCampaign} onChange={e=>setSelectedCampaign(e.target.value)}
-                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground pr-8">
-                    <option value="">Select campaign…</option>
-                    <option>AW25 Womenswear Campaign</option>
-                    <option>SS25 Fragrance Launch</option>
-                    <option>Resort Lookbook 2025</option>
-                  </select>
-                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"/>
-                </div>
-                {/* Due date — same row as date picker */}
-                <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs font-mono text-muted-foreground shrink-0 whitespace-nowrap">
-                  Due: {selectedCampaign ? "06/20/2025" : "—"}
-                </div>
-                {/* Payment Date — labeled, defaults to today */}
-                <div className="flex flex-col gap-1 shrink-0">
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Payment Date</div>
-                  <input type="date" defaultValue="2026-06-19" className="bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground hover:bg-secondary" title="Contact support">?</button>
-                  <button onClick={attemptClose} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
-                </div>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5 space-y-5">
-              {/* Amount row */}
-              <div className="flex items-stretch gap-4">
-                <div className="flex-1">
-                  <FieldLabel>Payment Amount</FieldLabel>
-                  <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden">
-                    <span className="px-3 py-2 text-sm text-muted-foreground border-r border-border">$</span>
-                    <input value={payAmount} onChange={e=>setPayAmount(e.target.value)} placeholder="0.00"
-                      className="flex-1 px-3 py-2 text-sm bg-transparent focus:outline-none"/>
-                    {amountDue && (
-                      <button onClick={()=>setPayAmount(amountDue)}
-                        className="px-3 py-2 text-xs font-medium text-muted-foreground border-l border-border hover:bg-secondary hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
-                        Pay in full
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Amount Due — hero */}
-                <div className="bg-foreground rounded-md px-6 py-3 flex flex-col items-center justify-center text-primary-foreground shrink-0 min-w-[150px]">
-                  <div className="text-[10px] font-mono uppercase tracking-widest opacity-60 mb-1">Amount Due</div>
-                  <div className="text-2xl font-semibold font-mono">{selectedCampaign ? "$2,850" : "—"}</div>
-                </div>
-              </div>
-
-              {/* Payer + timestamp */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <FieldLabel>Payment Submitted By</FieldLabel>
-                  <input readOnly value={meName} className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"/>
-                </div>
-                <div className="flex-1">
-                  <FieldLabel>Processing Timestamp</FieldLabel>
-                  <input readOnly value="Jun 19, 2026 · 2:34 PM EST" className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground cursor-not-allowed font-mono"/>
-                </div>
-              </div>
-
-              {/* E-Signature */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <FieldLabel>Authorized Representative E-Signature</FieldLabel>
-                  <div className="text-xs text-muted-foreground">By signing, you authorize this payment on behalf of {org}.</div>
-                </div>
-                <div className="shrink-0">
-                  {signature ? (
-                    <div className="border border-border rounded-md px-4 py-3 min-w-[140px] flex items-center justify-center bg-secondary cursor-pointer hover:border-foreground">
-                      <span className="font-serif italic text-lg">{signature}</span>
-                    </div>
-                  ) : (
-                    <button onClick={()=>setShowSigModal(true)} className="border border-dashed border-border rounded-md px-4 py-3 min-w-[140px] text-xs text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1">
-                      <Plus size={12}/> Add signature
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Demo-only outcome preview — no real processor sits behind
-                  this yet, so every failure state is a deliberate choice
-                  here rather than something only the happy path shows. */}
-              <div className="border border-dashed border-border rounded-md px-3 py-2.5">
-                <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Demo — simulate outcome</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {([
-                    { id:"success" as const,               label:"Success" },
-                    { id:"declined" as const,               label:"Card Declined" },
-                    { id:"failed" as const,                 label:"Payment Failed" },
-                    { id:"subscription-expired" as const,   label:"Subscription Expired" },
-                  ]).map(o=>(
-                    <button key={o.id} onClick={()=>setSimulateOutcome(o.id)}
-                      className={cx("text-[10px] font-mono px-2 py-1 rounded-sm border cursor-pointer capitalize transition-colors",
-                        simulateOutcome===o.id?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground"
-                      )}>{o.label}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="border-t-2 border-border bg-muted/20">
-              {/* Row 1: i button · Discard · Save Draft */}
-              <div className="px-6 py-3 flex items-center gap-2 border-b border-border">
-                <button className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground hover:bg-secondary" title="Open invoice">i</button>
-                <div className="flex-1"/>
-                <button onClick={()=>setShowPayModal(false)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-secondary transition-colors">Save Draft</button>
-                <button onClick={()=>setShowDiscardConfirm(true)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-muted transition-colors">Discard</button>
-              </div>
-              {/* Row 2: Authorize — always visible, gold when ready */}
-              <div className="px-6 py-4">
-                <button
-                  onClick={canAuthorize ? handleComplete : undefined}
-                  className={cx("w-full py-3.5 rounded-md text-sm transition-all",
-                    canAuthorize
-                      ? `${goldBtn} cursor-pointer`
-                      : "bg-gold/30 text-foreground/40 cursor-not-allowed"
-                  )}
-                >
-                  Authorize
-                </button>
-                {!canAuthorize && (
-                  <div className="text-center text-[10px] text-muted-foreground mt-2">
-                    {!selectedCampaign ? "Select a campaign to continue" : !payAmount ? "Enter payment amount" : "Add e-signature to authorize"}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Processing / outcome overlay */}
-            {payState !== "idle" && (
-              <PaymentOutcomeOverlay
-                outcome={simulateOutcome}
-                campaign={selectedCampaign || "AW25 Womenswear Campaign"}
-                amount={payAmount ? `$${Number(payAmount).toLocaleString()}` : "$2,850"}
-                onClose={()=>{ setPayState("idle"); setShowPayModal(false); }}
-                onAddCard={()=>{ setPayState("idle"); setShowPayModal(false); setShowAddCard(true); }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Discard Confirm */}
-      {showDiscardConfirm && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
-          <div className="bg-card border border-border rounded-md w-80 p-6 shadow-xl">
-            <div className="text-sm font-semibold mb-2">Discard payment draft?</div>
-            <div className="text-xs text-muted-foreground mb-5">This payment draft will be lost. This action cannot be undone.</div>
-            <div className="flex gap-2">
-              <Btn variant="primary" fullWidth onClick={()=>{ setShowDiscardConfirm(false); setShowPayModal(false); setSelectedCampaign(""); setPayAmount(""); }}>Discard</Btn>
-              <Btn variant="outline" fullWidth onClick={()=>setShowDiscardConfirm(false)}>Keep editing</Btn>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* E-Signature Modal */}
-      {showSigModal && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
-          <div className="bg-card border border-border rounded-md w-96 overflow-hidden shadow-xl">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-heading text-sm">Create E-Signature</div>
-              <button onClick={()=>setShowSigModal(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="text-xs text-muted-foreground">Type your full name to create your authorized e-signature.</div>
-              <div><FieldLabel>Full Name</FieldLabel><input value={sigInput} onChange={e=>setSigInput(e.target.value)} placeholder={`e.g. ${meName || "Jordan Smith"}`} className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/></div>
-              {sigInput && (<div className="border border-border rounded-md p-4 bg-secondary text-center"><div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider font-mono">Preview</div><div className="font-serif italic text-2xl">{sigInput}</div></div>)}
-              <div className="text-[10px] text-muted-foreground leading-relaxed">By creating this e-signature, you agree it is legally equivalent to your handwritten signature within <DvureWordmark size={9}/>.</div>
-            </div>
-            <div className="px-5 pb-5 flex gap-2">
-              <Btn variant="primary" disabled={!sigInput} onClick={()=>{ setSignature(sigInput); setShowSigModal(false); setSigInput(""); }}>Create Signature</Btn>
-              <Btn variant="outline" onClick={()=>setShowSigModal(false)}>Cancel</Btn>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Add Card Modal */}
       {showAddCard && (
@@ -3375,48 +3113,15 @@ function GlobalPayments() {
 
 // ─── INVOICES PANEL ─────────────────────────────────────────────────────────
 
-// A mix of payee kinds, matching what the platform actually supports —
-// agency-repped models, independent models (no agency cut), and crew
-// (day rate only, never an "agency" in the modeling sense).
-const INVOICE_DATA = [
-  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", payeeKind:"agency-model"     as const, agency:"Vantage Model Mgmt.", talent:"James Whitfield",         dayRate:950,  days:3, due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", payeeKind:"independent-model" as const, agency:"Independent",         talent:"Amara Diallo",            dayRate:1150, days:2, due:"06/24/2025", urgency:"green",  agencyPct:0,  dvurePct:3, taxPct:8.25 },
-  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    payeeKind:"agency-model"     as const, agency:"Meridian Models",     talent:"Mila Tran",               dayRate:1100, days:1, due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0768", campaign:"FW24 Campaign",            payeeKind:"agency-model"     as const, agency:"Vector Models",       talent:"Sofia Brandt",            dayRate:1200, days:3, due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0804", campaign:"Resort Lookbook 2025",     payeeKind:"crew"             as const, agency:"Crew",                talent:"Ibrahim Sy — Photographer", dayRate:900, days:2, due:"07/03/2025", urgency:"green",  agencyPct:0,  dvurePct:3, taxPct:8.25 },
-  { id:"INV-0815", campaign:"Beauty Campaign Q1",       payeeKind:"agency-model"     as const, agency:"Anthem Models",       talent:"Chiara Russo",            dayRate:860,  days:2, due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-];
-
-// Already-authorized invoices — same shape as an outstanding one, plus
-// when it was paid, so the fee breakdown modal keeps working unchanged.
-const PAID_INVOICE_DATA = [
-  { id:"INV-0729", campaign:"AW26 Runway Presentation", payeeKind:"agency-model"     as const, agency:"Solenne",       talent:"Priya Anand",            dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
-  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    payeeKind:"crew"             as const, agency:"Crew",          talent:"Grace Whitman — Production", dayRate:750,  days:2, agencyPct:0,  dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
-  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", payeeKind:"agency-model"     as const, agency:"Vantage Model Mgmt.", talent:"James Whitfield",   dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
-  { id:"INV-0655", campaign:"Resort Lookbook 2025",     payeeKind:"independent-model" as const, agency:"Independent",  talent:"Theo Bergstrom",         dayRate:460,  days:2, agencyPct:0,  dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
-];
-
-function calcBreakdown(inv: { dayRate: number; days: number; agencyPct: number; dvurePct: number; taxPct: number }) {
-  const modelFee      = inv.dayRate * inv.days;
-  const agencyFee     = Math.round(modelFee * (inv.agencyPct / 100));
-  const base          = modelFee + agencyFee;
-  const dvureFee      = Math.round(base * (inv.dvurePct / 100));          // 3%
-  const processingFee = Math.round(base * 0.029) + 30;                    // 2.9% + $0.30
-  const totalFees     = dvureFee + processingFee;
-  const tax           = Math.round(base * (inv.taxPct / 100));
-  const total         = base + dvureFee + processingFee + tax;
-  return { modelFee, agencyFee, dvureFee, processingFee, totalFees, tax, total };
-}
-
-// One shape for every invoice card on the brand side, whichever system it
-// actually came from — the still-mock card/ACH invoices above (no live
-// Stripe key yet) and the real, multi-payment invoices (0046/0051/0053).
-// Outstanding Invoices (Payments tab) and the Invoices tab both build
-// from this and render with the same <InvoiceCard/>, so they can't drift
-// apart in look or info (a real requirement, not a coincidence).
+// One shape for every invoice card on the brand side — real now,
+// whether the underlying payment was manual (check/wire/cash) or card
+// (0054), since both write into the same invoices/invoice_payments
+// tables. Outstanding Invoices (Payments tab) and the Invoices tab both
+// build from this and render with the same <InvoiceCard/>, so they
+// can't drift apart in look or info (a real requirement, not a
+// coincidence).
 interface UnifiedInvoice {
   key: string;
-  kind: "card" | "manual";
   id: string;
   campaign: string;
   payee: string;
@@ -3425,20 +3130,11 @@ interface UnifiedInvoice {
   dateLabel: string;
   overdue: boolean;
   status: InvoiceStatus;
-  card?: typeof INVOICE_DATA[number] | typeof PAID_INVOICE_DATA[number];
-  invoice?: Invoice;
+  invoice: Invoice;
 }
 
 function buildUnifiedInvoices(invoices: Invoice[]): UnifiedInvoice[] {
-  const cardOutstanding: UnifiedInvoice[] = INVOICE_DATA.map(inv => ({
-    key: inv.id, kind: "card", id: inv.id, campaign: inv.campaign, payee: inv.agency, detail: inv.talent,
-    amount: calcBreakdown(inv).total, dateLabel: inv.due, overdue: inv.urgency === "red", status: "outstanding", card: inv,
-  }));
-  const cardPaid: UnifiedInvoice[] = PAID_INVOICE_DATA.map(inv => ({
-    key: inv.id, kind: "card", id: inv.id, campaign: inv.campaign, payee: inv.agency, detail: inv.talent,
-    amount: calcBreakdown(inv).total, dateLabel: `Paid ${inv.paidDate}`, overdue: false, status: "paid", card: inv,
-  }));
-  const manual: UnifiedInvoice[] = invoices.map(inv => {
+  return invoices.map(inv => {
     const pendingAmount = inv.payments.filter(p => p.status === "pending").reduce((s, p) => s + p.amount, 0);
     const lastAccepted = [...inv.payments].reverse().find(p => p.status === "accepted");
     const detail = inv.payments.length === 1
@@ -3450,11 +3146,10 @@ function buildUnifiedInvoices(invoices: Invoice[]): UnifiedInvoice[] {
       ? `$${inv.acceptedAmount.toLocaleString()} of $${inv.totalAmount.toLocaleString()}`
       : pendingAmount > 0 ? "Pending confirmation" : "";
     return {
-      key: inv.id, kind: "manual", id: `INV-${inv.id.slice(0, 8).toUpperCase()}`, campaign: inv.campaignName, payee: inv.payeeName,
+      key: inv.id, id: `INV-${inv.id.slice(0, 8).toUpperCase()}`, campaign: inv.campaignName, payee: inv.payeeName,
       detail, amount: inv.totalAmount, dateLabel, overdue: false, status: inv.status, invoice: inv,
     };
   });
-  return [...cardOutstanding, ...cardPaid, ...manual];
 }
 
 // The one card look every invoice uses, mock or real, outstanding,
@@ -3538,91 +3233,7 @@ function InvoicesPanel({ invoices, invoicesLoading, onChanged, selected, onSelec
         </>)}
       </div>
 
-      {/* Card/ACH invoices (still mock — no live Stripe key) keep their
-          own fee-breakdown modal; real invoices open the shared trail
-          view, same one the Payments-tab spreadsheet opens. */}
-      {selected && selected.kind === "card" && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl w-full max-w-xl shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className={cx("w-2 h-2 rounded-full shrink-0", selected.status === "paid" ? "bg-[#27AE60]" : selected.overdue ? "bg-[#C0392B]" : "bg-muted-foreground/40")}/>
-                  <div className="text-sm font-semibold">{selected.id}</div>
-                </div>
-                <div className="text-xs text-muted-foreground">{selected.campaign} · {selected.payee}</div>
-              </div>
-              <button onClick={() => onSelect(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
-            </div>
-
-            <div className="px-6 py-5">
-              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">Fee Breakdown</div>
-              {(() => {
-                const inv = selected.card!;
-                const bd = calcBreakdown(inv);
-                const paidDate = "paidDate" in inv ? inv.paidDate : null;
-                return (
-                  <div className="space-y-1">
-                    <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                      <div>
-                        <div className="text-sm">{inv.payeeKind === "crew" ? "Day Rate" : "Model Fee"} — {inv.talent}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{inv.days} day{inv.days > 1 ? "s" : ""} × ${inv.dayRate.toLocaleString()}/day</div>
-                      </div>
-                      <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
-                    </div>
-                    {inv.payeeKind !== "crew" && (
-                      <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                        <div>
-                          <div className="text-sm">Agency Fee — {inv.agency}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{inv.payeeKind === "independent-model" ? "N/A — independent" : `${inv.agencyPct}% of model fee`}</div>
-                        </div>
-                        <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between py-2.5 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm">Fees &amp; Taxes</div>
-                        <div className="relative group/tooltip">
-                          <span className="w-4 h-4 rounded-full border border-border bg-secondary text-[9px] font-mono text-muted-foreground flex items-center justify-center cursor-default select-none">i</span>
-                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block z-20 w-56 bg-foreground text-primary-foreground rounded-md shadow-lg p-3 text-[10px] font-mono space-y-1.5">
-                            <div className="flex justify-between gap-4"><span><DvureWordmark size={9}/> transaction (3%)</span><span>${bd.dvureFee.toLocaleString()}</span></div>
-                            <div className="flex justify-between gap-4"><span>Processing (2.9% + $0.30)</span><span>${bd.processingFee.toLocaleString()}</span></div>
-                            <div className="border-t border-primary-foreground/20 pt-1.5 flex justify-between gap-4 font-semibold"><span>Total fees</span><span>${bd.totalFees.toLocaleString()}</span></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="font-mono text-sm font-medium">${(bd.dvureFee + bd.processingFee + bd.tax).toLocaleString()}</div>
-                    </div>
-                    <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
-                      <div className="text-sm font-semibold">Invoice Total</div>
-                      <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground font-mono text-right">
-                      {paidDate ? `Paid ${paidDate}` : `Due ${(inv as typeof INVOICE_DATA[number]).due}`}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="px-6 pb-5 flex gap-2">
-              {selected.status === "paid" ? (
-                <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
-                  <PaidStamp size={18} animate={false}/> Paid in Full
-                </div>
-              ) : (
-                <button
-                  onClick={() => onSelect(null)}
-                  className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
-                  Authorize Payment
-                </button>
-              )}
-              <Btn variant="outline" onClick={() => onSelect(null)}>Message Agency →</Btn>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selected && selected.kind === "manual" && selected.invoice && (
+      {selected && (
         <InvoiceDetailModal
           invoice={selected.invoice}
           onClose={() => onSelect(null)}

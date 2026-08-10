@@ -52,31 +52,3 @@ export async function createBooking(params: {
   return { id: data.id as string, error: null };
 }
 
-export interface UnpaidBooking {
-  id: string;
-  modelName: string;
-  agencyOrgId: string;
-  agencyName: string;
-  dayRate: number;
-  days: number;
-  grossAmount: number; // day_rate * days — what the brand is charged for this line
-}
-
-export async function fetchUnpaidBookings(campaignId: string): Promise<UnpaidBooking[]> {
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("id, day_rate, days, agency_org_id, model_profiles(full_name), organizations!bookings_agency_org_id_fkey(name)")
-    .eq("campaign_id", campaignId)
-    .neq("payment_status", "paid");
-  if (error || !data) return [];
-
-  return (data as any[]).map((b) => ({
-    id: b.id,
-    modelName: b.model_profiles?.full_name ?? "Unknown",
-    agencyOrgId: b.agency_org_id,
-    agencyName: b.organizations?.name ?? "Independent",
-    dayRate: Number(b.day_rate),
-    days: Number(b.days),
-    grossAmount: Number(b.day_rate) * Number(b.days),
-  }));
-}

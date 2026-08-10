@@ -26,6 +26,7 @@ export interface OutstandingPayee {
   modelId: string | null;
   crewPayeeId: string | null;
   invoiceId: string | null; // the open (not-yet-fully-paid) invoice to add another payment to, if one exists
+  bookingId: string | null; // the real bookings row backing this row — null for crew, needed to pay by card
 }
 
 function statusFor(accepted: number, pending: number, total: number): OutstandingStatus {
@@ -82,7 +83,7 @@ export async function fetchOutstandingPayees(campaignId: string): Promise<Outsta
 
   for (const b of (bookings as any[]) ?? []) {
     const isIndependent = !b.agency_org_id;
-    const totalAmount = Number(b.day_rate) * Number(b.days); // gross owed — matches fetchUnpaidBookings' grossAmount
+    const totalAmount = Number(b.day_rate) * Number(b.days); // gross owed — the same figure create-invoice-payment recomputes server-side for a card charge
     const match = isIndependent
       ? (li: any) => li.payee_model_id === b.model_id
       : (li: any) => li.payee_org_id === b.agency_org_id;
@@ -99,6 +100,7 @@ export async function fetchOutstandingPayees(campaignId: string): Promise<Outsta
       modelId: b.model_id,
       crewPayeeId: null,
       invoiceId: openInvoiceId,
+      bookingId: b.id,
     });
   }
 
@@ -120,6 +122,7 @@ export async function fetchOutstandingPayees(campaignId: string): Promise<Outsta
       modelId: null,
       crewPayeeId: payee.id,
       invoiceId: openInvoiceId,
+      bookingId: null,
     });
   }
 

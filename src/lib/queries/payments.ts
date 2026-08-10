@@ -1,6 +1,12 @@
 import { supabase } from "../supabaseClient";
 
 export type ManualPaymentMethod = "check" | "wire" | "cash";
+// A real payment event's method — manual (brand records it, payee
+// confirms) or card (Stripe PaymentIntent, written by the webhook only
+// once Stripe itself confirms success — see 0054 and stripe-webhook's
+// header for why card never passes through a 'pending' state a human
+// needs to confirm).
+export type PaymentMethod = ManualPaymentMethod | "card";
 export type PayeeKind = "agency" | "independent-model" | "crew";
 
 // A single payment event applied against an invoice. Mirrors
@@ -8,13 +14,14 @@ export type PayeeKind = "agency" | "independent-model" | "crew";
 // rests at 'paid' on its own: it's either still 'pending' or already
 // 'accepted', with paid_at set alongside accepted_at at the same instant
 // (see 0047's header). 'initiated' isn't reachable either, since
-// recordInvoicePayment sets 'pending' directly.
+// recordInvoicePayment sets 'pending' directly; a card payment only ever
+// appears already 'accepted' (see stripe-webhook).
 export type InvoicePaymentStatus = "pending" | "accepted" | "voided";
 
 export interface InvoicePayment {
   id: string;
   amount: number;
-  method: ManualPaymentMethod;
+  method: PaymentMethod;
   referenceNote: string | null;
   status: InvoicePaymentStatus;
   createdAt: string; // "Initiated"

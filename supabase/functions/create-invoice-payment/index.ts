@@ -4,6 +4,19 @@
 // rows (day_rate/days/agency_pct are immutable after creation as of
 // 0020_bookings_insert_only.sql, so they're trustworthy inputs) — the
 // client only ever sends which booking ids to include, never an amount.
+//
+// Bookings are grouped by payee (agency org, or the model directly for
+// an independent booking — bookings.agency_org_id has been nullable
+// since 0049) and reserved one invoice at a time via
+// reserve_invoice_for_card_payment (0054), which does the same
+// find-or-create-invoice + remaining-balance validation
+// record_invoice_payment uses for check/wire/cash. Nothing is written
+// to invoice_payments here — only once the webhook sees the charge
+// actually succeed (0054's header explains why: a card payment marked
+// 'pending' up front has no way to leave that state if the brand
+// abandons the form or the card is declined). The real per-booking
+// split for this charge is staged in invoice_card_payment_lines,
+// keyed by the PaymentIntent id, for the webhook to pick up.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
 import { corsHeaders } from "../_shared/cors.ts";
@@ -17,7 +30,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Missing Authorization header");
 
-    const { bookingIds, campaignId } = await req.json();
+    const { bookingIds } = await req.json();
     if (!Array.isArray(bookingIds) || bookingIds.length === 0) throw new Error("bookingIds must be a non-empty array");
 
     const supabaseUser = createClient(
@@ -49,7 +62,7 @@ Deno.serve(async (req) => {
     // but it can't sneak into the invoice total either way.
     const { data: bookings, error: bookingsErr } = await supabaseUser
       .from("bookings")
-      .select("id, brand_org_id, agency_org_id, day_rate, days, agency_pct, payment_status, model_profiles(full_name)")
+      .select("id, campaign_id, brand_org_id, agency_org_id, model_id, day_rate, days, agency_pct")
       .in("id", bookingIds);
     if (bookingsErr) throw new Error(bookingsErr.message);
     if (!bookings || bookings.length !== bookingIds.length) {
@@ -58,51 +71,82 @@ Deno.serve(async (req) => {
     if (bookings.some((b) => b.brand_org_id !== membership.org_id)) {
       throw new Error("All selected bookings must belong to your own organization");
     }
-    if (bookings.some((b) => b.payment_status === "paid")) {
-      throw new Error("One or more selected bookings is already paid");
+    const campaignIds = new Set(bookings.map((b) => b.campaign_id));
+    if (campaignIds.size !== 1) {
+      throw new Error("All selected bookings must belong to the same campaign");
+    }
+    const campaignId = bookings[0].campaign_id as string;
+
+    type PayeeGroup = {
+      agencyOrgId: string | null;
+      modelId: string | null;
+      bookings: { bookingId: string; grossCents: number; payoutCents: number }[];
+    };
+    const groups = new Map<string, PayeeGroup>();
+    for (const b of bookings) {
+      const isIndependent = !b.agency_org_id;
+      const key = isIndependent ? `model:${b.model_id}` : `agency:${b.agency_org_id}`;
+      const grossCents = Math.round(Number(b.day_rate) * Number(b.days) * 100);
+      // Only an agency's cut ever transfers out today (the model's own
+      // share stays with the agency off-platform) — an independent
+      // model has no agency to cut in, so the full gross is what they'd
+      // eventually be owed once individual payouts exist; it's not
+      // transferred yet either way (see the webhook's awaiting_payee_
+      // onboarding fallback, since model_profiles has no Connect
+      // account concept in this pass).
+      const payoutCents = isIndependent ? grossCents : Math.round(grossCents * Number(b.agency_pct));
+      const group = groups.get(key) ?? {
+        agencyOrgId: isIndependent ? null : b.agency_org_id,
+        modelId: isIndependent ? b.model_id : null,
+        bookings: [],
+      };
+      group.bookings.push({ bookingId: b.id, grossCents, payoutCents });
+      groups.set(key, group);
     }
 
-    const lines = bookings.map((b) => {
-      const gross = Math.round(Number(b.day_rate) * Number(b.days) * 100); // cents
-      const payout = Math.round(gross * Number(b.agency_pct));
-      return { bookingId: b.id, agencyOrgId: b.agency_org_id, grossCents: gross, payoutCents: payout };
-    });
-    const totalCents = lines.reduce((sum, l) => sum + l.grossCents, 0);
+    const totalCents = bookings.reduce((sum, b) => sum + Math.round(Number(b.day_rate) * Number(b.days) * 100), 0);
     if (totalCents <= 0) throw new Error("Invoice total must be greater than zero");
+
+    // Reserve every payee's invoice — and validate the remaining
+    // balance actually covers this charge — before Stripe is ever
+    // called, so a rejection here never leaves a live, unusable
+    // PaymentIntent behind.
+    const reservations: { invoiceId: string; group: PayeeGroup }[] = [];
+    for (const group of groups.values()) {
+      const groupTotalCents = group.bookings.reduce((sum, b) => sum + b.grossCents, 0);
+      const { data: invoiceId, error: reserveErr } = await supabaseUser.rpc("reserve_invoice_for_card_payment", {
+        p_campaign_id: campaignId,
+        p_invoice_total: groupTotalCents / 100,
+        p_amount: groupTotalCents / 100,
+        p_agency_org_id: group.agencyOrgId,
+        p_model_id: group.modelId,
+        p_crew_payee_id: null,
+      });
+      if (reserveErr || !invoiceId) throw new Error(reserveErr?.message ?? "Could not reserve an invoice for this payment");
+      reservations.push({ invoiceId: invoiceId as string, group });
+    }
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "usd",
       automatic_payment_methods: { enabled: true },
-      metadata: { booking_count: String(lines.length), campaign_id: campaignId ?? "" },
+      metadata: { booking_count: String(bookings.length), campaign_id: campaignId },
     });
 
-    const { data: invoice, error: invoiceErr } = await supabaseAdmin
-      .from("invoices")
-      .insert({
-        brand_org_id: membership.org_id,
-        campaign_id: campaignId ?? null,
-        total_amount: totalCents / 100,
+    const stagingRows = reservations.flatMap(({ invoiceId, group }) =>
+      group.bookings.map((b) => ({
         stripe_payment_intent_id: paymentIntent.id,
-        created_by_profile_id: user.id,
-      })
-      .select("id")
-      .single();
-    if (invoiceErr || !invoice) throw new Error(`Failed to create invoice: ${invoiceErr?.message}`);
-
-    const { error: lineErr } = await supabaseAdmin.from("invoice_line_items").insert(
-      lines.map((l) => ({
-        invoice_id: invoice.id,
-        booking_id: l.bookingId,
-        payee_org_id: l.agencyOrgId,
-        gross_amount: l.grossCents / 100,
-        payout_amount: l.payoutCents / 100,
+        invoice_id: invoiceId,
+        booking_id: b.bookingId,
+        gross_amount: b.grossCents / 100,
+        payout_amount: b.payoutCents / 100,
       }))
     );
-    if (lineErr) throw new Error(`Failed to create invoice line items: ${lineErr.message}`);
+    const { error: stagingErr } = await supabaseAdmin.from("invoice_card_payment_lines").insert(stagingRows);
+    if (stagingErr) throw new Error(`Failed to stage payment: ${stagingErr.message}`);
 
     return new Response(
-      JSON.stringify({ invoiceId: invoice.id, clientSecret: paymentIntent.client_secret }),
+      JSON.stringify({ clientSecret: paymentIntent.client_secret }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   } catch (err) {
