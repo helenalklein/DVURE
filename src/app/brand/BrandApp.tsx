@@ -2287,10 +2287,66 @@ type PaymentState = "idle" | "processing" | "complete";
 
 const MANUAL_METHOD_LABEL: Record<ManualPaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash" };
 
-function ManualPaymentStatusBadge({ status }: { status: ManualPayment["status"] }) {
-  if (status === "paid") return <Badge label="Confirmed" variant="active"/>;
-  if (status === "canceled") return <Badge label="Void" variant="draft"/>;
-  return <Badge label="Awaiting confirmation" variant="pending"/>;
+function fmtDateTime(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+// The 4-step timeline every payment is drawn on — Initiated/Pending/
+// Paid/Accepted — plus Voided as a distinct exception state that
+// replaces the bar outright rather than sitting on it (a voided payment
+// didn't "get partway to Accepted and stop," it's a different outcome).
+// Card/ACH (once Stripe is live) reaches Paid and Accepted in the same
+// instant a charge succeeds; a manual payment has no processor to
+// confirm receipt, so it stays at Pending until the agency itself
+// confirms, at which point Paid and Accepted land together too — see
+// 0047's migration header for the full reasoning.
+function PaymentTimeline({ payment }: { payment: ManualPayment }) {
+  if (payment.status === "voided") {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <XCircle size={13} className="text-[#C0392B] shrink-0"/>
+        <span className="text-[#C0392B] font-medium">Voided</span>
+        <span className="text-muted-foreground">before the agency confirmed it</span>
+      </div>
+    );
+  }
+  const steps: { label: string; reached: boolean; at: string | null }[] = [
+    { label: "Initiated", reached: true, at: payment.createdAt },
+    { label: "Pending",   reached: !!payment.pendingAt, at: payment.pendingAt },
+    { label: "Paid",      reached: !!payment.acceptedAt, at: payment.acceptedAt },
+    { label: "Accepted",  reached: !!payment.acceptedAt, at: payment.acceptedAt },
+  ];
+  return (
+    <div className="flex items-center gap-1">
+      {steps.map((s, i) => (
+        <div key={s.label} className="flex items-center gap-1 flex-1">
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <div className={cx("w-2.5 h-2.5 rounded-full shrink-0", s.reached ? "bg-foreground" : "bg-border")} title={s.at ? fmtDateTime(s.at) : undefined}/>
+            <span className={cx("text-[9px] font-mono uppercase tracking-wide whitespace-nowrap", s.reached ? "text-foreground" : "text-muted-foreground")}>{s.label}</span>
+          </div>
+          {i < steps.length - 1 && <div className={cx("h-px flex-1", steps[i+1].reached ? "bg-foreground" : "bg-border")}/>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The audit trail the void action promised — who recorded it, who
+// confirmed or voided it, and when, spelled out rather than left to a
+// tooltip.
+function PaymentAuditTrail({ payment }: { payment: ManualPayment }) {
+  return (
+    <div className="text-[10px] text-muted-foreground font-mono space-y-0.5">
+      <div>Recorded {fmtDateTime(payment.createdAt)}</div>
+      {payment.status === "accepted" && (
+        <div>Confirmed by {payment.confirmedByName ?? "the agency"} · {fmtDateTime(payment.acceptedAt)}</div>
+      )}
+      {payment.status === "voided" && (
+        <div>Voided by {payment.voidedByName ?? "—"} · {fmtDateTime(payment.voidedAt)} — "{payment.voidReason}"</div>
+      )}
+    </div>
+  );
 }
 
 // The brand's own record of every check/wire/cash payment it's sent —
@@ -2304,7 +2360,7 @@ function ManualPaymentsPanel({ payments, loading, onVoid }: {
       <div className="glass-subtle border rounded-md p-4 flex items-start gap-2.5 mb-5">
         <AlertCircle size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
         <div className="text-xs text-muted-foreground leading-relaxed">
-          Check, wire, and cash payments never touch a processor — recording one here doesn't move money, it's your record of a payment sent outside DVURE. The receiving agency confirms receipt on their end; until they do, it stays "Awaiting confirmation" and can still be voided if it was recorded in error.
+          Check, wire, and cash payments never touch a processor — recording one here doesn't move money, it's your record of a payment sent outside DVURE. The receiving agency confirms receipt on their end; until they do, it stays at "Pending" and can still be voided if it was recorded in error.
         </div>
       </div>
       {loading ? (
@@ -2312,31 +2368,25 @@ function ManualPaymentsPanel({ payments, loading, onVoid }: {
       ) : payments.length === 0 ? (
         <div className="text-sm text-muted-foreground">No check, wire, or cash payments recorded yet — use "Authorize Payment" on the Payments tab and choose a method other than Card.</div>
       ) : (
-        <div className="glass-subtle border rounded-md overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border bg-muted/30">{["Campaign","Agency","Method","Reference","Amount","Status","Recorded",""].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}</tr></thead>
-            <tbody>
-              {payments.map(p=>(
-                <tr key={p.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3 font-medium">{p.campaignName}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{p.agencyName}</td>
-                  <td className="px-4 py-3 text-xs">{MANUAL_METHOD_LABEL[p.method]}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{p.referenceNote || "—"}</td>
-                  <td className="px-4 py-3 font-mono text-sm">${p.amount.toLocaleString()}</td>
-                  <td className="px-4 py-3"><ManualPaymentStatusBadge status={p.status}/></td>
-                  <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</td>
-                  <td className="px-4 py-3">
-                    {p.status==="pending" && (
-                      <button onClick={()=>onVoid(p)} className="text-xs text-[#C0392B] hover:underline cursor-pointer">Void</button>
-                    )}
-                    {p.status==="canceled" && p.voidReason && (
-                      <span className="text-[10px] text-muted-foreground" title={p.voidReason}>Voided</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {payments.map(p=>(
+            <div key={p.id} className="glass-subtle border rounded-md p-4">
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{p.campaignName}</div>
+                  <div className="text-xs text-muted-foreground">{p.agencyName} · {MANUAL_METHOD_LABEL[p.method]}{p.referenceNote ? ` · ${p.referenceNote}` : ""}</div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="font-mono text-sm font-semibold">${p.amount.toLocaleString()}</div>
+                  {p.status==="pending" && (
+                    <button onClick={()=>onVoid(p)} className="text-xs text-[#C0392B] hover:underline cursor-pointer">Void</button>
+                  )}
+                </div>
+              </div>
+              <div className="max-w-md mb-2.5"><PaymentTimeline payment={p}/></div>
+              <PaymentAuditTrail payment={p}/>
+            </div>
+          ))}
         </div>
       )}
     </div>
