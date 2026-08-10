@@ -16,7 +16,7 @@ type SignupRole = "brand" | "agency";
 // dev-only control mounted at the App root (App.tsx), not on this form.
 
 export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: (open: boolean) => void }) {
-  const { signIn, signUpBrandOrAgency, completeOrgSignup } = useAuth();
+  const { signIn, signUpBrandOrAgency, signUpIndependentModel, completeOrgSignup } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +31,29 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   const [signupPassword, setSignupPassword] = useState("");
   const [signupError, setSignupError] = useState<string | null>(null);
   const [modelInfoOpen, setModelInfoOpen] = useState(false);
+  const [independentOpen, setIndependentOpen] = useState(false);
+  const [independentName, setIndependentName] = useState("");
+  const [independentEmail, setIndependentEmail] = useState("");
+  const [independentPassword, setIndependentPassword] = useState("");
+  const [independentAttested, setIndependentAttested] = useState(false);
+  const [independentSubmitting, setIndependentSubmitting] = useState(false);
+  const [independentError, setIndependentError] = useState<string | null>(null);
+  const [independentSuccess, setIndependentSuccess] = useState(false);
+
+  async function handleIndependentSignup() {
+    setIndependentSubmitting(true);
+    setIndependentError(null);
+    const { error } = await signUpIndependentModel({ email: independentEmail, password: independentPassword, fullName: independentName });
+    setIndependentSubmitting(false);
+    if (error) { setIndependentError(error); return; }
+    setIndependentSuccess(true);
+  }
+
+  function closeIndependent() {
+    setIndependentOpen(false);
+    setIndependentName(""); setIndependentEmail(""); setIndependentPassword("");
+    setIndependentAttested(false); setIndependentError(null); setIndependentSuccess(false);
+  }
 
   useEffect(() => {
     onModalOpenChange(signup !== null);
@@ -254,10 +277,64 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
               <button onClick={()=>setModelInfoOpen(false)} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={14}/></button>
             </div>
             <div className="text-xs text-muted-foreground leading-relaxed space-y-2">
-              <div>Models are added to DVURE by their agency — contact your agency directly to get connected.</div>
+              <div>Repped by an agency? They add you to DVURE directly — contact them to get connected.</div>
               <div>Artists and production crew get a real login once a production sends their first access — sign in above the same way, no separate portal.</div>
             </div>
+            <div className="pt-2 border-t border-border">
+              <button onClick={()=>{ setModelInfoOpen(false); setIndependentOpen(true); }}
+                className="text-xs text-foreground font-medium hover:underline cursor-pointer">
+                Not repped by an agency? Sign up as an independent model →
+              </button>
+            </div>
           </div>
+        </Modal>
+      )}
+
+      {independentOpen && (
+        <Modal onClose={closeIndependent} maxWidth="max-w-sm">
+          {independentSuccess ? (
+            <div className="p-6 space-y-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-foreground text-primary-foreground flex items-center justify-center mx-auto">
+                <Check size={20}/>
+              </div>
+              <div>
+                <div className="text-heading text-lg">You're all set</div>
+                <div className="text-sm text-muted-foreground mt-1">Your independent model account is ready. Sign in above with the email and password you just set.</div>
+              </div>
+              <Btn variant="primary" fullWidth onClick={closeIndependent}>Done</Btn>
+            </div>
+          ) : (
+            <div className="p-6 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-heading text-lg">Independent model sign-up</div>
+                  <div className="text-sm text-muted-foreground mt-0.5">For models not represented by any agency — brands can cast and pay you directly.</div>
+                </div>
+                <button onClick={closeIndependent} className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"><X size={16}/></button>
+              </div>
+              <div className="space-y-3">
+                <TextInput label="Your Name" value={independentName} onChange={e=>setIndependentName(e.target.value)} placeholder="e.g. Jordan Lee"/>
+                <TextInput label="Email" type="email" value={independentEmail} onChange={e=>setIndependentEmail(e.target.value)} placeholder="you@example.com"/>
+                <TextInput label="Password" type="password" value={independentPassword} onChange={e=>setIndependentPassword(e.target.value)} placeholder="••••••••"/>
+              </div>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={independentAttested} onChange={e=>setIndependentAttested(e.target.checked)} className="mt-0.5 shrink-0"/>
+                <span className="text-xs text-muted-foreground leading-relaxed">
+                  I confirm I am not currently under contract or representation with any modeling agency. I understand that if this isn't true, my DVURE account is null and void and may be suspended.
+                </span>
+              </label>
+              {independentError && (
+                <div className="flex items-center gap-1.5 text-xs text-red-500">
+                  <AlertCircle size={12}/> {independentError}
+                </div>
+              )}
+              <Btn variant="primary" fullWidth
+                disabled={!independentName || !independentEmail || independentPassword.length < 6 || !independentAttested || independentSubmitting}
+                onClick={handleIndependentSignup}>
+                {independentSubmitting ? "Creating account…" : "Create Account"}
+              </Btn>
+            </div>
+          )}
         </Modal>
       )}
     </div>

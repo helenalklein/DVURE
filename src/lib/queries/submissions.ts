@@ -66,7 +66,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       id,
       name: m?.full_name ?? "Unknown",
       photo: m?.photo_url ?? undefined,
-      agency: s.submitting_agency?.name ?? "",
+      agency: s.submitting_agency?.name ?? "Independent",
       motherAgency: motherByModel.get(s.model_id) ?? "",
       boutiqueAgency: boutiqueByModel.get(s.model_id),
       location: m?.location ?? "",

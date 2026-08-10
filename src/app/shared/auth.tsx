@@ -55,6 +55,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUpBrandOrAgency: (params: { email: string; password: string; fullName: string; role: "brand_staff" | "agency_staff" }) => Promise<{ error: string | null }>;
+  signUpIndependentModel: (params: { email: string; password: string; fullName: string }) => Promise<{ error: string | null }>;
   completeOrgSignup: (orgName: string, orgType: OrgType) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshIdentity: () => Promise<void>;
@@ -166,6 +167,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  // No org-provisioning step after this one, unlike signUpBrandOrAgency
+  // — handle_new_user() (0049) creates both profiles and model_profiles
+  // rows itself the moment role:model + independent:true land in raw_
+  // user_meta_data, since there's no org to stand up for an independent
+  // model.
+  const signUpIndependentModel = useCallback(
+    async (params: { email: string; password: string; fullName: string }) => {
+      const { error } = await supabase.auth.signUp({
+        email: params.email,
+        password: params.password,
+        options: { data: { role: "model", independent: true, full_name: params.fullName } },
+      });
+      return { error: error ? error.message : null };
+    },
+    []
+  );
+
   const completeOrgSignup = useCallback(
     async (orgName: string, orgType: OrgType) => {
       const { error } = await supabase.rpc("complete_org_signup", { p_org_name: orgName, p_org_type: orgType });
@@ -195,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadIdentity]);
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUpBrandOrAgency, completeOrgSignup, signOut, refreshIdentity }}>
+    <AuthContext.Provider value={{ ...state, signIn, signUpBrandOrAgency, signUpIndependentModel, completeOrgSignup, signOut, refreshIdentity }}>
       {children}
     </AuthContext.Provider>
   );

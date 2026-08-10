@@ -21,6 +21,7 @@ import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } 
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import { recordManualPayment, voidManualPayment, fetchManualPaymentsForBrand, type ManualPayment, type ManualPaymentMethod } from "../../lib/queries/payments";
+import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
@@ -290,10 +291,12 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
 
-function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook }: {
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded }: {
   talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
+  realCampaignId?: string | null; onIndependentAdded?: () => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
+  const [showIndependentModal, setShowIndependentModal] = useState(false);
   const [dragging, setDragging] = useState<number|null>(null);
   const [dragOver, setDragOver] = useState<SubmissionStage|null>(null);
   const [toast, setToast] = useState<{ msg: string; undo: () => void }|null>(null);
@@ -380,6 +383,12 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           <span className={cx("font-semibold", daysRemaining<=3?"text-foreground":"text-muted-foreground")}>{daysRemaining} days left</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {realCampaignId && (
+            <button onClick={()=>setShowIndependentModal(true)}
+              className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
+              <Plus size={10}/> Add Independent Model
+            </button>
+          )}
           <button onClick={() => setShowRejected(p=>!p)}
             className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
             {showRejected ? <ChevronUp size={10}/> : <ChevronDown size={10}/>} Rejected ({byStage("rejected").length})
@@ -442,18 +451,24 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                             <div className="text-xs font-semibold leading-tight truncate flex items-center gap-1">
                               {t.name} <CountryFlag location={t.location} className="text-[11px] shrink-0"/>
                             </div>
-                            <div className="text-[10px] text-muted-foreground truncate">
-                              <span className="text-muted-foreground/70">Mother:</span>{" "}
-                              <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
-                                className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground truncate">
-                              <span className="text-muted-foreground/70">Boutique:</span>{" "}
-                              {t.boutiqueAgency ? (
-                                <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.boutiqueAgency!); }}
-                                  className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.boutiqueAgency}</button>
-                              ) : "None"}
-                            </div>
+                            {t.motherAgency ? (<>
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                <span className="text-muted-foreground/70">Mother:</span>{" "}
+                                <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
+                                  className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                <span className="text-muted-foreground/70">Boutique:</span>{" "}
+                                {t.boutiqueAgency ? (
+                                  <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.boutiqueAgency!); }}
+                                    className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.boutiqueAgency}</button>
+                                ) : "None"}
+                              </div>
+                            </>) : (
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                <span className="text-muted-foreground/70">Independent</span> — no agency
+                              </div>
+                            )}
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
                               <span>{t.height}</span><span>·</span><span className="truncate">{t.location.split(",")[0]}</span>
                             </div>
@@ -658,6 +673,83 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           </div>
         </div>
       )}
+
+      {showIndependentModal && realCampaignId && (
+        <AddIndependentModelModal campaignId={realCampaignId}
+          onClose={()=>setShowIndependentModal(false)}
+          onAdded={()=>{ setShowIndependentModal(false); onIndependentAdded?.(); }}/>
+      )}
+    </div>
+  );
+}
+
+// Not-repped models are found here, not in the mock talent pool —
+// model_profiles_select_independent (0049) exposes every independent
+// row to any signed-in user, so this is a live search, not a picklist.
+function AddIndependentModelModal({ campaignId, onClose, onAdded }: {
+  campaignId: string; onClose: () => void; onAdded: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<IndependentModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    searchIndependentModels(query).then(r => { if (active) { setResults(r); setLoading(false); } });
+    return () => { active = false; };
+  }, [query]);
+
+  async function handleAdd(modelId: string) {
+    setSubmittingId(modelId);
+    setError(null);
+    const { error } = await submitIndependentModel(campaignId, modelId);
+    setSubmittingId(null);
+    if (error) { setError(error); return; }
+    onAdded();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-card border border-border rounded-md w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <div className="text-heading text-sm">Add Independent Model</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Not repped by any agency — you'll deal with them directly.</div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={16}/></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="flex items-center border border-border rounded-md bg-input-background px-3 gap-2 h-9">
+            <Search size={13} className="text-muted-foreground shrink-0"/>
+            <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by name…" autoFocus
+              className="flex-1 text-sm bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
+          </div>
+          {error && <div className="text-xs text-red-500">{error}</div>}
+          <div className="max-h-80 overflow-y-auto space-y-1.5">
+            {loading ? (
+              <div className="text-sm text-muted-foreground py-6 text-center">Loading…</div>
+            ) : results.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-6 text-center">No independent models found{query ? ` matching "${query}"` : ""}.</div>
+            ) : results.map(m => (
+              <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-md border border-border">
+                <div className="w-9 h-9 rounded-full bg-secondary shrink-0 overflow-hidden flex items-center justify-center">
+                  {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover"/> : <User size={16} className="text-muted-foreground"/>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{m.fullName}</div>
+                  <div className="text-xs text-muted-foreground truncate">{m.location ?? "—"}{m.defaultDayRate ? ` · $${m.defaultDayRate}/day` : ""}</div>
+                </div>
+                <Btn variant="primary" size="sm" disabled={submittingId===m.id} onClick={()=>handleAdd(m.id)}>
+                  {submittingId===m.id ? "Adding…" : "Add"}
+                </Btn>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1143,6 +1235,13 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
   const campaign = campaigns.find(c=>c.id===campaignId);
 
+  async function refetchTalent(realId: string) {
+    const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
+    setTalent(realTalent);
+    setShim(realShim);
+    setComments(await fetchSubmissionComments(realShim));
+  }
+
   useEffect(() => {
     let active = true;
     const realId = realIdShim.get(campaignId) ?? null;
@@ -1369,7 +1468,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }}/>}
 
 
           {section==="call-sheet" && (

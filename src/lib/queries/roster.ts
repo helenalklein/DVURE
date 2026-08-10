@@ -43,6 +43,24 @@ export async function insertRosterModel(
   agencyName: string,
   input: { name: string; email: string; location: string; rate: string; height: string; exp: string }
 ): Promise<{ model: RosterModel | null; error: string | null }> {
+  // Independent models (0049) attest at signup that they're not repped
+  // by any agency — an agency trying to add someone by the same email is
+  // exactly the conflict that attestation is meant to catch. This is the
+  // whole enforcement mechanism today (there's no DVURE staff admin
+  // queue yet to route a real dispute to), so it has to actually block
+  // rather than just warn.
+  if (input.email.trim()) {
+    const { data: conflict } = await supabase
+      .from("model_profiles")
+      .select("id")
+      .eq("is_independent", true)
+      .ilike("email", input.email.trim())
+      .maybeSingle();
+    if (conflict) {
+      return { model: null, error: "This person is already on DVURE as an independent model. If you believe this is a conflict (they're actually repped by your agency), contact us directly rather than re-adding them here." };
+    }
+  }
+
   const { data: model, error: modelError } = await supabase
     .from("model_profiles")
     .insert({
