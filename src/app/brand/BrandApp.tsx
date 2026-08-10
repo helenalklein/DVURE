@@ -2616,6 +2616,11 @@ function fmtDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 // The 4-step timeline every payment is drawn on — Initiated/Pending/
 // Paid/Accepted — plus Voided as a distinct exception state that
 // replaces the bar outright rather than sitting on it (a voided payment
@@ -2673,49 +2678,6 @@ function PaymentAuditTrail({ payment }: { payment: ManualPayment }) {
   );
 }
 
-// The brand's own record of every check/wire/cash payment it's sent —
-// real, persisted (record_manual_payment/0046), so this is what actually
-// answers "did that payment take place," not a demo animation.
-function ManualPaymentsPanel({ payments, loading, onVoid }: {
-  payments: ManualPayment[]; loading: boolean; onVoid: (p: ManualPayment) => void;
-}) {
-  return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="glass-subtle border rounded-md p-4 flex items-start gap-2.5 mb-5">
-        <AlertCircle size={13} className="text-muted-foreground mt-0.5 shrink-0"/>
-        <div className="text-xs text-muted-foreground leading-relaxed">
-          Check, wire, and cash payments never touch a processor — recording one here doesn't move money, it's your record of a payment sent outside DVURE. The recipient (agency, independent model, or crew member) confirms receipt on their end; until they do, it stays at "Pending" and can still be voided if it was recorded in error.
-        </div>
-      </div>
-      {loading ? (
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      ) : payments.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No check, wire, or cash payments recorded yet — use "Authorize Payment" on the Payments tab and choose a method other than Card.</div>
-      ) : (
-        <div className="space-y-3">
-          {payments.map(p=>(
-            <div key={p.id} className="glass-subtle border rounded-md p-4">
-              <div className="flex items-start justify-between gap-4 mb-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{p.campaignName}</div>
-                  <div className="text-xs text-muted-foreground">{p.payeeName} · {MANUAL_METHOD_LABEL[p.method]}{p.referenceNote ? ` · ${p.referenceNote}` : ""}</div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="font-mono text-sm font-semibold">${p.amount.toLocaleString()}</div>
-                  {p.status==="pending" && (
-                    <button onClick={()=>onVoid(p)} className="text-xs text-[#C0392B] hover:underline cursor-pointer">Void</button>
-                  )}
-                </div>
-              </div>
-              <div className="max-w-md mb-2.5"><PaymentTimeline payment={p}/></div>
-              <PaymentAuditTrail payment={p}/>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function GlobalPayments() {
   const currentUser = useCurrentUser();
@@ -2723,7 +2685,8 @@ function GlobalPayments() {
   const meName = currentUser?.name ?? "";
   const { org: accountOrg } = useAuth();
   const accessGate = getAccessGate(accountOrg);
-  const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices"|"manual">("payments");
+  const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices">("payments");
+  const [selectedInvoice, setSelectedInvoice] = useState<UnifiedInvoice | null>(null);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showSigModal, setShowSigModal] = useState(false);
@@ -2761,14 +2724,20 @@ function GlobalPayments() {
     reloadManualPayments();
   }, [accountOrg?.id]);
 
-  // Sorted: red (overdue) first, yellow (≤3 days) second, green last
-  const invoices = [
-    { campaign:"FW24 Campaign — Balance",  amount:"$980",   due:"06/10/2025", urgency:"red"    },
-    { campaign:"AW25 Womenswear Campaign", amount:"$2,850", due:"06/20/2025", urgency:"yellow" },
-    { campaign:"SS25 Fragrance Launch",    amount:"$2,300", due:"06/24/2025", urgency:"green"  },
-    { campaign:"Resort Lookbook 2025",     amount:"$1,100", due:"07/03/2025", urgency:"green"  },
-    { campaign:"Beauty Campaign Q1",       amount:"$1,450", due:"07/10/2025", urgency:"green"  },
-  ];
+  // Same merged (mock card + real manual) list the Invoices tab itself
+  // renders from, so a card seen here looks and reads identically there —
+  // outstanding only, overdue-first.
+  const outstandingInvoices = useMemo(() => {
+    const overdueOrder = (inv: UnifiedInvoice) => inv.overdue ? 0 : 1;
+    return buildUnifiedInvoices(manualPayments)
+      .filter(inv => inv.status === "outstanding")
+      .sort((a,b) => overdueOrder(a)-overdueOrder(b));
+  }, [manualPayments]);
+
+  function openInvoice(inv: UnifiedInvoice) {
+    setSelectedInvoice(inv);
+    setPaymentsTab("invoices");
+  }
 
   // Quiet history column, not another call to action — most recent first.
   // "delayed" reflects money already authorized on the brand's side —
@@ -2785,12 +2754,6 @@ function GlobalPayments() {
     { campaign:"Resort Lookbook 2025",     amount:"$980",   paidDate:"May 27", status:"paid" },
   ];
   const [pendingBankAdded, setPendingBankAdded] = useState(false);
-
-  const urgencyDot = (u: string) => {
-    if (u === "red")    return "w-2.5 h-2.5 rounded-full bg-[#C0392B] shrink-0";
-    if (u === "yellow") return "w-2.5 h-2.5 rounded-full bg-[#D4A017] shrink-0";
-    return "w-2.5 h-2.5 rounded-full bg-[#27AE60] shrink-0";
-  };
 
   const hasCard = true;
   const amountDue = selectedCampaign ? "2850" : "";
@@ -2832,21 +2795,22 @@ function GlobalPayments() {
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Payments" sub={`${org} · Payment methods and invoices`}/>
       <GateBanner org={accountOrg}/>
-      {/* Tab bar: Payments | Invoices | Check/Wire/Cash */}
+      {/* Tab bar: Payments | Invoices (invoices now includes every check/wire/cash payment too) */}
       <div className="bg-card border-b border-border px-6 flex items-center shrink-0">
-        {([{id:"payments" as const,label:"Payments"},{id:"invoices" as const,label:"Invoices"},{id:"manual" as const,label:"Check / Wire / Cash"}]).map(t=>(
+        {([{id:"payments" as const,label:"Payments"},{id:"invoices" as const,label:"Invoices"}]).map(t=>(
           <button key={t.id} onClick={()=>setPaymentsTab(t.id)}
             className={cx("px-5 py-3 text-sm border-b-2 -mb-px transition-colors cursor-pointer",
               paymentsTab===t.id?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
             )}>{t.label}</button>
         ))}
       </div>
-      {paymentsTab==="invoices" && <InvoicesPanel/>}
-      {paymentsTab==="manual" && (
-        <ManualPaymentsPanel
-          payments={manualPayments}
-          loading={manualPaymentsLoading}
-          onVoid={(p)=>{ setVoidTarget(p); setVoidReason(""); }}
+      {paymentsTab==="invoices" && (
+        <InvoicesPanel
+          manualPayments={manualPayments}
+          manualPaymentsLoading={manualPaymentsLoading}
+          onVoidManual={(p)=>{ setVoidTarget(p); setVoidReason(""); }}
+          selected={selectedInvoice}
+          onSelect={setSelectedInvoice}
         />
       )}
       {paymentsTab==="payments" && <div className="flex-1 flex min-h-0">
@@ -2923,34 +2887,24 @@ function GlobalPayments() {
 
         {/* MIDDLE — Invoices, flex-1 */}
         <div className="flex-1 flex flex-col min-h-0">
-          {/* Header row: legend left, actions right */}
+          {/* Header row */}
           <div className="flex items-center justify-between mb-3 shrink-0 gap-3">
-            <div className="flex items-center gap-1 min-w-0">
-              <h2 className="text-heading text-base mr-3 shrink-0">Outstanding Invoices</h2>
-              <div className="hidden lg:flex items-center gap-3 text-[10px] font-mono text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#C0392B] inline-block"/>Overdue</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#D4A017] inline-block"/>Due soon</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#27AE60] inline-block"/>On track</span>
-              </div>
-            </div>
+            <h2 className="text-heading text-base shrink-0">Outstanding Invoices</h2>
             <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer shrink-0" onClick={() => setPaymentsTab("invoices")}>
               See all invoices →
             </button>
           </div>
-          {/* 2-wide grid — unpaid invoices only */}
+          {/* Same card as the Invoices tab — unpaid only */}
           <div className="flex-1 overflow-auto">
-            <div className="grid grid-cols-2 gap-3">
-              {invoices.slice(0,9).map((inv,i)=>(
-                <div key={i} className={cx("glass-subtle border rounded-md p-4 cursor-pointer hover:border-foreground/40 transition-all flex flex-col gap-3", inv.urgency==="red"&&"border-[#C0392B]/30 bg-[#C0392B]/5")}>
-                  <div className="flex items-center justify-between">
-                    <span className={urgencyDot(inv.urgency)}/>
-                    <div className="text-[10px] font-mono text-muted-foreground">{inv.due}</div>
-                  </div>
-                  <div className="text-xs font-medium leading-snug flex-1">{inv.campaign}</div>
-                  <div className="text-base font-semibold font-mono">{inv.amount}</div>
-                </div>
-              ))}
-            </div>
+            {outstandingInvoices.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No outstanding invoices.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {outstandingInvoices.slice(0,9).map(inv => (
+                  <InvoiceCard key={inv.key} inv={inv} onClick={()=>openInvoice(inv)}/>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Authorize Payment — gold with white text, back to its original weight */}
@@ -3104,8 +3058,8 @@ function GlobalPayments() {
               <div className="px-6 py-3 flex items-center gap-2 border-b border-border">
                 <button className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground hover:bg-secondary" title="Open invoice">i</button>
                 <div className="flex-1"/>
-                <button onClick={()=>setShowDiscardConfirm(true)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-muted transition-colors">Discard</button>
                 <button onClick={()=>setShowPayModal(false)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-secondary transition-colors">Save Draft</button>
+                <button onClick={()=>setShowDiscardConfirm(true)} className="text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-3 py-2 hover:bg-muted transition-colors">Discard</button>
               </div>
               {/* Row 2: Authorize — always visible, gold when ready */}
               <div className="px-6 py-4">
@@ -3266,124 +3220,173 @@ function GlobalPayments() {
 
 // ─── INVOICES PANEL ─────────────────────────────────────────────────────────
 
+// A mix of payee kinds, matching what the platform actually supports —
+// agency-repped models, independent models (no agency cut), and crew
+// (day rate only, never an "agency" in the modeling sense).
 const INVOICE_DATA = [
-  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", agency:"Vantage Model Mgmt.", talent:"James Whitfield", dayRate:950,  days:3, amount:2850,  due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", agency:"Vantage Model Mgmt.", talent:"Amara Diallo",    dayRate:1150, days:2, amount:2300,  due:"06/24/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    agency:"Meridian Models",        talent:"Mila Tran",       dayRate:1100, days:1, amount:1100,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0768", campaign:"FW24 Campaign",            agency:"Vector Models",        talent:"Sofia Brandt",    dayRate:1200, days:3, amount:3600,  due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0804", campaign:"Resort Lookbook 2025",     agency:"Halcyon Models",      talent:"Ines Ferreira",   dayRate:1340, days:2, amount:2680,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Anthem Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", payeeKind:"agency-model"     as const, agency:"Vantage Model Mgmt.", talent:"James Whitfield",         dayRate:950,  days:3, due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", payeeKind:"independent-model" as const, agency:"Independent",         talent:"Amara Diallo",            dayRate:1150, days:2, due:"06/24/2025", urgency:"green",  agencyPct:0,  dvurePct:3, taxPct:8.25 },
+  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    payeeKind:"agency-model"     as const, agency:"Meridian Models",     talent:"Mila Tran",               dayRate:1100, days:1, due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0768", campaign:"FW24 Campaign",            payeeKind:"agency-model"     as const, agency:"Vector Models",       talent:"Sofia Brandt",            dayRate:1200, days:3, due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0804", campaign:"Resort Lookbook 2025",     payeeKind:"crew"             as const, agency:"Crew",                talent:"Ibrahim Sy — Photographer", dayRate:900, days:2, due:"07/03/2025", urgency:"green",  agencyPct:0,  dvurePct:3, taxPct:8.25 },
+  { id:"INV-0815", campaign:"Beauty Campaign Q1",       payeeKind:"agency-model"     as const, agency:"Anthem Models",       talent:"Chiara Russo",            dayRate:860,  days:2, due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
 ];
 
 // Already-authorized invoices — same shape as an outstanding one, plus
 // when it was paid, so the fee breakdown modal keeps working unchanged.
 const PAID_INVOICE_DATA = [
-  { id:"INV-0729", campaign:"AW26 Runway Presentation", agency:"Solenne",   talent:"Priya Anand",     dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
-  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    agency:"Anthem Models",  talent:"Chiara Russo",    dayRate:900,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
-  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", agency:"Vantage Model Mgmt.", talent:"James Whitfield", dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
-  { id:"INV-0655", campaign:"Resort Lookbook 2025",     agency:"Halcyon Models", talent:"Ines Ferreira",   dayRate:460,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
+  { id:"INV-0729", campaign:"AW26 Runway Presentation", payeeKind:"agency-model"     as const, agency:"Solenne",       talent:"Priya Anand",            dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
+  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    payeeKind:"crew"             as const, agency:"Crew",          talent:"Grace Whitman — Production", dayRate:750,  days:2, agencyPct:0,  dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
+  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", payeeKind:"agency-model"     as const, agency:"Vantage Model Mgmt.", talent:"James Whitfield",   dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
+  { id:"INV-0655", campaign:"Resort Lookbook 2025",     payeeKind:"independent-model" as const, agency:"Independent",  talent:"Theo Bergstrom",         dayRate:460,  days:2, agencyPct:0,  dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
 ];
 
-function InvoicesPanel() {
+function calcBreakdown(inv: { dayRate: number; days: number; agencyPct: number; dvurePct: number; taxPct: number }) {
+  const modelFee      = inv.dayRate * inv.days;
+  const agencyFee     = Math.round(modelFee * (inv.agencyPct / 100));
+  const base          = modelFee + agencyFee;
+  const dvureFee      = Math.round(base * (inv.dvurePct / 100));          // 3%
+  const processingFee = Math.round(base * 0.029) + 30;                    // 2.9% + $0.30
+  const totalFees     = dvureFee + processingFee;
+  const tax           = Math.round(base * (inv.taxPct / 100));
+  const total         = base + dvureFee + processingFee + tax;
+  return { modelFee, agencyFee, dvureFee, processingFee, totalFees, tax, total };
+}
+
+// One shape for every invoice card on the brand side, whichever system it
+// actually came from — the still-mock card/ACH invoices above (no live
+// Stripe key yet) and the real check/wire/cash payments (0046/0051).
+// Outstanding Invoices (Payments tab) and the Invoices tab both build
+// from this and render with the same <InvoiceCard/>, so they can't drift
+// apart in look or info (a real requirement, not a coincidence).
+interface UnifiedInvoice {
+  key: string;
+  kind: "card" | "manual";
+  id: string;
+  campaign: string;
+  payee: string;
+  detail: string;
+  amount: number;
+  dateLabel: string;
+  overdue: boolean;
+  status: "outstanding" | "paid" | "voided";
+  card?: typeof INVOICE_DATA[number] | typeof PAID_INVOICE_DATA[number];
+  manual?: ManualPayment;
+}
+
+function buildUnifiedInvoices(manualPayments: ManualPayment[]): UnifiedInvoice[] {
+  const cardOutstanding: UnifiedInvoice[] = INVOICE_DATA.map(inv => ({
+    key: inv.id, kind: "card", id: inv.id, campaign: inv.campaign, payee: inv.agency, detail: inv.talent,
+    amount: calcBreakdown(inv).total, dateLabel: inv.due, overdue: inv.urgency === "red", status: "outstanding", card: inv,
+  }));
+  const cardPaid: UnifiedInvoice[] = PAID_INVOICE_DATA.map(inv => ({
+    key: inv.id, kind: "card", id: inv.id, campaign: inv.campaign, payee: inv.agency, detail: inv.talent,
+    amount: calcBreakdown(inv).total, dateLabel: `Paid ${inv.paidDate}`, overdue: false, status: "paid", card: inv,
+  }));
+  const manual: UnifiedInvoice[] = manualPayments.map(p => ({
+    key: p.id, kind: "manual", id: `PMT-${p.id.slice(0, 8).toUpperCase()}`, campaign: p.campaignName, payee: p.payeeName,
+    detail: `${MANUAL_METHOD_LABEL[p.method]}${p.referenceNote ? ` · ${p.referenceNote}` : ""}`,
+    amount: p.amount,
+    dateLabel: p.status === "voided" ? `Voided ${fmtDate(p.voidedAt)}` : p.status === "accepted" ? `Paid ${fmtDate(p.acceptedAt)}` : `Recorded ${fmtDate(p.createdAt)}`,
+    overdue: false,
+    status: p.status === "accepted" ? "paid" : p.status === "voided" ? "voided" : "outstanding",
+    manual: p,
+  }));
+  return [...cardOutstanding, ...cardPaid, ...manual];
+}
+
+// The one card look every invoice uses, mock or real, outstanding or
+// paid — a single colored dot (red only if actually overdue, the
+// established convention, no yellow/green tiering) instead of the old
+// three-way urgency legend.
+function InvoiceCard({ inv, onClick }: { inv: UnifiedInvoice; onClick: () => void }) {
+  const dotClass = inv.status === "paid" ? "bg-[#27AE60]" : inv.overdue ? "bg-[#C0392B]" : "bg-muted-foreground/40";
+  return (
+    <div
+      onClick={onClick}
+      className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group relative overflow-hidden"
+    >
+      {inv.status === "paid" && (
+        <div className="absolute inset-0 flex items-center justify-center opacity-[0.16] pointer-events-none"><PaidStamp size={190} animate={false}/></div>
+      )}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className={cx("w-2 h-2 rounded-full shrink-0", dotClass)}/>
+          <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
+        </div>
+        {inv.status === "outstanding" && <span className="text-[10px] font-mono text-muted-foreground">{inv.dateLabel}</span>}
+      </div>
+      <div className="mb-4">
+        <div className="text-sm font-semibold leading-snug mb-0.5">{inv.campaign}</div>
+        <div className="text-xs text-muted-foreground">{inv.payee}</div>
+        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{inv.detail}</div>
+      </div>
+      <div className="border-t border-border pt-3 flex items-end justify-between">
+        <div>
+          <div className="text-[10px] text-muted-foreground font-mono">{inv.status === "outstanding" ? "Total Due" : inv.dateLabel}</div>
+          <div className={cx("text-xl font-semibold font-mono", inv.status === "outstanding" && inv.overdue && "font-bold text-[#C0392B]/80", inv.status === "voided" && "line-through text-muted-foreground")}>
+            ${inv.amount.toLocaleString()}
+          </div>
+        </div>
+        <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-mono">View →</span>
+      </div>
+    </div>
+  );
+}
+
+function InvoicesPanel({ manualPayments, manualPaymentsLoading, onVoidManual, selected, onSelect }: {
+  manualPayments: ManualPayment[]; manualPaymentsLoading: boolean; onVoidManual: (p: ManualPayment) => void;
+  selected: UnifiedInvoice | null; onSelect: (inv: UnifiedInvoice | null) => void;
+}) {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
-  const [selected, setSelected] = useState<typeof INVOICE_DATA[number] | typeof PAID_INVOICE_DATA[number] | null>(null);
-  const isPaid = (inv: { paidDate?: string }): inv is typeof PAID_INVOICE_DATA[number] => "paidDate" in inv;
 
-  const urgencyDot = (u: string) => {
-    if (u === "red")    return "w-2 h-2 rounded-full bg-[#C0392B] shrink-0";
-    if (u === "yellow") return "w-2 h-2 rounded-full bg-[#D4A017] shrink-0";
-    return "w-2 h-2 rounded-full bg-[#27AE60] shrink-0";
-  };
-
-  function calcBreakdown(inv: { dayRate: number; days: number; agencyPct: number; dvurePct: number; taxPct: number }) {
-    const modelFee      = inv.dayRate * inv.days;
-    const agencyFee     = Math.round(modelFee * (inv.agencyPct / 100));
-    const base          = modelFee + agencyFee;
-    const dvureFee      = Math.round(base * (inv.dvurePct / 100));          // 3%
-    const processingFee = Math.round(base * 0.029) + 30;                    // 2.9% + $0.30
-    const totalFees     = dvureFee + processingFee;
-    const tax           = Math.round(base * (inv.taxPct / 100));
-    const total         = base + dvureFee + processingFee + tax;
-    return { modelFee, agencyFee, dvureFee, processingFee, totalFees, tax, total };
-  }
-
-  const urgencyOrder: Record<string,number> = { red:0, yellow:1, green:2 };
-  const sorted = [...INVOICE_DATA].sort((a,b)=>(urgencyOrder[a.urgency]??2)-(urgencyOrder[b.urgency]??2));
+  const all = useMemo(() => buildUnifiedInvoices(manualPayments), [manualPayments]);
+  const outstanding = useMemo(() => {
+    const order = (i: UnifiedInvoice) => (i.overdue ? 0 : 1);
+    return all.filter(i => i.status === "outstanding").sort((a, b) => order(a) - order(b));
+  }, [all]);
+  const paid = useMemo(() => all.filter(i => i.status === "paid"), [all]);
+  const voided = useMemo(() => all.filter(i => i.status === "voided"), [all]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <TopBar title="Invoices" sub={`All invoices · ${org}`}/>
       <div className="flex-1 overflow-auto p-6">
-        <div className="flex items-center gap-4 mb-4 text-[10px] font-mono text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#C0392B] inline-block"/>Overdue</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#D4A017] inline-block"/>Due within 3 days</span>
-          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#27AE60] inline-block"/>On track</span>
-        </div>
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-          {sorted.map(inv => {
-            const bd = calcBreakdown(inv);
-            return (
-              <div key={inv.id}
-                onClick={() => setSelected(inv)}
-                className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className={urgencyDot(inv.urgency)}/>
-                    <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground">{inv.due}</span>
-                </div>
-                <div className="mb-4">
-                  <div className="text-sm font-semibold leading-snug mb-0.5">{inv.campaign}</div>
-                  <div className="text-xs text-muted-foreground">{inv.agency}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{inv.talent}</div>
-                </div>
-                <div className="border-t border-border pt-3 flex items-end justify-between">
-                  <div>
-                    <div className="text-[10px] text-muted-foreground font-mono">Total Due</div>
-                    <div className="text-xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-mono">View →</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {manualPaymentsLoading && <div className="text-sm text-muted-foreground mb-4">Loading…</div>}
+        {outstanding.length === 0 && !manualPaymentsLoading ? (
+          <div className="text-sm text-muted-foreground">No outstanding invoices.</div>
+        ) : (
+          <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+            {outstanding.map(inv => <InvoiceCard key={inv.key} inv={inv} onClick={() => onSelect(inv)}/>)}
+          </div>
+        )}
 
-        <h2 className="text-heading text-base mt-8 mb-4">Paid</h2>
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-          {PAID_INVOICE_DATA.map(inv => {
-            const bd = calcBreakdown(inv);
-            return (
-              <div key={inv.id}
-                onClick={() => setSelected(inv)}
-                className="glass-subtle border rounded-xl p-5 cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group relative overflow-hidden"
-              >
-                <div className="absolute inset-0 flex items-center justify-center opacity-[0.16] pointer-events-none"><PaidStamp size={190} animate={false}/></div>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#27AE60] shrink-0"/>
-                    <span className="text-[10px] font-mono text-muted-foreground">{inv.id}</span>
-                  </div>
+        {paid.length > 0 && (<>
+          <h2 className="text-heading text-base mt-8 mb-4">Paid</h2>
+          <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+            {paid.map(inv => <InvoiceCard key={inv.key} inv={inv} onClick={() => onSelect(inv)}/>)}
+          </div>
+        </>)}
+
+        {voided.length > 0 && (<>
+          <h2 className="text-heading text-base mt-8 mb-4">Voided</h2>
+          <div className="space-y-2">
+            {voided.map(inv => (
+              <div key={inv.key} onClick={() => onSelect(inv)}
+                className="glass-subtle border rounded-md px-4 py-3 flex items-center justify-between gap-4 cursor-pointer hover:border-foreground/40 transition-colors text-xs">
+                <div className="min-w-0 truncate">
+                  <span className="font-medium">{inv.campaign}</span>
+                  <span className="text-muted-foreground"> · {inv.payee} · {inv.detail}</span>
                 </div>
-                <div className="mb-4">
-                  <div className="text-sm font-semibold leading-snug mb-0.5">{inv.campaign}</div>
-                  <div className="text-xs text-muted-foreground">{inv.agency}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{inv.talent}</div>
-                </div>
-                <div className="border-t border-border pt-3 flex items-end justify-between">
-                  <div>
-                    <div className="text-[10px] text-muted-foreground font-mono">Total Paid · {inv.paidDate}</div>
-                    <div className="text-xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-mono">View →</span>
+                <div className="flex items-center gap-3 shrink-0 text-muted-foreground font-mono">
+                  <span className="line-through">${inv.amount.toLocaleString()}</span>
+                  <span>{inv.dateLabel}</span>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        </>)}
       </div>
 
       {/* Invoice Detail Modal */}
@@ -3393,72 +3396,106 @@ function InvoicesPanel() {
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className={isPaid(selected) ? "w-2 h-2 rounded-full bg-[#27AE60] shrink-0" : urgencyDot(selected.urgency)}/>
+                  <span className={cx("w-2 h-2 rounded-full shrink-0", selected.status === "paid" ? "bg-[#27AE60]" : selected.overdue ? "bg-[#C0392B]" : "bg-muted-foreground/40")}/>
                   <div className="text-sm font-semibold">{selected.id}</div>
                 </div>
-                <div className="text-xs text-muted-foreground">{selected.campaign} · {selected.agency}</div>
+                <div className="text-xs text-muted-foreground">{selected.campaign} · {selected.payee}</div>
               </div>
-              <button onClick={()=>setSelected(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
+              <button onClick={() => onSelect(null)} className="text-muted-foreground hover:text-foreground"><X size={16}/></button>
             </div>
-            <div className="px-6 py-5">
-              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">Fee Breakdown</div>
-              {(() => {
-                const bd = calcBreakdown(selected);
-                return (
-                  <div className="space-y-1">
-                    <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                      <div>
-                        <div className="text-sm">Model Fee — {selected.talent}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{selected.days} day{selected.days>1?"s":""} × ${selected.dayRate.toLocaleString()}/day</div>
+
+            {selected.kind === "card" ? (<>
+              <div className="px-6 py-5">
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">Fee Breakdown</div>
+                {(() => {
+                  const inv = selected.card!;
+                  const bd = calcBreakdown(inv);
+                  const paidDate = "paidDate" in inv ? inv.paidDate : null;
+                  return (
+                    <div className="space-y-1">
+                      <div className="flex items-baseline justify-between py-2.5 border-b border-border">
+                        <div>
+                          <div className="text-sm">{inv.payeeKind === "crew" ? "Day Rate" : "Model Fee"} — {inv.talent}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{inv.days} day{inv.days > 1 ? "s" : ""} × ${inv.dayRate.toLocaleString()}/day</div>
+                        </div>
+                        <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
                       </div>
-                      <div className="font-mono text-sm font-medium">${bd.modelFee.toLocaleString()}</div>
-                    </div>
-                    <div className="flex items-baseline justify-between py-2.5 border-b border-border">
-                      <div>
-                        <div className="text-sm">Agency Fee — {selected.agency}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono">{selected.agencyPct}% of model fee</div>
-                      </div>
-                      <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
-                    </div>
-                    <div className="flex items-center justify-between py-2.5 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm">Fees &amp; Taxes</div>
-                        <div className="relative group/tooltip">
-                          <span className="w-4 h-4 rounded-full border border-border bg-secondary text-[9px] font-mono text-muted-foreground flex items-center justify-center cursor-default select-none">i</span>
-                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block z-20 w-56 bg-foreground text-primary-foreground rounded-md shadow-lg p-3 text-[10px] font-mono space-y-1.5">
-                            <div className="flex justify-between gap-4"><span><DvureWordmark size={9}/> transaction (3%)</span><span>${bd.dvureFee.toLocaleString()}</span></div>
-                            <div className="flex justify-between gap-4"><span>Processing (2.9% + $0.30)</span><span>${bd.processingFee.toLocaleString()}</span></div>
-                            <div className="border-t border-primary-foreground/20 pt-1.5 flex justify-between gap-4 font-semibold"><span>Total fees</span><span>${bd.totalFees.toLocaleString()}</span></div>
+                      {inv.payeeKind !== "crew" && (
+                        <div className="flex items-baseline justify-between py-2.5 border-b border-border">
+                          <div>
+                            <div className="text-sm">Agency Fee — {inv.agency}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono">{inv.payeeKind === "independent-model" ? "N/A — independent" : `${inv.agencyPct}% of model fee`}</div>
+                          </div>
+                          <div className="font-mono text-sm font-medium">${bd.agencyFee.toLocaleString()}</div>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between py-2.5 border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm">Fees &amp; Taxes</div>
+                          <div className="relative group/tooltip">
+                            <span className="w-4 h-4 rounded-full border border-border bg-secondary text-[9px] font-mono text-muted-foreground flex items-center justify-center cursor-default select-none">i</span>
+                            <div className="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block z-20 w-56 bg-foreground text-primary-foreground rounded-md shadow-lg p-3 text-[10px] font-mono space-y-1.5">
+                              <div className="flex justify-between gap-4"><span><DvureWordmark size={9}/> transaction (3%)</span><span>${bd.dvureFee.toLocaleString()}</span></div>
+                              <div className="flex justify-between gap-4"><span>Processing (2.9% + $0.30)</span><span>${bd.processingFee.toLocaleString()}</span></div>
+                              <div className="border-t border-primary-foreground/20 pt-1.5 flex justify-between gap-4 font-semibold"><span>Total fees</span><span>${bd.totalFees.toLocaleString()}</span></div>
+                            </div>
                           </div>
                         </div>
+                        <div className="font-mono text-sm font-medium">${(bd.dvureFee + bd.processingFee + bd.tax).toLocaleString()}</div>
                       </div>
-                      <div className="font-mono text-sm font-medium">${(bd.dvureFee+bd.processingFee+bd.tax).toLocaleString()}</div>
+                      <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
+                        <div className="text-sm font-semibold">Invoice Total</div>
+                        <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono text-right">
+                        {paidDate ? `Paid ${paidDate}` : `Due ${(inv as typeof INVOICE_DATA[number]).due}`}
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between pt-4 mt-1 border-t-2 border-foreground">
-                      <div className="text-sm font-semibold">Invoice Total</div>
-                      <div className="text-2xl font-semibold font-mono">${bd.total.toLocaleString()}</div>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground font-mono text-right">
-                      {isPaid(selected) ? `Paid ${selected.paidDate}` : `Due ${selected.due}`}
-                    </div>
+                  );
+                })()}
+              </div>
+              <div className="px-6 pb-5 flex gap-2">
+                {selected.status === "paid" ? (
+                  <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
+                    <PaidStamp size={18} animate={false}/> Paid in Full
                   </div>
-                );
-              })()}
-            </div>
-            <div className="px-6 pb-5 flex gap-2">
-              {isPaid(selected) ? (
-                <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
-                  <PaidStamp size={18} animate={false}/> Paid in Full — {selected.paidDate}
+                ) : (
+                  <button
+                    onClick={() => onSelect(null)}
+                    className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
+                    Authorize Payment
+                  </button>
+                )}
+                <Btn variant="outline" onClick={() => onSelect(null)}>Message Agency →</Btn>
+              </div>
+            </>) : (<>
+              <div className="px-6 py-5 space-y-4">
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider mb-1">{selected.detail}</div>
+                  <div className="text-2xl font-semibold font-mono">${selected.amount.toLocaleString()}</div>
                 </div>
-              ) : (
-                <button
-                  onClick={()=>setSelected(null)}
-                  className="flex-1 py-3 rounded-md text-sm font-semibold bg-gold hover:bg-gold/90 text-gold-foreground transition-all cursor-pointer">
-                  Authorize Payment
-                </button>
-              )}
-              <Btn variant="outline" onClick={()=>setSelected(null)}>Message Agency →</Btn>
-            </div>
+                <PaymentTimeline payment={selected.manual!}/>
+                <PaymentAuditTrail payment={selected.manual!}/>
+              </div>
+              <div className="px-6 pb-5 flex gap-2">
+                {selected.manual!.status === "pending" && (
+                  <button
+                    onClick={() => { onVoidManual(selected.manual!); onSelect(null); }}
+                    className="flex-1 py-3 rounded-md text-sm font-semibold border border-[#C0392B]/40 text-[#C0392B] hover:bg-[#C0392B]/5 transition-all cursor-pointer">
+                    Void Payment
+                  </button>
+                )}
+                {selected.manual!.status === "accepted" && (
+                  <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center gap-2">
+                    <PaidStamp size={18} animate={false}/> Paid in Full
+                  </div>
+                )}
+                {selected.manual!.status === "voided" && (
+                  <div className="flex-1 py-3 rounded-md text-sm font-semibold bg-secondary text-muted-foreground flex items-center justify-center">Voided</div>
+                )}
+                <Btn variant="outline" onClick={() => onSelect(null)}>Close</Btn>
+              </div>
+            </>)}
           </div>
         </div>
       )}

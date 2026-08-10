@@ -140,7 +140,7 @@ export default function CampaignCalendar({ campaigns, addableCampaigns, openCamp
               <ChevronRight size={15}/>
             </button>
           </div>
-          <Btn variant="outline" size="sm" icon={<CalendarPlus size={13}/>} onClick={()=>setShowSubscribe(true)}>Subscribe</Btn>
+          <Btn variant="outline" size="sm" icon={<CalendarPlus size={13}/>} onClick={()=>setShowSubscribe(true)}>Connect</Btn>
           <Btn variant="primary" size="sm" icon={<Plus size={13}/>} onClick={()=>setShowAdd(true)} disabled={addableCampaigns.length===0}>New Event</Btn>
         </div>
       </div>
@@ -163,14 +163,18 @@ export default function CampaignCalendar({ campaigns, addableCampaigns, openCamp
 
       {selected && (
         <Modal onClose={()=>setSelected(null)} maxWidth="max-w-sm">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="text-heading text-sm">{KIND_LABEL[selected.kind]}</div>
-            <button onClick={()=>setSelected(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+          <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-heading text-sm truncate">{selected.label}</div>
+              <div className="text-xs font-mono text-muted-foreground mt-0.5">{selected.date.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</div>
+            </div>
+            <button onClick={()=>setSelected(null)} className="text-muted-foreground hover:text-foreground cursor-pointer shrink-0"><X size={14}/></button>
           </div>
           <div className="p-5 space-y-3">
-            <div className="text-sm font-medium">{selected.campaignName}</div>
-            <div className="text-xs text-muted-foreground">{selected.label}</div>
-            <div className="text-xs font-mono text-muted-foreground">{selected.date.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className={cx("w-1.5 h-1.5 rounded-full shrink-0", KIND_DOT[selected.kind])}/>
+              {KIND_LABEL[selected.kind]} · {selected.campaignName}
+            </div>
           </div>
           <div className="px-5 pb-5 space-y-2">
             <Btn variant="primary" fullWidth onClick={()=>{ openCampaign(selected.campaignId); setSelected(null); }}>Open Campaign</Btn>
@@ -215,12 +219,12 @@ function SubscribeModal({ token, onClose, onRegenerate }: {
   return (
     <Modal onClose={onClose} maxWidth="max-w-md">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-        <div className="text-heading text-sm">Subscribe in Apple / Google Calendar</div>
+        <div className="text-heading text-sm">Connect to Apple / Google Calendar</div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
       </div>
       <div className="p-5 space-y-4">
         <div className="text-xs text-muted-foreground">
-          Add this link as a calendar subscription and every shoot day and casting across your campaigns stays in sync automatically — new events show up without re-adding anything.
+          Add this link as a calendar connection and every shoot day and casting across your campaigns stays in sync automatically — new events show up without re-adding anything.
         </div>
         {urls ? (
           <>
