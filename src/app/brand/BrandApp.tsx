@@ -13,7 +13,7 @@ import {
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
@@ -4310,7 +4310,15 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [leadsNeededRaw, setLeadsNeededRaw] = useState<CampaignNeedingLeads[]>([]);
   const [campaignsUpdatedAt, setCampaignsUpdatedAt] = useState<number>(Date.now());
-  const allCampaigns = [...CAMPAIGNS, ...realCampaigns];
+  // A real signed-in brand only ever sees its own real campaigns — the 5
+  // legacy placeholder campaigns (CAMPAIGNS) used to be merged in
+  // unconditionally, which meant every real account saw fake campaigns
+  // mixed into their real list, including name collisions with their
+  // own real campaigns (confirmed directly: a real "AW25 Womenswear
+  // Campaign" and the placeholder one of the same name, side by side).
+  // Direct decision to drop the merge now that real campaign creation
+  // exists and this account has real campaigns of its own.
+  const allCampaigns = realCampaigns;
 
   async function refetchCampaigns() {
     if (!org) return null;
