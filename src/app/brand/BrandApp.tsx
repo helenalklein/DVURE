@@ -992,24 +992,36 @@ const OUTSTANDING_STATUS_BADGE: Record<OutstandingPayee["status"], { label: stri
 // invoice happens from InvoiceDetailModal's own "Add Payment" instead,
 // where a specific amount less than the full remaining balance makes
 // sense one payee at a time.
+// Paying one person at a time allows an editable amount, so a first
+// payment can be a genuine partial installment (not just a full-balance
+// shot) — the whole point of the payment trail. A bulk multi-select
+// keeps paying each payee's full remaining balance, since one shared
+// partial amount across several different people's different balances
+// doesn't have a sensible single number to edit.
 function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
   campaignId: string; payees: OutstandingPayee[]; onClose: () => void; onDone: () => void;
 }) {
+  const isSingle = payees.length === 1;
   const [method, setMethod] = useState<ManualPaymentMethod>("check");
   const [note, setNote] = useState("");
+  const [amountInput, setAmountInput] = useState(isSingle ? String(payees[0].remaining) : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const total = payees.reduce((s,p)=>s+p.remaining, 0);
+  const singleAmount = isSingle ? Number(amountInput) : 0;
+  const total = isSingle ? singleAmount : payees.reduce((s,p)=>s+p.remaining, 0);
+  const canSubmit = isSingle ? singleAmount > 0 && singleAmount <= payees[0].remaining : true;
 
   async function handleSubmit() {
+    if (!canSubmit) { setError("Enter an amount up to the remaining balance."); return; }
     setSubmitting(true);
     setError(null);
     for (const p of payees) {
+      const amount = isSingle ? singleAmount : p.remaining;
       const params: RecordInvoicePaymentParams = p.kind === "crew"
-        ? { campaignId, invoiceTotal: p.totalAmount, amount: p.remaining, method, referenceNote: note, payeeKind: "crew", crewPayeeId: p.crewPayeeId! }
+        ? { campaignId, invoiceTotal: p.totalAmount, amount, method, referenceNote: note, payeeKind: "crew", crewPayeeId: p.crewPayeeId! }
         : p.kind === "independent-model"
-        ? { campaignId, invoiceTotal: p.totalAmount, amount: p.remaining, method, referenceNote: note, payeeKind: "independent-model", modelId: p.modelId! }
-        : { campaignId, invoiceTotal: p.totalAmount, amount: p.remaining, method, referenceNote: note, payeeKind: "agency", agencyOrgId: p.agencyOrgId! };
+        ? { campaignId, invoiceTotal: p.totalAmount, amount, method, referenceNote: note, payeeKind: "independent-model", modelId: p.modelId! }
+        : { campaignId, invoiceTotal: p.totalAmount, amount, method, referenceNote: note, payeeKind: "agency", agencyOrgId: p.agencyOrgId! };
       const { error } = await recordInvoicePayment(params);
       if (error) { setSubmitting(false); setError(`${p.name}: ${error}`); return; }
     }
@@ -1028,14 +1040,25 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="max-h-32 overflow-y-auto space-y-1">
-            {payees.map(p=>(
-              <div key={p.key} className="flex items-center justify-between text-xs">
-                <span>{p.name} <span className="text-muted-foreground">· {p.subLabel}</span></span>
-                <span className="font-mono">${p.remaining.toLocaleString()}</span>
+          {isSingle ? (
+            <div>
+              <FieldLabel>Amount</FieldLabel>
+              <div className="flex items-center gap-2">
+                <input value={amountInput} onChange={e=>setAmountInput(e.target.value)} type="number" min="0" max={payees[0].remaining}
+                  className="w-32 bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-foreground"/>
+                <span className="text-xs text-muted-foreground">of ${payees[0].remaining.toLocaleString()} owed to {payees[0].name}</span>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="max-h-32 overflow-y-auto space-y-1">
+              {payees.map(p=>(
+                <div key={p.key} className="flex items-center justify-between text-xs">
+                  <span>{p.name} <span className="text-muted-foreground">· {p.subLabel}</span></span>
+                  <span className="font-mono">${p.remaining.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div>
             <FieldLabel>Method</FieldLabel>
             <div className="flex gap-1.5">
@@ -1054,7 +1077,7 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
               className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
           </div>
           {error && <div className="text-xs text-red-500">{error}</div>}
-          <Btn variant="primary" fullWidth disabled={submitting} onClick={handleSubmit}>
+          <Btn variant="primary" fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
             {submitting ? "Recording…" : `Record Payment${payees.length>1?"s":""}`}
           </Btn>
         </div>
