@@ -12,12 +12,15 @@ export async function createBooking(params: {
   campaignId: string;
   submissionId: string;
   brandOrgId: string;
-  agencyOrgId: string;
+  agencyOrgId: string | null;
   modelId: string;
   dayRate: number;
   days: number;
   shootDate: string; // YYYY-MM-DD
 }): Promise<{ id: string | null; error: string | null }> {
+  // No agency on the booking (an independent model, 0049) means no
+  // agency cut — agency_pct silently defaulting to the standard 20% here
+  // would invent a fee owed to nobody.
   const { data, error } = await supabase
     .from("bookings")
     .insert({
@@ -29,7 +32,7 @@ export async function createBooking(params: {
       day_rate: params.dayRate,
       days: params.days,
       shoot_date: params.shootDate,
-      agency_pct: DEFAULT_AGENCY_PCT / 100,
+      agency_pct: params.agencyOrgId ? DEFAULT_AGENCY_PCT / 100 : 0,
       platform_pct: DEFAULT_PLATFORM_PCT / 100,
     })
     .select("id")
@@ -71,7 +74,7 @@ export async function fetchUnpaidBookings(campaignId: string): Promise<UnpaidBoo
     id: b.id,
     modelName: b.model_profiles?.full_name ?? "Unknown",
     agencyOrgId: b.agency_org_id,
-    agencyName: b.organizations?.name ?? "Unknown agency",
+    agencyName: b.organizations?.name ?? "Independent",
     dayRate: Number(b.day_rate),
     days: Number(b.days),
     grossAmount: Number(b.day_rate) * Number(b.days),
