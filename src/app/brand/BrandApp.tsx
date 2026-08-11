@@ -29,7 +29,7 @@ import SubscriptionPanel from "../shared/SubscriptionPanel";
 import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries/outstandingPayments";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
-import CallSheet from "../shared/CallSheet";
+import CallSheet, { CrewTab } from "../shared/CallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
@@ -42,7 +42,7 @@ import { createOrgStaffInvite, fetchPendingOrgInvites, type PendingInvite } from
 
 type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "payments" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "crew" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "payments" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Vantage Model Management","Meridian Models","Solenne","Vector Models"];
 
@@ -197,16 +197,21 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"users",         label:"Users",         Icon:User            },
 ];
 
-// Call Sheet is a universal companion tool — every type gets it as its
-// own tab right under Submissions, not a swap-in only certain types
-// receive. Runway additionally gets a Looks tab, since that's
-// specifically a fashion-show concern the others don't share. (Casting
-// Board was pulled — it's part of Relay, deferred to Phase 2 along with
-// the rest of that module.)
+// Crew and Call Sheet are universal companion tools — every type gets
+// both as their own tabs right under Submissions, not a swap-in only
+// certain types receive. Split from a single "Call Sheet" tab: Crew is
+// the working surface (assign people, set rates, manage leads) and
+// Call Sheet is the read-only printed handout — production juggling
+// assignments all week shouldn't share a tab with the document you
+// print and send out once the roster's locked. Runway additionally
+// gets a Looks tab, since that's specifically a fashion-show concern
+// the others don't share. (Casting Board was pulled — it's part of
+// Relay, deferred to Phase 2 along with the rest of that module.)
 function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: string; Icon: IconFn }[] {
   const withCallSheet = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
     item,
-    { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:Users },
+    { id:"crew" as CampaignSection, label:"Crew", Icon:Users },
+    { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:FileText },
   ] : [item]);
   if (type !== "Runway") return withCallSheet;
   return withCallSheet.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
@@ -1858,6 +1863,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }}/>}
 
+
+          {section==="crew" && (
+            realCampaignId
+              ? <CrewTab campaignId={realCampaignId} campaignName={campaign.name}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Crew and has no saved project record to attach roles to — create a new campaign to use Crew.</div>
+          )}
 
           {section==="call-sheet" && (
             realCampaignId
@@ -4456,7 +4467,10 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
     navigate(`/brand/campaigns/${id}`);
   }
   function openCampaignCallSheet(id: number) {
-    setCampaignSection("call-sheet");
+    // Jumps here from an attention reminder about unfilled roles —
+    // that's assignment work, which now lives on Crew, not the
+    // read-only Call Sheet tab.
+    setCampaignSection("crew");
     navigate(`/brand/campaigns/${id}`);
   }
   function backToCampaigns() { setGlobalNav("campaigns"); navigate("/brand"); if (org) fetchCampaignsNeedingLeads(org.id).then(setLeadsNeededRaw); }
