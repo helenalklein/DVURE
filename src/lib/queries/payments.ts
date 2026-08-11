@@ -30,6 +30,8 @@ export interface InvoicePayment {
   pendingAt: string | null;
   acceptedAt: string | null;
   confirmedByName: string | null;
+  signatureName: string | null;
+  signatureCapturedAt: string | null;
   voidedAt: string | null;
   voidedByName: string | null;
   voidReason: string | null;
@@ -84,8 +86,8 @@ export async function recordInvoicePayment(params: RecordInvoicePaymentParams): 
   return { paymentId: data as string, error: null };
 }
 
-export async function confirmInvoicePayment(paymentId: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.rpc("confirm_invoice_payment", { p_payment_id: paymentId });
+export async function confirmInvoicePayment(paymentId: string, signatureName: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("confirm_invoice_payment", { p_payment_id: paymentId, p_signature_name: signatureName });
   return { error: error?.message ?? null };
 }
 
@@ -109,6 +111,7 @@ const INVOICE_SELECT = `
   invoice_payments(
     id, amount, payment_method, reference_note, status,
     created_at, pending_at, accepted_at, voided_at, void_reason,
+    signature_name, signature_captured_at,
     confirmed_by:profiles!invoice_payments_payee_confirmed_by_profile_id_fkey(full_name),
     voided_by:profiles!invoice_payments_voided_by_profile_id_fkey(full_name)
   )
@@ -131,6 +134,8 @@ function mapRow(r: any): Invoice {
       pendingAt: p.pending_at,
       acceptedAt: p.accepted_at,
       confirmedByName: p.confirmed_by?.full_name ?? null,
+      signatureName: p.signature_name ?? null,
+      signatureCapturedAt: p.signature_captured_at ?? null,
       voidedAt: p.voided_at,
       voidedByName: p.voided_by?.full_name ?? null,
       voidReason: p.void_reason,

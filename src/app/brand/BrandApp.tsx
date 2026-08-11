@@ -2773,7 +2773,10 @@ function PaymentAuditTrail({ payment }: { payment: InvoicePayment }) {
     <div className="text-[10px] text-muted-foreground font-mono space-y-0.5">
       <div>Recorded {fmtDateTime(payment.createdAt)}</div>
       {payment.status === "accepted" && (
-        <div>Confirmed by {payment.confirmedByName ?? "the agency"} · {fmtDateTime(payment.acceptedAt)}</div>
+        <>
+          <div>Confirmed by {payment.confirmedByName ?? "the agency"} · {fmtDateTime(payment.acceptedAt)}</div>
+          {payment.signatureName && <div>Signed "{payment.signatureName}" · {fmtDateTime(payment.signatureCapturedAt)}</div>}
+        </>
       )}
       {payment.status === "voided" && (
         <div>Voided by {payment.voidedByName ?? "—"} · {fmtDateTime(payment.voidedAt)} — "{payment.voidReason}"</div>

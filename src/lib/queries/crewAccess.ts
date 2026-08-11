@@ -2,6 +2,7 @@ import { supabase } from "../supabaseClient";
 
 export interface CrewAccessDetails {
   grantId: string;
+  payeeId: string | null;
   payeeName: string;
   payeeDiscipline: string | null;
   campaignId: string;
@@ -21,7 +22,7 @@ export async function fetchMyCrewGrants(): Promise<CrewAccessDetails[]> {
     .from("campaign_guest_access")
     .select(`
       id, expires_at,
-      crew_payees(full_name, discipline),
+      crew_payees(id, full_name, discipline),
       campaigns(id, name, status, due_date, organizations(name))
     `)
     .order("expires_at", { ascending: false });
@@ -29,6 +30,7 @@ export async function fetchMyCrewGrants(): Promise<CrewAccessDetails[]> {
 
   return (data as any[]).map((g) => ({
     grantId: g.id,
+    payeeId: g.crew_payees?.id ?? null,
     payeeName: g.crew_payees?.full_name ?? "",
     payeeDiscipline: g.crew_payees?.discipline ?? null,
     campaignId: g.campaigns?.id ?? "",
@@ -70,6 +72,10 @@ export async function redeemCrewAccess(accessCode: string): Promise<{ data: Crew
   return {
     data: {
       grantId: row.grant_id,
+      // This is the no-login emergency-access path — there's no
+      // auth.uid() session for a payment-confirm queue to scope to
+      // here anyway, so payeeId is never populated on this branch.
+      payeeId: null,
       payeeName: row.payee_name,
       payeeDiscipline: row.payee_discipline,
       campaignId: row.campaign_id,

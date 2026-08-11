@@ -3,6 +3,8 @@ import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare
 import { cx, Badge, TopBar, Stat, CurrentUserProvider, useCurrentUser, DvureMark, DvureSignature, MobileNavDrawer } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
+import { fetchPendingConfirmationsForModel } from "../../lib/queries/payments";
+import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 
 type View = "bookings" | "availability" | "contracts" | "earnings" | "profile" | "messages";
 
@@ -108,12 +110,14 @@ function BookingsView() {
 
 function EarningsView() {
   const currentUser = useCurrentUser();
+  const { modelProfile } = useAuth();
   const myBookings = BOOKINGS.filter(b=>b.model===currentUser?.name);
   const paid = myBookings.filter(b=>b.paymentStatus==="paid");
   const totalPaid = paid.reduce((s,b)=>s+bookingBreakdown(b).modelFee,0);
   const totalPending = myBookings.filter(b=>b.paymentStatus!=="paid").reduce((s,b)=>s+bookingBreakdown(b).modelFee,0);
   return (
     <div className="max-w-2xl space-y-4">
+      {modelProfile && <PaymentConfirmQueue fetchPending={()=>fetchPendingConfirmationsForModel(modelProfile.id)}/>}
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Paid to date" value={`$${totalPaid.toLocaleString()}`} sub={`${paid.length} booking${paid.length!==1?"s":""}`}/>
         <Stat label="Awaiting payment" value={`$${totalPending.toLocaleString()}`}/>

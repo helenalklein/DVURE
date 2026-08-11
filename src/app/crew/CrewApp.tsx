@@ -7,6 +7,8 @@ import {
   redeemCrewAccess, fetchMyCrewGrants, updateCrewPayee, updateMyProfile,
   type CrewAccessDetails,
 } from "../../lib/queries/crewAccess";
+import { fetchPendingConfirmationsForCrew } from "../../lib/queries/payments";
+import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 
 const CREW_DISCIPLINES: { key: string; label: string }[] = [
   { key: "photographer", label: "Photographer" },
@@ -63,11 +65,23 @@ function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
 function PaymentsTab({ grants }: { grants: CrewAccessDetails[] | null }) {
   if (grants === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
 
+  // A crew member can hold a distinct crew_payees row per campaign
+  // (one per booking relationship, not one global identity) — merge
+  // the pending queue across every payee id from their grants rather
+  // than assuming a single one.
+  const payeeIds = [...new Set(grants.map(g => g.payeeId).filter((id): id is string => id != null))];
+
+  async function fetchPending() {
+    const results = await Promise.all(payeeIds.map(id => fetchPendingConfirmationsForCrew(id)));
+    return results.flat();
+  }
+
   return (
     <div>
+      {payeeIds.length > 0 && <div className="mb-6"><PaymentConfirmQueue fetchPending={fetchPending}/></div>}
       <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground mb-6 flex items-start gap-2">
         <AlertCircle size={13} className="shrink-0 mt-0.5"/>
-        <div>Payment tracking for crew isn't wired up yet. Once it's built, your rate and payout status for each job will show here.</div>
+        <div>Full payout history for crew isn't wired up yet — once it's built, your rate and payout status for each job will show here. Any payment already recorded for you will show above, awaiting your confirmation.</div>
       </div>
 
       {grants.length === 0 ? (
