@@ -20,9 +20,9 @@ import { updateOrgLogo } from "../../lib/queries/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
-import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
+import { createBooking, DEFAULT_AGENCY_PCT, PLATFORM_FEE_PCT_ACH, PLATFORM_FEE_PCT_CARD } from "../../lib/queries/bookings";
 import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
-import { createInvoicePayment, createSetupIntent, listPaymentMethods, type SavedCard } from "../../lib/queries/stripe";
+import { createInvoicePayment, createSetupIntent, listPaymentMethods, type SavedCard, type InvoicePaymentIntent } from "../../lib/queries/stripe";
 import CardPaymentStep from "./CardPaymentStep";
 import AddCardStep from "../shared/AddCardStep";
 import SubscriptionPanel from "../shared/SubscriptionPanel";
@@ -1000,44 +1000,74 @@ const OUTSTANDING_STATUS_BADGE: Record<OutstandingPayee["status"], { label: stri
 // keeps paying each payee's full remaining balance, since one shared
 // partial amount across several different people's different balances
 // doesn't have a sensible single number to edit.
+const MANUAL_METHODS = ["check", "wire", "cash"] as const;
+function isManualMethod(m: PaymentMethod): m is typeof MANUAL_METHODS[number] {
+  return (MANUAL_METHODS as readonly string[]).includes(m);
+}
+function isElectronicMethod(m: PaymentMethod): m is "ach" | "card" {
+  return m === "ach" || m === "card";
+}
+// Mirrors create-invoice-payment's own rounding (grossCents first, fee
+// rounded off that) so this preview never drifts a cent from what the
+// server actually charges.
+function previewFee(grossDollars: number, pct: number) {
+  const grossCents = Math.round(grossDollars * 100);
+  return Math.round(grossCents * pct / 100) / 100;
+}
+
 function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
   campaignId: string; payees: OutstandingPayee[]; onClose: () => void; onDone: () => void;
 }) {
   const isSingle = payees.length === 1;
   const anyCrew = payees.some(p => p.bookingId == null);
-  // Card is the default whenever it's actually available — falls back
-  // to check for a crew-only selection, since the Card pill is disabled
-  // there (crew has no booking to charge against).
-  const [method, setMethod] = useState<PaymentMethod>(anyCrew ? "check" : "card");
+  // ACH is DVURE's recommended default — cheaper for us to process, so
+  // it's priced lower and steered toward everywhere a payment starts.
+  // Crew have no booking identity for either electronic method yet, so
+  // they land on the manual "Other" list instead.
+  const [method, setMethod] = useState<PaymentMethod>(anyCrew ? "check" : "ach");
+  const [otherOpen, setOtherOpen] = useState(anyCrew);
   const [note, setNote] = useState("");
   const [amountInput, setAmountInput] = useState(isSingle ? String(payees[0].remaining) : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cardClientSecret, setCardClientSecret] = useState<string | null>(null);
+  const [intent, setIntent] = useState<InvoicePaymentIntent | null>(null);
   const singleAmount = isSingle ? Number(amountInput) : 0;
   const total = isSingle ? singleAmount : payees.reduce((s,p)=>s+p.remaining, 0);
   const canSubmit = isSingle ? singleAmount > 0 && singleAmount <= payees[0].remaining : true;
+  const electronic = isElectronicMethod(method);
+  const feePct = method === "ach" ? PLATFORM_FEE_PCT_ACH : method === "card" ? PLATFORM_FEE_PCT_CARD : null;
+  const feePreview = feePct != null ? previewFee(total, feePct) : 0;
 
   function selectMethod(m: PaymentMethod) {
     setMethod(m);
-    // Card charges the real, server-recomputed booking amount — never
-    // let the client assert a partial figure for it, even though manual
-    // methods allow editing a single payee's amount down.
-    if (m === "card" && isSingle) setAmountInput(String(payees[0].remaining));
+    // Electronic charges the real, server-recomputed booking amount —
+    // never let the client assert a partial figure for either one, even
+    // though manual methods allow editing a single payee's amount down.
+    if (isElectronicMethod(m) && isSingle) setAmountInput(String(payees[0].remaining));
+  }
+
+  function selectElectronic(m: "ach" | "card") {
+    setOtherOpen(false);
+    selectMethod(m);
+  }
+
+  function openOther() {
+    setOtherOpen(true);
+    if (!isManualMethod(method)) selectMethod("check");
   }
 
   async function handleSubmit() {
-    if (method === "card") return; // card goes through handleStartCardPayment instead
+    if (electronic) return; // electronic goes through handleStartElectronicPayment instead
     if (!canSubmit) { setError("Enter an amount up to the remaining balance."); return; }
     setSubmitting(true);
     setError(null);
     for (const p of payees) {
       const amount = isSingle ? singleAmount : p.remaining;
       const params: RecordInvoicePaymentParams = p.kind === "crew"
-        ? { campaignId, invoiceTotal: p.totalAmount, amount, method, referenceNote: note, payeeKind: "crew", crewPayeeId: p.crewPayeeId! }
+        ? { campaignId, invoiceTotal: p.totalAmount, amount, method: method as ManualPaymentMethod, referenceNote: note, payeeKind: "crew", crewPayeeId: p.crewPayeeId! }
         : p.kind === "independent-model"
-        ? { campaignId, invoiceTotal: p.totalAmount, amount, method, referenceNote: note, payeeKind: "independent-model", modelId: p.modelId! }
-        : { campaignId, invoiceTotal: p.totalAmount, amount, method, referenceNote: note, payeeKind: "agency", agencyOrgId: p.agencyOrgId! };
+        ? { campaignId, invoiceTotal: p.totalAmount, amount, method: method as ManualPaymentMethod, referenceNote: note, payeeKind: "independent-model", modelId: p.modelId! }
+        : { campaignId, invoiceTotal: p.totalAmount, amount, method: method as ManualPaymentMethod, referenceNote: note, payeeKind: "agency", agencyOrgId: p.agencyOrgId! };
       const { error } = await recordInvoicePayment(params);
       if (error) { setSubmitting(false); setError(`${p.name}: ${error}`); return; }
     }
@@ -1045,14 +1075,15 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
     onDone();
   }
 
-  async function handleStartCardPayment() {
+  async function handleStartElectronicPayment() {
+    if (!isElectronicMethod(method)) return;
     setSubmitting(true);
     setError(null);
     const bookingIds = payees.map(p => p.bookingId).filter((id): id is string => id != null);
-    const { clientSecret, error: err } = await createInvoicePayment(bookingIds, campaignId);
+    const { intent: result, error: err } = await createInvoicePayment(bookingIds, method);
     setSubmitting(false);
-    if (err || !clientSecret) { setError(err ?? "Couldn't start payment."); return; }
-    setCardClientSecret(clientSecret);
+    if (err || !result) { setError(err ?? "Couldn't start payment."); return; }
+    setIntent(result);
   }
 
   return (
@@ -1060,17 +1091,20 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
       <div className="bg-card border border-border rounded-md w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div>
-            <div className="text-heading text-sm">{cardClientSecret ? "Confirm payment" : "Record Payment"}</div>
+            <div className="text-heading text-sm">{intent ? "Confirm payment" : "Record Payment"}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{payees.length} {payees.length===1?"person":"people"} · ${total.toLocaleString()} total</div>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={16}/></button>
         </div>
-        {cardClientSecret ? (
+        {intent ? (
           <div className="p-5 overflow-y-auto">
             <CardPaymentStep
-              clientSecret={cardClientSecret}
-              totalCents={Math.round(total * 100)}
-              onBack={()=>setCardClientSecret(null)}
+              clientSecret={intent.clientSecret}
+              grossAmount={intent.grossAmount}
+              platformFeePct={intent.platformFeePct}
+              platformFeeAmount={intent.platformFeeAmount}
+              totalAmount={intent.totalAmount}
+              onBack={()=>setIntent(null)}
               onDone={onDone}
             />
           </div>
@@ -1081,11 +1115,11 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
               <FieldLabel>Amount</FieldLabel>
               <div className="flex items-center gap-2">
                 <input value={amountInput} onChange={e=>setAmountInput(e.target.value)} type="number" min="0" max={payees[0].remaining}
-                  disabled={method==="card"}
+                  disabled={electronic}
                   className="w-32 bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-foreground disabled:opacity-60"/>
                 <span className="text-xs text-muted-foreground">of ${payees[0].remaining.toLocaleString()} owed to {payees[0].name}</span>
               </div>
-              {method==="card" && <div className="text-[10px] text-muted-foreground mt-1">Card payments are for the full remaining balance.</div>}
+              {electronic && <div className="text-[10px] text-muted-foreground mt-1">{method==="ach" ? "ACH" : "Card"} payments are for the full remaining balance.</div>}
             </div>
           ) : (
             <div className="max-h-32 overflow-y-auto space-y-1">
@@ -1100,20 +1134,42 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
           <div>
             <FieldLabel>Method</FieldLabel>
             <div className="flex gap-1.5">
-              {(["check","wire","cash","card"] as const).map(m=>{
-                const disabled = m==="card" && anyCrew;
-                return (
-                  <button key={m} disabled={disabled} onClick={()=>selectMethod(m)}
-                    title={disabled ? "Card isn't available for crew yet — use check, wire, or cash" : undefined}
-                    className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors capitalize",
-                      disabled ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
-                        : method===m ? "bg-foreground text-primary-foreground border-foreground cursor-pointer" : "border-border text-muted-foreground hover:border-foreground cursor-pointer"
-                    )}>{m}</button>
-                );
-              })}
+              <button disabled={anyCrew} onClick={()=>selectElectronic("ach")}
+                title={anyCrew ? "ACH isn't available for crew yet — use check, wire, or cash" : undefined}
+                className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors text-left",
+                  anyCrew ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+                    : method==="ach" && !otherOpen ? "bg-foreground text-primary-foreground border-foreground cursor-pointer" : "border-border text-muted-foreground hover:border-foreground cursor-pointer"
+                )}>
+                ACH <span className="opacity-70">· {PLATFORM_FEE_PCT_ACH}% · Recommended</span>
+              </button>
+              <button disabled={anyCrew} onClick={()=>selectElectronic("card")}
+                title={anyCrew ? "Card isn't available for crew yet — use check, wire, or cash" : undefined}
+                className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  anyCrew ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+                    : method==="card" && !otherOpen ? "bg-foreground text-primary-foreground border-foreground cursor-pointer" : "border-border text-muted-foreground hover:border-foreground cursor-pointer"
+                )}>
+                Card <span className="opacity-70">· {PLATFORM_FEE_PCT_CARD}%</span>
+              </button>
+              <button onClick={openOther}
+                className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  otherOpen ? "bg-foreground text-primary-foreground border-foreground cursor-pointer" : "border-border text-muted-foreground hover:border-foreground cursor-pointer"
+                )}>Other ▾</button>
             </div>
+            {method==="ach" && !otherOpen && (
+              <div className="text-[10px] text-muted-foreground mt-1">6% − 0.5% ACH discount = 5.5%</div>
+            )}
+            {otherOpen && (
+              <div className="flex gap-1.5 mt-1.5">
+                {MANUAL_METHODS.map(m=>(
+                  <button key={m} onClick={()=>selectMethod(m)}
+                    className={cx("text-xs px-3 py-1.5 rounded-full border transition-colors capitalize",
+                      method===m ? "bg-foreground text-primary-foreground border-foreground cursor-pointer" : "border-border text-muted-foreground hover:border-foreground cursor-pointer"
+                    )}>{m}</button>
+                ))}
+              </div>
+            )}
           </div>
-          {method!=="card" && (
+          {!electronic && (
             <div>
               <FieldLabel>Reference note (optional)</FieldLabel>
               <input value={note} onChange={e=>setNote(e.target.value)}
@@ -1121,10 +1177,17 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
                 className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
             </div>
           )}
+          {electronic && feePct != null && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
+              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono">${total.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">DVURE platform fee ({feePct}%)</span><span className="font-mono">${feePreview.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div className="flex justify-between font-semibold pt-1 border-t border-border"><span>Total charge</span><span className="font-mono">${(total+feePreview).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+            </div>
+          )}
           {error && <div className="text-xs text-red-500">{error}</div>}
-          {method==="card" ? (
-            <Btn variant="primary" fullWidth disabled={submitting} onClick={handleStartCardPayment}>
-              {submitting ? "Preparing payment…" : "Continue to card payment"}
+          {electronic ? (
+            <Btn variant="primary" fullWidth disabled={submitting} onClick={handleStartElectronicPayment}>
+              {submitting ? "Preparing payment…" : `Continue to ${method==="ach" ? "ACH" : "card"} payment`}
             </Btn>
           ) : (
             <Btn variant="primary" fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
@@ -1880,9 +1943,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                   const selectedTalent = bookModal.ids.map(id => talent.find(t => t.id === id)).filter((t): t is Talent => !!t);
                   const hasIndependent = selectedTalent.some(t => t.agency === "Independent");
                   const hasRepped = selectedTalent.some(t => t.agency !== "Independent");
-                  if (hasIndependent && !hasRepped) return `No agency in the middle — just DVURE's platform fee (${DEFAULT_PLATFORM_PCT}%).`;
-                  if (hasIndependent && hasRepped) return `Repped models use DVURE's standard split (${DEFAULT_AGENCY_PCT}% / ${DEFAULT_PLATFORM_PCT}%); independent models pay only the platform fee (${DEFAULT_PLATFORM_PCT}%).`;
-                  return `Agency and platform fees use DVURE's standard split (${DEFAULT_AGENCY_PCT}% / ${DEFAULT_PLATFORM_PCT}%).`;
+                  const feeRange = `${PLATFORM_FEE_PCT_ACH}–${PLATFORM_FEE_PCT_CARD}% depending on how they pay`;
+                  if (hasIndependent && !hasRepped) return `No agency in the middle — just DVURE's platform fee (${feeRange}).`;
+                  if (hasIndependent && hasRepped) return `Repped models use DVURE's standard agency split (${DEFAULT_AGENCY_PCT}%) plus the platform fee (${feeRange}); independent models pay only the platform fee.`;
+                  return `Agency split is DVURE's standard ${DEFAULT_AGENCY_PCT}%, plus the platform fee (${feeRange}).`;
                 })()}
               </div>
             </div>
@@ -2649,7 +2713,7 @@ function PaidStamp({ size = 120, animate = true }: { size?: number; animate?: bo
 // its own state rather than "declined" being an afterthought bolted onto
 // the success path. Each has its own color, icon, and a next step that
 // actually gets someone unblocked, not just an apology.
-const MANUAL_METHOD_LABEL: Record<PaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash", card: "Card" };
+const MANUAL_METHOD_LABEL: Record<PaymentMethod, string> = { check: "Check", wire: "Wire", cash: "Cash", card: "Card", ach: "ACH" };
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "";

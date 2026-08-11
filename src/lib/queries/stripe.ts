@@ -30,16 +30,27 @@ export async function startAgencyConnectOnboarding(): Promise<{ url: string | nu
   return { url: data?.url ?? null, error: null };
 }
 
+export type ChargeMethod = "ach" | "card";
+
+export interface InvoicePaymentIntent {
+  clientSecret: string;
+  grossAmount: number;
+  platformFeePct: number;
+  platformFeeAmount: number;
+  totalAmount: number;
+}
+
 export async function createInvoicePayment(
   bookingIds: string[],
-  campaignId?: string
-): Promise<{ invoiceId: string | null; clientSecret: string | null; error: string | null }> {
-  const { data, error } = await supabase.functions.invoke<{ invoiceId: string; clientSecret: string }>(
+  chargeMethod: ChargeMethod
+): Promise<{ intent: InvoicePaymentIntent | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<InvoicePaymentIntent>(
     "create-invoice-payment",
-    { body: { bookingIds, campaignId } }
+    { body: { bookingIds, chargeMethod } }
   );
-  if (error) return { invoiceId: null, clientSecret: null, error: await functionErrorMessage(error) };
-  return { invoiceId: data?.invoiceId ?? null, clientSecret: data?.clientSecret ?? null, error: null };
+  if (error) return { intent: null, error: await functionErrorMessage(error) };
+  if (!data?.clientSecret) return { intent: null, error: "Couldn't start payment." };
+  return { intent: data, error: null };
 }
 
 export interface SavedCard {
@@ -74,6 +85,21 @@ export async function listSubscriptionPlan(): Promise<{ plan: SubscriptionPlan |
   const { data, error } = await supabase.functions.invoke<{ plan: SubscriptionPlan | null }>("list-subscription-plan");
   if (error) return { plan: null, error: await functionErrorMessage(error) };
   return { plan: data?.plan ?? null, error: null };
+}
+
+// Fires right after a manual (check/wire/cash) payment gets confirmed
+// — bills the brand DVURE's platform fee via a real Stripe Invoice,
+// since no charge exists to collect it from directly. Best-effort from
+// the caller's side (same tier as audit logging): if this fails, the
+// payment itself already succeeded and stays confirmed either way, so
+// errors here are logged, not surfaced as if the confirmation failed.
+export async function createNoncircumventionInvoice(paymentId: string): Promise<{ invoiceUrl: string | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<{ invoiceUrl: string }>(
+    "create-noncircumvention-invoice",
+    { body: { paymentId } }
+  );
+  if (error) return { invoiceUrl: null, error: await functionErrorMessage(error) };
+  return { invoiceUrl: data?.invoiceUrl ?? null, error: null };
 }
 
 export async function createSubscription(paymentMethodId: string): Promise<{ status: string | null; error: string | null }> {

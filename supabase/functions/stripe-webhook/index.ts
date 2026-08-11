@@ -64,6 +64,12 @@ Deno.serve(async (req) => {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
+        // Set by create-invoice-payment — "ach" or "card", whichever
+        // the PaymentIntent was actually priced and restricted to
+        // (payment_method_types there only ever allows the one method
+        // matching this). Falls back to "card" for older PaymentIntents
+        // created before this metadata field existed.
+        const chargeMethod = pi.metadata?.charge_method === "ach" ? "ach" : "card";
 
         const { data: stagedLines } = await supabaseAdmin
           .from("invoice_card_payment_lines")
@@ -104,7 +110,7 @@ Deno.serve(async (req) => {
           await supabaseAdmin.from("invoice_payments").insert({
             invoice_id: invoiceId,
             amount: grossTotal,
-            payment_method: "card",
+            payment_method: chargeMethod,
             status: "accepted",
             pending_at: now,
             accepted_at: now,

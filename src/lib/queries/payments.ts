@@ -2,11 +2,13 @@ import { supabase } from "../supabaseClient";
 
 export type ManualPaymentMethod = "check" | "wire" | "cash";
 // A real payment event's method — manual (brand records it, payee
-// confirms) or card (Stripe PaymentIntent, written by the webhook only
-// once Stripe itself confirms success — see 0054 and stripe-webhook's
-// header for why card never passes through a 'pending' state a human
-// needs to confirm).
-export type PaymentMethod = ManualPaymentMethod | "card";
+// confirms) or electronic (Stripe PaymentIntent, written by the
+// webhook only once Stripe itself confirms success — see 0054 and
+// stripe-webhook's header for why these never pass through a 'pending'
+// state a human needs to confirm). ACH and card are priced differently
+// (create-invoice-payment) even though both are "electronic" here.
+export type ElectronicPaymentMethod = "card" | "ach";
+export type PaymentMethod = ManualPaymentMethod | ElectronicPaymentMethod;
 export type PayeeKind = "agency" | "independent-model" | "crew";
 
 // A single payment event applied against an invoice. Mirrors

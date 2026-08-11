@@ -2,11 +2,22 @@ import { supabase } from "../supabaseClient";
 import { logAuditEvent } from "../audit";
 
 // Fee split isn't a per-booking negotiation in the UI yet — every real
-// booking uses the platform's own standard split, the same numbers the
-// mock BOOKINGS data has always used (see bookingBreakdown() in
-// mockData.ts). Revisit if/when brands need to negotiate this per deal.
+// booking uses the platform's own standard split. Revisit if/when
+// brands need to negotiate this per deal.
+//
+// The platform fee is added on top of gross, never deducted from what
+// a payee is owed, and varies by how the brand actually pays — ACH is
+// cheaper for DVURE to process than card, so it's priced lower to
+// steer volume there. Card/ACH add the fee directly to the charge
+// (create-invoice-payment, which recomputes it fresh at payment time —
+// bookings.platform_pct below is only ever a stored-for-reference
+// default, never read back for the real charge). A confirmed check/
+// wire/cash payment bills the card rate separately afterward via a
+// real Stripe Invoice (create-noncircumvention-invoice), since no
+// money moves through Stripe on those to collect it from directly.
 export const DEFAULT_AGENCY_PCT = 20;
-export const DEFAULT_PLATFORM_PCT = 3;
+export const PLATFORM_FEE_PCT_ACH = 5.5;
+export const PLATFORM_FEE_PCT_CARD = 6;
 
 export async function createBooking(params: {
   campaignId: string;
@@ -33,7 +44,7 @@ export async function createBooking(params: {
       days: params.days,
       shoot_date: params.shootDate,
       agency_pct: params.agencyOrgId ? DEFAULT_AGENCY_PCT / 100 : 0,
-      platform_pct: DEFAULT_PLATFORM_PCT / 100,
+      platform_pct: PLATFORM_FEE_PCT_CARD / 100,
     })
     .select("id")
     .single();

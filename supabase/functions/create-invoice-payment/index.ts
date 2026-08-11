@@ -1,9 +1,19 @@
 // Builds one Stripe PaymentIntent covering however many bookings the
 // brand selected — "one big ticket," but only for the lines they chose
 // to include. Every amount is recomputed here from the real booking
-// rows (day_rate/days/agency_pct are immutable after creation as of
+// rows (day_rate/days are immutable after creation as of
 // 0020_bookings_insert_only.sql, so they're trustworthy inputs) — the
 // client only ever sends which booking ids to include, never an amount.
+// The actual charge is gross + a platform fee on top; the payee's
+// invoice stays at gross — DVURE's cut is billed to the brand, never
+// deducted from what a payee is owed. The fee rate depends on
+// chargeMethod: ACH is meaningfully cheaper for DVURE to process than
+// card (Stripe's own ACH fee is capped low; card's isn't), so it's
+// priced lower to steer volume there. Because the rate is locked in at
+// PaymentIntent-creation time, the brand picks ACH or card in DVURE's
+// own UI first (RecordPaymentModal) — this never falls back to
+// Stripe's automatic multi-method picker, which would let someone
+// switch methods after the amount was already fixed for the other one.
 //
 // Bookings are grouped by payee (agency org, or the model directly for
 // an independent booking — bookings.agency_org_id has been nullable
@@ -23,6 +33,13 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2024-06-20" });
 
+// Mirrors src/lib/queries/bookings.ts's PLATFORM_FEE_PCT_BY_METHOD (no
+// shared module between the Deno Edge Function runtime and the Vite
+// app — keep both in sync by hand if these ever change). "Other"
+// (check/wire/cash) uses the card rate — see
+// create-noncircumvention-invoice's own copy of this constant.
+const PLATFORM_FEE_PCT: Record<"ach" | "card", number> = { ach: 5.5, card: 6 };
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -30,8 +47,9 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Missing Authorization header");
 
-    const { bookingIds } = await req.json();
+    const { bookingIds, chargeMethod } = await req.json();
     if (!Array.isArray(bookingIds) || bookingIds.length === 0) throw new Error("bookingIds must be a non-empty array");
+    if (chargeMethod !== "ach" && chargeMethod !== "card") throw new Error('chargeMethod must be "ach" or "card"');
 
     const supabaseUser = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -70,13 +88,18 @@ Deno.serve(async (req) => {
 
     let customerId = org.stripe_customer_id as string | null;
     if (!customerId) {
-      const customer = await stripe.customers.create({ name: org.name, metadata: { org_id: org.id } });
+      const customer = await stripe.customers.create({ name: org.name, email: user.email, metadata: { org_id: org.id } });
       customerId = customer.id;
       const { error: updateErr } = await supabaseAdmin
         .from("organizations")
         .update({ stripe_customer_id: customerId })
         .eq("id", org.id);
       if (updateErr) throw new Error(`Failed to save Stripe customer id: ${updateErr.message}`);
+    } else if (user.email) {
+      // Backfill email on customers created before this field was added
+      // — Stripe needs it to actually deliver a Stripe Invoice (see
+      // create-noncircumvention-invoice), not just to save a card.
+      await stripe.customers.update(customerId, { email: user.email }).catch((err) => console.error("Non-fatal: failed to backfill customer email:", err));
     }
 
     // bookings_select already scopes this to the caller's own org
@@ -85,7 +108,7 @@ Deno.serve(async (req) => {
     // but it can't sneak into the invoice total either way.
     const { data: bookings, error: bookingsErr } = await supabaseUser
       .from("bookings")
-      .select("id, campaign_id, brand_org_id, agency_org_id, model_id, day_rate, days, agency_pct")
+      .select("id, campaign_id, brand_org_id, agency_org_id, model_id, day_rate, days")
       .in("id", bookingIds);
     if (bookingsErr) throw new Error(bookingsErr.message);
     if (!bookings || bookings.length !== bookingIds.length) {
@@ -110,14 +133,11 @@ Deno.serve(async (req) => {
       const isIndependent = !b.agency_org_id;
       const key = isIndependent ? `model:${b.model_id}` : `agency:${b.agency_org_id}`;
       const grossCents = Math.round(Number(b.day_rate) * Number(b.days) * 100);
-      // Only an agency's cut ever transfers out today (the model's own
-      // share stays with the agency off-platform) — an independent
-      // model has no agency to cut in, so the full gross is what they'd
-      // eventually be owed once individual payouts exist; it's not
-      // transferred yet either way (see the webhook's awaiting_payee_
-      // onboarding fallback, since model_profiles has no Connect
-      // account concept in this pass).
-      const payoutCents = isIndependent ? grossCents : Math.round(grossCents * Number(b.agency_pct));
+      // The payee — agency or independent model — always receives their
+      // full gross rate. DVURE's cut is never deducted from what's owed
+      // to them; it's collected separately, on top, from the brand (see
+      // feeCents below).
+      const payoutCents = grossCents;
       const group = groups.get(key) ?? {
         agencyOrgId: isIndependent ? null : b.agency_org_id,
         modelId: isIndependent ? b.model_id : null,
@@ -127,8 +147,14 @@ Deno.serve(async (req) => {
       groups.set(key, group);
     }
 
-    const totalCents = bookings.reduce((sum, b) => sum + Math.round(Number(b.day_rate) * Number(b.days) * 100), 0);
-    if (totalCents <= 0) throw new Error("Invoice total must be greater than zero");
+    const grossTotalCents = bookings.reduce((sum, b) => sum + Math.round(Number(b.day_rate) * Number(b.days) * 100), 0);
+    if (grossTotalCents <= 0) throw new Error("Invoice total must be greater than zero");
+    // The fee is on top of what's owed to payees, not carved out of it
+    // — invoices stay at gross (below), only the actual Stripe charge
+    // is gross + fee.
+    const feePct = PLATFORM_FEE_PCT[chargeMethod as "ach" | "card"];
+    const feeCents = Math.round(grossTotalCents * feePct / 100);
+    const totalCents = grossTotalCents + feeCents;
 
     // Reserve every payee's invoice — and validate the remaining
     // balance actually covers this charge — before Stripe is ever
@@ -150,19 +176,31 @@ Deno.serve(async (req) => {
     }
 
     // customer is attached so this charge shows up under the org's
-    // Stripe Customer and future work can surface it as a saved method
-    // — actually listing it as selectable in the PaymentElement needs a
-    // Customer Session too, which was tried and reverted here (real
-    // cuss_secret_... returned, PaymentElement accepted it without
-    // erroring, but the saved card still didn't appear as an option —
-    // needs more research, likely a payment-method allow_redisplay
-    // consent setting, before trying again).
+    // Stripe Customer — actually listing a saved card as selectable in
+    // the PaymentElement needs a Customer Session too, tried and
+    // reverted (see AddCardStep/CardPaymentStep history): the real
+    // cuss_secret_... came back and the Element accepted it without
+    // erroring, but the saved card still never appeared as an option —
+    // needs more research before trying again.
+    //
+    // Exactly one payment_method_types entry, matching chargeMethod —
+    // never both, since the fee is already locked in for whichever one
+    // was chosen. This also means Stripe's PaymentElement has nothing
+    // else to offer (no Klarna/Affirm/Cash App/Amazon Pay soup, no
+    // switching methods mid-form after the amount was fixed).
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "usd",
       customer: customerId,
-      automatic_payment_methods: { enabled: true },
-      metadata: { booking_count: String(bookings.length), campaign_id: campaignId },
+      payment_method_types: [chargeMethod === "ach" ? "us_bank_account" : "card"],
+      metadata: {
+        booking_count: String(bookings.length),
+        campaign_id: campaignId,
+        charge_method: chargeMethod,
+        platform_fee_pct: String(feePct),
+        gross_amount: String(grossTotalCents / 100),
+        platform_fee_amount: String(feeCents / 100),
+      },
     });
 
     const stagingRows = reservations.flatMap(({ invoiceId, group }) =>
@@ -178,7 +216,13 @@ Deno.serve(async (req) => {
     if (stagingErr) throw new Error(`Failed to stage payment: ${stagingErr.message}`);
 
     return new Response(
-      JSON.stringify({ clientSecret: paymentIntent.client_secret }),
+      JSON.stringify({
+        clientSecret: paymentIntent.client_secret,
+        grossAmount: grossTotalCents / 100,
+        platformFeePct: feePct,
+        platformFeeAmount: feeCents / 100,
+        totalAmount: totalCents / 100,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   } catch (err) {

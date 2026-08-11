@@ -54,13 +54,15 @@ Deno.serve(async (req) => {
 
     let customerId = org.stripe_customer_id as string | null;
     if (!customerId) {
-      const customer = await stripe.customers.create({ name: org.name, metadata: { org_id: org.id } });
+      const customer = await stripe.customers.create({ name: org.name, email: user.email, metadata: { org_id: org.id } });
       customerId = customer.id;
       const { error: updateErr } = await supabaseAdmin
         .from("organizations")
         .update({ stripe_customer_id: customerId })
         .eq("id", org.id);
       if (updateErr) throw new Error(`Failed to save Stripe customer id: ${updateErr.message}`);
+    } else if (user.email) {
+      await stripe.customers.update(customerId, { email: user.email }).catch((err) => console.error("Non-fatal: failed to backfill customer email:", err));
     }
 
     // Card-only, not automatic_payment_methods — this flow is

@@ -11,6 +11,7 @@ import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
 import { fetchAgencyInvitations, type AgencyInvitation } from "../../lib/queries/agencyInvitations";
 import { fetchPendingConfirmationsForAgency, confirmInvoicePayment, type PendingConfirmation, type ManualPaymentMethod } from "../../lib/queries/payments";
+import { createNoncircumventionInvoice } from "../../lib/queries/stripe";
 import SubscriptionPanel from "../shared/SubscriptionPanel";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
@@ -687,6 +688,15 @@ function ManualPaymentConfirmQueue() {
   async function handleConfirm(paymentId: string) {
     setConfirmingId(paymentId);
     await confirmInvoicePayment(paymentId);
+    // Best-effort, same tier as audit logging — the confirmation itself
+    // already succeeded either way. Bills DVURE's platform fee on this
+    // manual payment via a real Stripe Invoice, since no charge exists
+    // to collect it from directly (create-noncircumvention-invoice
+    // itself no-ops for card/ach payments, which collect the fee in the
+    // charge already).
+    createNoncircumventionInvoice(paymentId).then(({ error }) => {
+      if (error) console.error("Non-circumvention invoice failed:", error);
+    });
     setConfirmingId(null);
     reload();
   }
