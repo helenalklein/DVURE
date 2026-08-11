@@ -165,8 +165,8 @@ Deno.serve(async (req) => {
         p_crew_payee_id: null,
       });
       if (reserveErr || !data || data.length === 0) throw new Error(reserveErr?.message ?? "Could not reserve an invoice for this payment");
-      const row = data[0] as { invoice_id: string; remaining_amount: number };
-      reservations.push({ invoiceId: row.invoice_id, group, remainingCents: Math.round(Number(row.remaining_amount) * 100) });
+      const row = data[0] as { out_invoice_id: string; remaining_amount: number };
+      reservations.push({ invoiceId: row.out_invoice_id, group, remainingCents: Math.round(Number(row.remaining_amount) * 100) });
     }
 
     // The fee is on top of what's owed to payees, not carved out of it
