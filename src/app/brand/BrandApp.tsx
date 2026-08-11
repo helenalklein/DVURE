@@ -21,8 +21,9 @@ import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } 
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
 import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
-import { createInvoicePayment } from "../../lib/queries/stripe";
+import { createInvoicePayment, createSetupIntent, listPaymentMethods, type SavedCard } from "../../lib/queries/stripe";
 import CardPaymentStep from "./CardPaymentStep";
+import AddCardStep from "./AddCardStep";
 import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries/outstandingPayments";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
@@ -2859,6 +2860,17 @@ function InvoiceDetailModal({ invoice, onClose, onChanged }: {
   );
 }
 
+// Stripe's card.brand is already lowercase-ish and mostly presentable,
+// but a couple of common networks read better with real casing than
+// str.toUpperCase() would give them.
+const CARD_BRAND_LABEL: Record<string, string> = {
+  visa: "VISA", mastercard: "MASTERCARD", amex: "AMEX", discover: "DISCOVER",
+  diners: "DINERS CLUB", jcb: "JCB", unionpay: "UNIONPAY",
+};
+function cardBrandLabel(brand: string): string {
+  return CARD_BRAND_LABEL[brand] ?? brand.toUpperCase();
+}
+
 function GlobalPayments() {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
@@ -2956,9 +2968,43 @@ function GlobalPayments() {
   ];
   const [pendingBankAdded, setPendingBankAdded] = useState(false);
 
-  const hasCard = true;
+  // Real cards, straight from Stripe (organizations.stripe_customer_id,
+  // reused from the never-wired-up subscription column — see
+  // create-setup-intent's header). Bank Accounts stays mock/decorative
+  // below — ACH/Financial Connections is a separate, not-yet-decided
+  // effort.
+  const [cards, setCards] = useState<SavedCard[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
+  const [addCardSecret, setAddCardSecret] = useState<string | null>(null);
+  const [addCardLoading, setAddCardLoading] = useState(false);
+  const [addCardError, setAddCardError] = useState<string | null>(null);
 
-  // Gold button style, shared by the (still decorative) Add Card/Add
+  async function reloadCards() {
+    setCardsLoading(true);
+    const { cards: fetched } = await listPaymentMethods();
+    setCards(fetched);
+    setCardsLoading(false);
+  }
+
+  useEffect(() => { reloadCards(); }, [accountOrg?.id]);
+
+  async function startAddCard() {
+    setShowAddCard(true);
+    setAddCardError(null);
+    setAddCardLoading(true);
+    const { clientSecret, error } = await createSetupIntent();
+    setAddCardLoading(false);
+    if (error || !clientSecret) { setAddCardError(error ?? "Couldn't start card setup."); return; }
+    setAddCardSecret(clientSecret);
+  }
+
+  function closeAddCard() {
+    setShowAddCard(false);
+    setAddCardSecret(null);
+    setAddCardError(null);
+  }
+
+  // Gold button style, shared by the Authorize Payment/Add Card/Add
   // Bank actions — plain sentence case, matching every other button's
   // Instrument Sans treatment.
   const goldBtn = "bg-gold hover:bg-gold/90 text-gold-foreground font-semibold transition-all shadow-md hover:shadow-lg";
@@ -2993,31 +3039,35 @@ function GlobalPayments() {
         <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto">
           <div>
             <h2 className="text-heading text-base mb-3">Payment Cards</h2>
-            {hasCard ? (
+            {cardsLoading ? (
+              <div className="h-44 border border-dashed border-border rounded-xl flex items-center justify-center text-xs text-muted-foreground">Loading…</div>
+            ) : cards.length > 0 ? (
               <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#2A2826] via-[#1E1C1A] to-[#0B0B0A] p-5 flex flex-col justify-between select-none cursor-pointer hover:shadow-lg transition-shadow">
-                  <div className="flex items-start justify-between">
-                    <div><div className="text-[10px] font-mono text-white/80 uppercase tracking-widest">Primary</div><div className="text-base font-bold text-white tracking-widest mt-1">AMEX</div></div>
-                    <div className="text-right"><div className="text-[10px] text-white/70">American Express</div><div className="text-xs text-white/90 mt-1">Centurion</div></div>
-                  </div>
-                  <div>
-                    <div className="text-white font-mono text-lg tracking-widest mb-2">•••• •••• •••• 4242</div>
-                    <div className="flex items-end justify-between">
-                      <div><div className="text-[9px] text-white/60 uppercase">Card Holder</div><div className="text-xs text-white font-medium">{meName.toUpperCase()}</div></div>
-                      <div className="text-right"><div className="text-[9px] text-white/60 uppercase">Expires</div><div className="text-xs text-white font-mono">09/27</div></div>
+                {cards.map((c, i) => i === 0 ? (
+                  <div key={c.id} className="relative rounded-xl overflow-hidden h-44 bg-gradient-to-br from-[#2A2826] via-[#1E1C1A] to-[#0B0B0A] p-5 flex flex-col justify-between select-none hover:shadow-lg transition-shadow">
+                    <div className="flex items-start justify-between">
+                      <div><div className="text-[10px] font-mono text-white/80 uppercase tracking-widest">Primary</div><div className="text-base font-bold text-white tracking-widest mt-1">{cardBrandLabel(c.brand)}</div></div>
+                    </div>
+                    <div>
+                      <div className="text-white font-mono text-lg tracking-widest mb-2">•••• •••• •••• {c.last4}</div>
+                      <div className="flex items-end justify-between">
+                        <div><div className="text-[9px] text-white/60 uppercase">Card Holder</div><div className="text-xs text-white font-medium">{meName.toUpperCase()}</div></div>
+                        <div className="text-right"><div className="text-[9px] text-white/60 uppercase">Expires</div><div className="text-xs text-white font-mono">{String(c.expMonth).padStart(2,"0")}/{String(c.expYear).slice(-2)}</div></div>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="relative rounded-xl overflow-hidden h-28 bg-gradient-to-br from-[#2a2a2a] to-[#444] p-4 flex flex-col justify-between cursor-pointer hover:shadow-md transition-shadow opacity-70">
-                  <div className="text-xs text-white/60 font-mono">VISA</div>
-                  <div><div className="text-white font-mono text-sm tracking-widest mb-1">•••• •••• •••• 8891</div><div className="text-xs text-white/60">{meName.toUpperCase()} · 03/26</div></div>
-                </div>
-                <button onClick={()=>setShowAddCard(true)} className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 flex items-center justify-center gap-1 hover:border-foreground transition-colors w-full">
+                ) : (
+                  <div key={c.id} className="relative rounded-xl overflow-hidden h-28 bg-gradient-to-br from-[#2a2a2a] to-[#444] p-4 flex flex-col justify-between hover:shadow-md transition-shadow opacity-70">
+                    <div className="text-xs text-white/60 font-mono">{cardBrandLabel(c.brand)}</div>
+                    <div><div className="text-white font-mono text-sm tracking-widest mb-1">•••• •••• •••• {c.last4}</div><div className="text-xs text-white/60">{meName.toUpperCase()} · {String(c.expMonth).padStart(2,"0")}/{String(c.expYear).slice(-2)}</div></div>
+                  </div>
+                ))}
+                <button onClick={startAddCard} className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 flex items-center justify-center gap-1 hover:border-foreground transition-colors w-full">
                   <Plus size={12}/> Add card
                 </button>
               </div>
             ) : (
-              <div className="h-44 border-2 border-dashed border-border rounded-xl flex items-center justify-center cursor-pointer hover:border-foreground transition-colors" onClick={()=>setShowAddCard(true)}>
+              <div className="h-44 border-2 border-dashed border-border rounded-xl flex items-center justify-center cursor-pointer hover:border-foreground transition-colors" onClick={startAddCard}>
                 <div className="text-center"><Plus size={20} className="text-muted-foreground mx-auto mb-1"/><div className="text-xs text-muted-foreground">Add payment card</div></div>
               </div>
             )}
@@ -3111,34 +3161,24 @@ function GlobalPayments() {
       </div>{/* end payments flex */}
       </div>}{/* end paymentsTab==="payments" */}
 
-      {/* Add Card Modal */}
+      {/* Add Card Modal — real Stripe SetupIntent, same Elements
+          treatment as CardPaymentStep, saved for reuse against future
+          invoice payments. */}
       {showAddCard && (
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
           <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <div className="text-heading text-sm">Add Payment Card</div>
-              <button onClick={()=>setShowAddCard(false)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+              <button onClick={closeAddCard} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
-            <div className="p-6 space-y-4">
-              <TextInput label="Name on Card" placeholder={`e.g. ${meName || "Jordan Smith"}`}/>
-              <div>
-                <FieldLabel>Card Number</FieldLabel>
-                <input placeholder="•••• •••• •••• ••••" maxLength={19}
-                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-foreground tracking-widest"/>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-1"><TextInput label="Expiry" placeholder="MM/YY"/></div>
-                <div className="col-span-1"><TextInput label="CVV" placeholder="•••"/></div>
-                <div className="col-span-1"><TextInput label="ZIP Code" placeholder="10001"/></div>
-              </div>
-              <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground flex items-start gap-2">
-                <Lock size={13} className="shrink-0 mt-0.5"/>
-                <span>This is a preview of the billing screen — real card processing via Stripe Connect isn&rsquo;t wired in yet, and nothing typed here is saved or transmitted.</span>
-              </div>
-            </div>
-            <div className="px-6 pb-6 flex gap-2">
-              <button className={`flex-1 py-3 rounded-md text-sm ${goldBtn}`} onClick={()=>setShowAddCard(false)}>Save Card</button>
-              <Btn variant="outline" onClick={()=>setShowAddCard(false)}>Cancel</Btn>
+            <div className="p-6">
+              {addCardLoading && <div className="text-sm text-muted-foreground py-6 text-center">Preparing secure card form…</div>}
+              {addCardError && !addCardLoading && (
+                <div className="text-xs text-[#C0392B] bg-[#C0392B]/10 border border-[#C0392B]/30 rounded-md px-3 py-2.5 mb-4">{addCardError}</div>
+              )}
+              {addCardSecret && (
+                <AddCardStep clientSecret={addCardSecret} onCancel={closeAddCard} onDone={()=>{ closeAddCard(); reloadCards(); }}/>
+              )}
             </div>
           </div>
         </div>

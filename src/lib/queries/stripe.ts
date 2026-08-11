@@ -41,3 +41,23 @@ export async function createInvoicePayment(
   if (error) return { invoiceId: null, clientSecret: null, error: await functionErrorMessage(error) };
   return { invoiceId: data?.invoiceId ?? null, clientSecret: data?.clientSecret ?? null, error: null };
 }
+
+export interface SavedCard {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+export async function createSetupIntent(): Promise<{ clientSecret: string | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<{ clientSecret: string }>("create-setup-intent");
+  if (error) return { clientSecret: null, error: await functionErrorMessage(error) };
+  return { clientSecret: data?.clientSecret ?? null, error: null };
+}
+
+export async function listPaymentMethods(): Promise<{ cards: SavedCard[]; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<{ cards: SavedCard[] }>("list-payment-methods");
+  if (error) return { cards: [], error: await functionErrorMessage(error) };
+  return { cards: data?.cards ?? [], error: null };
+}
