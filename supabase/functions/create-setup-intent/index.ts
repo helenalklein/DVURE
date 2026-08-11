@@ -63,9 +63,15 @@ Deno.serve(async (req) => {
       if (updateErr) throw new Error(`Failed to save Stripe customer id: ${updateErr.message}`);
     }
 
+    // Card-only, not automatic_payment_methods — this flow is
+    // specifically "add a card" (the Payment Cards box only ever
+    // renders type:"card" methods, see list-payment-methods), so
+    // offering Bank/Cash App Pay/Klarna/Pix here would let someone
+    // "save" a method that then has nowhere to show up, and drags in
+    // Stripe's own Link/bank-incentive UI for methods we don't use.
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ["card"],
     });
 
     return new Response(JSON.stringify({ clientSecret: setupIntent.client_secret }), {
