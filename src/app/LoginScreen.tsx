@@ -104,7 +104,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   const passwordTooShort = signupPassword.length > 0 && signupPassword.length < 6;
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background">
+    <div className="h-screen flex items-center justify-center bg-secondary">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8 flex flex-col items-center">
           <img src={dvureMarkD} alt="" className="h-[76px] w-auto"/>
