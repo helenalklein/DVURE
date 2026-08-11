@@ -477,12 +477,14 @@ export function MobileNavDrawer({ open, onClose, children }: { open: boolean; on
 export function GateBanner({ org }: { org: OrgInfo | undefined }) {
   const gate = getAccessGate(org);
   if (!gate.gated) return null;
-  const copy = gate.reason === "unverified"
+  const copy = gate.reason === "payment_locked"
+    ? "This account is locked — an overdue DVURE platform fee invoice needs to be paid before you can make more payments."
+    : gate.reason === "unverified"
     ? "This account isn't verified yet — payments, invites, and adding teammates are locked until verification completes."
     : "Your trial has ended — payments, invites, and adding teammates are locked until you add a payment method.";
   return (
-    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-secondary border-b border-border text-xs">
-      <Lock size={13} className="text-muted-foreground shrink-0"/>
+    <div className={cx("flex items-center gap-2.5 px-4 py-2.5 border-b border-border text-xs", gate.reason==="payment_locked" ? "bg-[#C0392B]/10" : "bg-secondary")}>
+      <Lock size={13} className={cx("shrink-0", gate.reason==="payment_locked" ? "text-[#C0392B]" : "text-muted-foreground")}/>
       <span className="text-foreground">{copy}</span>
     </div>
   );

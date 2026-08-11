@@ -217,6 +217,33 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // The non-circumvention platform-fee invoice (create-noncircumvention-invoice)
+      // is the only place DVURE uses Stripe's own Invoicing product, so
+      // any invoice.paid here is unambiguously one of ours. Unlocks the
+      // brand's account immediately rather than waiting for the next
+      // lock_overdue_accounts cron tick.
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const { data: payment } = await supabaseAdmin
+          .from("invoice_payments")
+          .select("id, invoice_id")
+          .eq("stripe_noncircumvention_invoice_id", invoice.id)
+          .maybeSingle();
+        if (!payment) break; // not one of ours (shouldn't happen, but not fatal)
+
+        await supabaseAdmin
+          .from("invoice_payments")
+          .update({ noncircumvention_invoice_paid_at: new Date().toISOString() })
+          .eq("id", payment.id);
+
+        // Re-derives lock status for every org from scratch (same
+        // function the daily cron runs) rather than duplicating the
+        // "still has an overdue unpaid invoice" query here — cheap at
+        // this pilot's scale, one source of truth for the lock rule.
+        await supabaseAdmin.rpc("lock_overdue_accounts");
+        break;
+      }
+
       case "account.updated": {
         const account = event.data.object as Stripe.Account;
         await supabaseAdmin

@@ -20,6 +20,7 @@ export interface OrgInfo {
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: string | null;
   logoUrl: string | null;
+  paymentLocked: boolean;
 }
 
 export interface ModelAgencyInfo {
@@ -133,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subscriptionStatus: orgRow.subscription_status,
         trialEndsAt: orgRow.trial_ends_at,
         logoUrl: orgRow.logo_url,
+        paymentLocked: !!orgRow.payment_locked,
       },
     });
   }, []);

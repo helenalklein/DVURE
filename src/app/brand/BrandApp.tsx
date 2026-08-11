@@ -1023,6 +1023,8 @@ function previewFee(grossDollars: number, pct: number) {
 function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
   campaignId: string; payees: OutstandingPayee[]; onClose: () => void; onDone: () => void;
 }) {
+  const { org: accountOrg } = useAuth();
+  const gate = getAccessGate(accountOrg);
   const isSingle = payees.length === 1;
   const anyCrew = payees.some(p => p.bookingId == null);
   // ACH is DVURE's recommended default — cheaper for us to process, so
@@ -1189,13 +1191,20 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
               <div className="flex justify-between font-semibold pt-1 border-t border-border"><span>Total charge</span><span className="font-mono">${(total+feePreview).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
             </div>
           )}
+          {gate.gated && (
+            <div className="text-xs text-[#C0392B]">
+              {gate.reason === "payment_locked"
+                ? "This account is locked — pay the outstanding platform fee invoice to resume making payments."
+                : "Payments are locked for this account right now."}
+            </div>
+          )}
           {error && <div className="text-xs text-red-500">{error}</div>}
           {electronic ? (
-            <Btn variant="primary" fullWidth disabled={submitting} onClick={handleStartElectronicPayment}>
+            <Btn variant="primary" fullWidth disabled={submitting || gate.gated} onClick={handleStartElectronicPayment}>
               {submitting ? "Preparing payment…" : `Continue to ${method==="ach" ? "ACH" : "card"} payment`}
             </Btn>
           ) : (
-            <Btn variant="primary" fullWidth disabled={submitting || !canSubmit} onClick={handleSubmit}>
+            <Btn variant="primary" fullWidth disabled={submitting || !canSubmit || gate.gated} onClick={handleSubmit}>
               {submitting ? "Recording…" : `Record Payment${payees.length>1?"s":""}`}
             </Btn>
           )}
@@ -3212,7 +3221,8 @@ function GlobalPayments() {
             )}
           </div>
 
-          <button onClick={()=>setShowAuthorize(true)} disabled={outstandingInvoices.length===0}
+          <button onClick={()=>setShowAuthorize(true)} disabled={outstandingInvoices.length===0 || getAccessGate(accountOrg).gated}
+            title={getAccessGate(accountOrg).gated ? "This account is locked — see the banner above" : undefined}
             className={`w-full shrink-0 mt-4 py-3.5 rounded-md text-sm ${goldBtn} disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}>
             Authorize Payment
           </button>

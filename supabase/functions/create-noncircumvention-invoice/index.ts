@@ -127,7 +127,11 @@ Deno.serve(async (req) => {
 
     const { error: updatePaymentErr } = await supabaseAdmin
       .from("invoice_payments")
-      .update({ stripe_noncircumvention_invoice_id: sent.id })
+      // noncircumvention_invoice_created_at anchors the 90-day
+      // account-lock window (lock_overdue_accounts) — set here, not
+      // derived from Stripe's own days_until_due, which is a separate,
+      // softer payment-term reminder unrelated to DVURE's own lock policy.
+      .update({ stripe_noncircumvention_invoice_id: sent.id, noncircumvention_invoice_created_at: new Date().toISOString() })
       .eq("id", payment.id);
     if (updatePaymentErr) throw new Error(`Invoice sent but failed to record it: ${updatePaymentErr.message}`);
 
