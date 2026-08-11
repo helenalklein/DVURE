@@ -63,3 +63,38 @@ export async function createBooking(params: {
   return { id: data.id as string, error: null };
 }
 
+export interface ModelBooking {
+  id: string;
+  campaignName: string;
+  brandName: string;
+  agencyName: string | null; // null means independent -- no agency in the middle
+  dayRate: number;
+  days: number;
+  shootDate: string;
+}
+
+// A model's own real bookings — bookings_select's RLS (model_id =
+// my_model_id()) already scopes this to their own rows, agency-repped
+// or independent alike. Deliberately doesn't attempt a payment status
+// here: that's only ever knowable from DVURE's side for an independent
+// booking (see fetchInvoicesForModel) -- an agency-repped booking pays
+// the agency, and DVURE has no RLS-visible invoice to show the model
+// what their agency did with it after that.
+export async function fetchBookingsForModel(modelId: string): Promise<ModelBooking[]> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id, day_rate, days, shoot_date, campaigns(name, organizations(name)), agency:organizations!bookings_agency_org_id_fkey(name)")
+    .eq("model_id", modelId)
+    .order("shoot_date", { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map((r) => ({
+    id: r.id,
+    campaignName: r.campaigns?.name ?? "Unknown campaign",
+    brandName: r.campaigns?.organizations?.name ?? "Unknown brand",
+    agencyName: r.agency?.name ?? null,
+    dayRate: Number(r.day_rate),
+    days: Number(r.days),
+    shootDate: r.shoot_date,
+  }));
+}
+

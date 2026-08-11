@@ -191,6 +191,21 @@ export async function fetchInvoicesForAgency(agencyOrgId: string): Promise<Invoi
   return (data as any[]).map(mapRow);
 }
 
+// Every invoice naming this model directly as payee — only ever
+// populated for an independent model (no agency in the middle); an
+// agency-repped model's bookings pay the agency, not the model, so
+// DVURE has no invoice of its own to show them (their agency handles
+// that split entirely outside this system).
+export async function fetchInvoicesForModel(modelId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(INVOICE_SELECT)
+    .eq("invoice_line_items.payee_model_id", modelId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map(mapRow);
+}
+
 // One invoice with its full payment trail — used to open the detail/
 // trail view directly from a spreadsheet row that already knows its
 // invoiceId (fetchOutstandingPayees) without refetching the whole list.

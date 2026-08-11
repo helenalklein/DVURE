@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare } from "lucide-react";
-import { cx, Badge, TopBar, Stat, CurrentUserProvider, useCurrentUser, DvureMark, DvureSignature, MobileNavDrawer } from "../shared/ui";
-import { BOOKINGS, bookingBreakdown, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
+import { cx, Badge, TopBar, Stat, CurrentUserProvider, DvureMark, DvureSignature, MobileNavDrawer } from "../shared/ui";
+import { CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
-import { fetchPendingConfirmationsForModel } from "../../lib/queries/payments";
+import { fetchPendingConfirmationsForModel, fetchInvoicesForModel, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
+import { fetchBookingsForModel, type ModelBooking } from "../../lib/queries/bookings";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 
 type View = "bookings" | "availability" | "contracts" | "earnings" | "profile" | "messages";
@@ -69,37 +70,42 @@ function MessagesView() {
   );
 }
 
-function statusBadge(status: "pending"|"processing"|"paid") {
-  if (status === "paid") return <Badge label="Paid" variant="active"/>;
-  if (status === "processing") return <Badge label="Processing" variant="pending"/>;
-  return <Badge label="Awaiting Payment" variant="draft"/>;
-}
-
+// Bookings never carry a reliable per-booking payment status of their
+// own (bookings.payment_status was retired as a stale signal during
+// the Stripe integration — see create-invoice-payment's header) and an
+// agency-repped booking's day rate isn't the model's actual take-home
+// either, since the agency's internal split with the model happens
+// entirely outside DVURE. So this view shows the real booking terms
+// only — no fabricated "your earnings" or payment-status badge. Real
+// payment tracking (only ever knowable for an independent booking)
+// lives in EarningsView below.
 function BookingsView() {
-  const currentUser = useCurrentUser();
-  const myBookings = BOOKINGS.filter(b=>b.model===currentUser?.name);
+  const { modelProfile } = useAuth();
+  const [bookings, setBookings] = useState<ModelBooking[] | null>(null);
+
+  useEffect(() => {
+    if (!modelProfile) { setBookings([]); return; }
+    fetchBookingsForModel(modelProfile.id).then(setBookings);
+  }, [modelProfile?.id]);
+
+  if (bookings === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
+
   return (
     <div className="max-w-2xl space-y-3">
-      <p className="text-sm text-muted-foreground mb-2">Bookings confirmed through your agency.</p>
-      {myBookings.map(b=>{
-        const bd = bookingBreakdown(b);
-        return (
-          <div key={b.id} className="glass-subtle border rounded-md p-4">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div>
-                <div className="text-sm font-semibold">{b.campaign}</div>
-                <div className="text-xs text-muted-foreground">{b.brand} · via {b.agency} · Shoot {b.shootDate}</div>
-              </div>
-              {statusBadge(b.paymentStatus)}
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-border">
-              <span className="text-xs text-muted-foreground">Your earnings ({b.days} day{b.days>1?"s":""} × ${b.dayRate.toLocaleString()})</span>
-              <span className="font-mono text-sm font-semibold">${bd.modelFee.toLocaleString()}</span>
-            </div>
+      <p className="text-sm text-muted-foreground mb-2">Your confirmed bookings.</p>
+      {bookings.map(b=>(
+        <div key={b.id} className="glass-subtle border rounded-md p-4">
+          <div className="mb-2">
+            <div className="text-sm font-semibold">{b.campaignName}</div>
+            <div className="text-xs text-muted-foreground">{b.brandName}{b.agencyName ? ` · via ${b.agencyName}` : ""} · Shoot {b.shootDate}</div>
           </div>
-        );
-      })}
-      {myBookings.length===0 && (
+          <div className="flex items-center justify-between pt-2 border-t border-border">
+            <span className="text-xs text-muted-foreground">Day rate ({b.days} day{b.days>1?"s":""} × ${b.dayRate.toLocaleString()})</span>
+            <span className="font-mono text-sm font-semibold">${(b.dayRate*b.days).toLocaleString()}</span>
+          </div>
+        </div>
+      ))}
+      {bookings.length===0 && (
         <div className="flex items-center justify-center h-40 border border-dashed border-border rounded-md">
           <div className="text-sm text-muted-foreground">No bookings yet</div>
         </div>
@@ -108,32 +114,56 @@ function BookingsView() {
   );
 }
 
+// Same real-invoice pattern already used for Crew and Agency
+// (fetchInvoicesForModel mirrors fetchInvoicesForCrewPayee) — only
+// ever populated for an independent booking, since an agency-repped
+// booking pays the agency directly and DVURE has no invoice of its
+// own naming the model as payee.
+const INVOICE_STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: "default"|"active"|"pending"|"draft" }> = {
+  outstanding: { label: "Awaiting payment", variant: "draft" },
+  partially_paid: { label: "Partially paid", variant: "pending" },
+  paid: { label: "Paid", variant: "active" },
+};
+
 function EarningsView() {
-  const currentUser = useCurrentUser();
   const { modelProfile } = useAuth();
-  const myBookings = BOOKINGS.filter(b=>b.model===currentUser?.name);
-  const paid = myBookings.filter(b=>b.paymentStatus==="paid");
-  const totalPaid = paid.reduce((s,b)=>s+bookingBreakdown(b).modelFee,0);
-  const totalPending = myBookings.filter(b=>b.paymentStatus!=="paid").reduce((s,b)=>s+bookingBreakdown(b).modelFee,0);
+  const [invoices, setInvoices] = useState<Invoice[] | null>(null);
+
+  useEffect(() => {
+    if (!modelProfile) { setInvoices([]); return; }
+    fetchInvoicesForModel(modelProfile.id).then(setInvoices);
+  }, [modelProfile?.id]);
+
+  if (invoices === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
+
+  const totalPaid = invoices.reduce((s,inv)=>s+inv.acceptedAmount,0);
+  const totalPending = invoices.reduce((s,inv)=>s+(inv.totalAmount-inv.acceptedAmount),0);
+  const paidCount = invoices.filter(i=>i.status==="paid").length;
+
   return (
     <div className="max-w-2xl space-y-4">
       {modelProfile && <PaymentConfirmQueue fetchPending={()=>fetchPendingConfirmationsForModel(modelProfile.id)}/>}
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="Paid to date" value={`$${totalPaid.toLocaleString()}`} sub={`${paid.length} booking${paid.length!==1?"s":""}`}/>
+        <Stat label="Paid to date" value={`$${totalPaid.toLocaleString()}`} sub={`${paidCount} invoice${paidCount!==1?"s":""}`}/>
         <Stat label="Awaiting payment" value={`$${totalPending.toLocaleString()}`}/>
       </div>
-      <div className="space-y-2">
-        {myBookings.map(b=>{
-          const bd = bookingBreakdown(b);
-          return (
-            <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
-              <div className="flex-1"><div className="text-sm font-semibold">{b.campaign}</div><div className="text-xs text-muted-foreground">{b.shootDate}</div></div>
-              <span className="font-mono text-sm">${bd.modelFee.toLocaleString()}</span>
-              {statusBadge(b.paymentStatus)}
+      {invoices.length === 0 ? (
+        <div className="text-sm text-muted-foreground">
+          No payment history yet. Bookings made through an agency are paid to your agency directly — this tracks payments for your independent bookings only.
+        </div>
+      ) : (
+        <div className="glass-subtle border rounded-md overflow-hidden">
+          {invoices.map((inv,i)=>(
+            <div key={inv.id} className={cx("px-4 py-3 flex items-center justify-between gap-3", i>0 && "border-t border-border")}>
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{inv.campaignName}</div>
+                <div className="text-xs text-muted-foreground">${inv.acceptedAmount.toLocaleString()} of ${inv.totalAmount.toLocaleString()} confirmed</div>
+              </div>
+              <Badge {...INVOICE_STATUS_BADGE[inv.status]}/>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
