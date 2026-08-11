@@ -1,5 +1,5 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings, Lock, Camera } from "lucide-react";
+import { Bell, X, ChevronDown, Settings, Lock, Camera, Menu } from "lucide-react";
 import type { OrgInfo } from "./auth";
 import { getAccessGate } from "./accessGate";
 import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
@@ -424,7 +424,7 @@ function relativeUpdated(updatedAt: number, nowMs: number): string {
   return `Updated ${hours}h ago`;
 }
 
-export function TopBar({ title, sub, actions, updatedAt }: { title: string; sub?: string; actions?: JSX.Element; updatedAt?: number }) {
+export function TopBar({ title, sub, actions, updatedAt, onMenuClick }: { title: string; sub?: string; actions?: JSX.Element; updatedAt?: number; onMenuClick?: () => void }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (updatedAt == null) return;
@@ -432,16 +432,40 @@ export function TopBar({ title, sub, actions, updatedAt }: { title: string; sub?
     return () => clearInterval(id);
   }, [updatedAt]);
   return (
-    <div className="h-14 border-b glass flex items-center px-6 gap-4 shrink-0 z-20 relative">
+    <div className="h-14 border-b glass flex items-center px-4 md:px-6 gap-3 md:gap-4 shrink-0 z-20 relative">
+      {onMenuClick && (
+        <button onClick={onMenuClick} className="md:hidden shrink-0 -ml-1 p-1.5 text-foreground cursor-pointer" aria-label="Open menu">
+          <Menu size={20}/>
+        </button>
+      )}
       <div className="flex-1 min-w-0">
         <div className="text-heading text-lg truncate">{title}</div>
-        {sub && <div className="text-subtext text-xs">{sub}</div>}
+        {sub && <div className="text-subtext text-xs truncate">{sub}</div>}
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        {updatedAt != null && <span className="text-[10px] font-mono text-muted-foreground">{relativeUpdated(updatedAt, now)}</span>}
+        {updatedAt != null && <span className="hidden sm:inline text-[10px] font-mono text-muted-foreground">{relativeUpdated(updatedAt, now)}</span>}
         {actions}<UserMenuButton/><BellButton/>
       </div>
     </div>
+  );
+}
+
+// Slide-in mobile nav drawer — sidebar content stays identical between
+// desktop and mobile (same NAV map, same active-state styling), only
+// how it's positioned changes. Desktop ignores `open` entirely via the
+// md: overrides; mobile fixed-positions it off-canvas until toggled by
+// TopBar's hamburger button, with a backdrop that closes it on tap.
+export function MobileNavDrawer({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <>
+      {open && <div className="fixed inset-0 bg-foreground/40 z-30 md:hidden" onClick={onClose}/>}
+      <div className={cx(
+        "fixed inset-y-0 left-0 z-40 w-64 transition-transform duration-200 ease-out md:static md:z-auto md:w-52 md:translate-x-0 md:transition-none",
+        open ? "translate-x-0" : "-translate-x-full"
+      )}>
+        {children}
+      </div>
+    </>
   );
 }
 

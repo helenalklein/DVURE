@@ -1,0 +1,11 @@
+/* iOS Safari auto-zooms into any focused input/select/textarea whose
+ * effective font-size is under 16px — nearly everything here is
+ * text-sm (14px) or smaller. Bumping to 16px only inside the mobile
+ * breakpoint keeps desktop typography untouched; !important is needed
+ * because Tailwind's text-sm/text-xs utility classes outrank a bare
+ * element selector on specificity. */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

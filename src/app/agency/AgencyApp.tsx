@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox } from "../shared/ui";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox, MobileNavDrawer } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage } from "../shared/types";
 import { useAuth } from "../shared/auth";
@@ -29,7 +29,7 @@ const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
 // Agency's own Settings — leaner than the brand's (no Billing/Security/
 // Org/Notifications/Audit placeholders that were never real), just
 // Profile plus the one real, working surface: the pilot subscription.
-function AgencySettingsScreen({ onLogout }: { onLogout: () => void }) {
+function AgencySettingsScreen({ onLogout, onMenuClick }: { onLogout: () => void; onMenuClick?: () => void }) {
   const { profile, org } = useAuth();
   const isAdmin = org?.accessLevel === "administrator";
   const [tab, setTab] = useState<"profile"|"subscription">("profile");
@@ -38,17 +38,17 @@ function AgencySettingsScreen({ onLogout }: { onLogout: () => void }) {
     ...(isAdmin ? [["subscription","Subscription"] as [string,string]] : []),
   ];
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Settings" sub={`${org?.name ?? ""} · Account settings`}/>
-      <div className="flex-1 flex min-h-0">
-        <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Settings" sub={`${org?.name ?? ""} · Account settings`} onMenuClick={onMenuClick}/>
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        <div className="shrink-0 border-b md:border-b-0 md:border-r glass px-2 py-2 md:py-4 flex md:block gap-0.5 md:space-y-0.5 overflow-x-auto md:w-44">
           {TABS.map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id as typeof tab)}
-              className={cx("w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
+              className={cx("shrink-0 md:w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
                 tab===id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}>{label}</button>
           ))}
-          <div className="pt-4 border-t border-border mt-4">
+          <div className="hidden md:block pt-4 border-t border-border mt-4">
             <button onClick={onLogout} className="w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-2">
               <LogOut size={13}/> Sign out
             </button>
@@ -57,7 +57,7 @@ function AgencySettingsScreen({ onLogout }: { onLogout: () => void }) {
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8">
           <div className="max-w-xl">
             {tab === "profile" && (
               <div className="space-y-5">
@@ -795,7 +795,13 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   const [roster, setRoster] = useState<RosterModel[]>([]);
   const [realInvitations, setRealInvitations] = useState<AgencyInvitation[]>([]);
   const [submitCampaign, setSubmitCampaign] = useState<string | undefined>(undefined);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const invitations: Invitation[] = [...INVITATIONS, ...realInvitations];
+
+  function selectView(v: View) {
+    setView(v);
+    setMobileNavOpen(false);
+  }
 
   useEffect(() => {
     let active = true;
@@ -813,44 +819,46 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   return (
     <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:agencyName, email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>setView("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
-        <aside className="w-52 shrink-0 glass border-r flex flex-col">
-          <div className="px-4 py-2.5 min-h-14 flex items-start border-b border-border gap-2.5">
-            <div className="shrink-0 mt-0.5"><OrgLogoBox org={org} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
-            <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
-              <span className="text-sm font-medium break-words inline-flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></span>
-              <span className="text-heading text-xs shrink-0 text-muted-foreground">Agency</span>
+        <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
+          <aside className="w-full h-full glass border-r flex flex-col">
+            <div className="px-4 py-2.5 min-h-14 flex items-start border-b border-border gap-2.5">
+              <div className="shrink-0 mt-0.5"><OrgLogoBox org={org} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
+              <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
+                <span className="text-sm font-medium break-words inline-flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></span>
+                <span className="text-heading text-xs shrink-0 text-muted-foreground">Agency</span>
+              </div>
             </div>
-          </div>
-          <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-            {NAV.map(item=>{
-              const NavIcon = item.Icon;
-              const count = item.id==="invitations" ? invitations.length : item.count;
-              return (
-                <button key={item.id} onClick={()=>setView(item.id)}
-                  className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors text-left",
-                    view===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  )}>
-                  <NavIcon size={15}/>{item.label}
-                  {!!count && <span className="ml-auto text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-full">{count}</span>}
-                </button>
-              );
-            })}
-          </nav>
-          <div className="px-3 py-3 border-t border-border">
-            <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-md hover:bg-secondary">
-              <LogOut size={13}/> Sign out
-            </button>
-            <div className="flex items-center justify-center gap-1.5 pt-3 opacity-40">
-              <DvureMark size={12}/><DvureSignature size={10}/>
+            <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+              {NAV.map(item=>{
+                const NavIcon = item.Icon;
+                const count = item.id==="invitations" ? invitations.length : item.count;
+                return (
+                  <button key={item.id} onClick={()=>selectView(item.id)}
+                    className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors text-left",
+                      view===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    )}>
+                    <NavIcon size={15}/>{item.label}
+                    {!!count && <span className="ml-auto text-[10px] font-mono bg-foreground text-primary-foreground px-1.5 py-0.5 rounded-full">{count}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="px-3 py-3 border-t border-border">
+              <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-md hover:bg-secondary">
+                <LogOut size={13}/> Sign out
+              </button>
+              <div className="flex items-center justify-center gap-1.5 pt-3 opacity-40">
+                <DvureMark size={12}/><DvureSignature size={10}/>
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        </MobileNavDrawer>
         {view === "settings" ? (
-          <AgencySettingsScreen onLogout={onLogout}/>
+          <AgencySettingsScreen onLogout={onLogout} onMenuClick={()=>setMobileNavOpen(true)}/>
         ) : (
-          <main className="flex-1 flex flex-col min-h-0">
-            <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`}/>
-            <div className="flex-1 overflow-auto p-6">
+          <main className="flex-1 flex flex-col min-h-0 min-w-0">
+            <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`} onMenuClick={()=>setMobileNavOpen(true)}/>
+            <div className="flex-1 overflow-auto p-4 md:p-6">
               {view === "invitations" && <InvitationsView invitations={invitations} onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
               {view === "submit" && <SubmitTalentView roster={roster} invitations={invitations} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
               {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
