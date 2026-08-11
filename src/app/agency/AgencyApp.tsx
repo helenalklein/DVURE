@@ -143,7 +143,7 @@ function InvitationsView({ invitations, onSubmitTalent }: { invitations: Invitat
       {invitations.length === 0 && (
         <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No campaign invitations yet.</div>
       )}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {invitations.map(inv=>{
           const closed = submissionIsClosed(inv);
           return (

@@ -11,7 +11,7 @@ import {
   User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
@@ -115,10 +115,15 @@ function BrandSidebar({ active, onNav, onLogout }: {
   const orgName = currentUser?.org ?? "";
   const { org: accountOrg, refreshIdentity } = useAuth();
   const canEditLogo = accountOrg?.accessLevel === "administrator";
+  const { open: mobileNavOpen, setOpen: setMobileNavOpen } = useMobileNav();
   async function handleLogoChange(dataUri: string) {
     if (!accountOrg) return;
     await updateOrgLogo(accountOrg.id, dataUri);
     await refreshIdentity();
+  }
+  function selectNav(v: GlobalView) {
+    onNav(v);
+    setMobileNavOpen(false);
   }
   // Pending-review items live under the nav item they actually come from —
   // a contract badge on Contracts, a payment badge on Payments — rather
@@ -131,24 +136,25 @@ function BrandSidebar({ active, onNav, onLogout }: {
     "contracts-global": OVERDUE_ACTIONS.filter(a=>a.type==="Contract").length,
   };
   return (
-    <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
+    <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
+    <aside className="w-full h-full glass border-r flex flex-col">
       <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2">
         <div className="shrink-0 mt-0.5"><OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
         <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
           <span className="text-sm font-medium break-words">{orgName}</span>
           <span className="text-heading text-xs shrink-0 text-muted-foreground">Brand</span>
         </div>
-        <button onClick={()=>onNav("campaigns")} title="Projects"
+        <button onClick={()=>selectNav("campaigns")} title="Projects"
           className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={13}/>
         </button>
       </div>
-      <nav className="flex-1 px-2 py-3 space-y-1.5">
+      <nav className="flex-1 px-2 py-3 space-y-1.5 overflow-y-auto">
         {GLOBAL_NAV.map(item => {
           const NavIcon = item.Icon;
           const badgeCount = navBadge[item.id] ?? 0;
           return (
-            <button key={item.id} onClick={() => onNav(item.id)}
+            <button key={item.id} onClick={() => selectNav(item.id)}
               className={cx("w-full flex items-center gap-3 px-3 py-3 rounded-lg border text-sm transition-colors text-left cursor-pointer",
                 active===item.id
                   ? "bg-secondary border-foreground/15 text-foreground font-medium shadow-sm"
@@ -166,7 +172,7 @@ function BrandSidebar({ active, onNav, onLogout }: {
         })}
       </nav>
       <div className="px-3 pb-1 border-t border-border pt-3">
-        <button onClick={()=>onNav("settings")}
+        <button onClick={()=>selectNav("settings")}
           className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left",
             active==="settings"?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}>
@@ -182,6 +188,7 @@ function BrandSidebar({ active, onNav, onLogout }: {
         </div>
       </div>
     </aside>
+    </MobileNavDrawer>
   );
 }
 
@@ -226,15 +233,21 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
   const orgName = currentUser?.org ?? "";
   const { org: accountOrg, refreshIdentity } = useAuth();
   const canEditLogo = accountOrg?.accessLevel === "administrator";
+  const { open: mobileNavOpen, setOpen: setMobileNavOpen } = useMobileNav();
   async function handleLogoChange(dataUri: string) {
     if (!accountOrg) return;
     await updateOrgLogo(accountOrg.id, dataUri);
     await refreshIdentity();
   }
+  function selectSection(s: CampaignSection) {
+    onSection(s);
+    setMobileNavOpen(false);
+  }
   const nav = campaignNavFor(campaign.type);
   const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
-    <aside className="w-52 shrink-0 glass border-r flex flex-col h-full">
+    <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
+    <aside className="w-full h-full glass border-r flex flex-col">
       <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2">
         <div className="shrink-0 mt-0.5"><OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
         <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
@@ -272,7 +285,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         {nav.map(item => {
           const NavIcon = item.Icon;
           return (
-            <button key={item.id} onClick={() => onSection(item.id)}
+            <button key={item.id} onClick={() => selectSection(item.id)}
               className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left",
                 section===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}>
@@ -297,6 +310,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         </button>
       </div>
     </aside>
+    </MobileNavDrawer>
   );
 }
 
@@ -1577,6 +1591,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onArchived?: () => void;
 }) {
   const { profile, org } = useAuth();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string|null>(null);
@@ -1808,8 +1823,8 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   return (
     <>
       <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined} isReal={!!realCampaignId} canArchive={canArchive} onArchive={openArchiveConfirm}/>
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name}
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+        <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name} onMenuClick={()=>setMobileNavOpen(true)}
           actions={viewingAgency ? <Btn variant="primary" size="sm" icon={<Send size={13}/>}
             onClick={()=>{ setViewingAgency(null); setFocusAgency(viewingAgency); onSection("collaboration"); }}>Message Agency</Btn> : undefined}/>
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -2388,6 +2403,7 @@ const OVERDUE_ACTIONS = [
 
 function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { campaigns: Campaign[]; openCampaign: (id: number) => void; onNewCampaign: () => void; updatedAt?: number }) {
   const currentUser = useCurrentUser();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [tab, setTab] = useState("active");
   const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
   // Assigned per the currently-visible set, not per campaign in isolation —
@@ -2395,8 +2411,8 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { 
   // AW26 Runway Presentation (id 5) deliberately gets no cover — direct request.
   const covers = assignCampaignCovers(filtered.map(c=>c.id).filter(id=>id!==5));
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`} updatedAt={updatedAt}/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`} updatedAt={updatedAt} onMenuClick={()=>setMobileNavOpen(true)}/>
       <div className="flex items-center justify-between gap-1 px-6 pt-5 border-b border-border shrink-0">
         <div className="flex items-center gap-1">
           {["active","drafts","archived"].map(t=>(
@@ -2411,13 +2427,13 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { 
           <Plus size={14}/> New Campaign
         </button>
       </div>
-      <div className="flex-1 overflow-auto p-6 space-y-5">
+      <div className="flex-1 overflow-auto p-4 md:p-6 space-y-5">
         {filtered.length===0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
             <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(c=>(
               <div key={c.id} className="glass-subtle border rounded-lg overflow-hidden cursor-pointer hover:border-foreground/40 hover:shadow-md transition-all group" onClick={()=>openCampaign(c.id)}>
                 {/* Cover — the brand's own view gets mood/editorial stock;
@@ -2470,6 +2486,7 @@ const CAMPAIGN_TYPES = ["Campaign","Runway","Event","Other"];
 
 function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: (realId: string) => void }) {
   const { profile, org } = useAuth();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [step, setStep] = useState(1);
   const [genders, setGenders] = useState(["Female"]);
   const [cats, setCats] = useState(["Editorial"]);
@@ -2544,7 +2561,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="New Campaign" sub={`Step ${step} of 4`} actions={<Btn variant="ghost" size="sm" onClick={onBack}><X size={13}/> Discard</Btn>}/>
+      <TopBar title="New Campaign" sub={`Step ${step} of 4`} onMenuClick={()=>setMobileNavOpen(true)} actions={<Btn variant="ghost" size="sm" onClick={onBack}><X size={13}/> Discard</Btn>}/>
       <div className="glass border-b px-6 py-4 shrink-0">
         <div className="max-w-xl mx-auto flex items-start">
           {STEPS.map((s,i)=>(
@@ -2665,9 +2682,10 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
 
 function GlobalContracts() {
   const currentUser = useCurrentUser();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Contracts" sub={`All contracts · ${currentUser?.org ?? ""}`} actions={<Btn variant="primary" size="sm" icon={<Plus size={13}/>}>Generate Contract</Btn>}/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Contracts" sub={`All contracts · ${currentUser?.org ?? ""}`} onMenuClick={()=>setMobileNavOpen(true)} actions={<Btn variant="primary" size="sm" icon={<Plus size={13}/>}>Generate Contract</Btn>}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-3 gap-3 mb-6">
           <Stat label="Active contracts" value="3" sub="2 awaiting signature"/>
@@ -2968,6 +2986,7 @@ function GlobalPayments() {
   const org = currentUser?.org ?? "";
   const meName = currentUser?.name ?? "";
   const { org: accountOrg } = useAuth();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [paymentsTab, setPaymentsTab] = useState<"payments"|"invoices">("payments");
   const [selectedInvoice, setSelectedInvoice] = useState<UnifiedInvoice | null>(null);
   const [showAddCard, setShowAddCard] = useState(false);
@@ -3102,8 +3121,8 @@ function GlobalPayments() {
   const goldBtn = "bg-gold hover:bg-gold/90 text-gold-foreground font-semibold transition-all shadow-md hover:shadow-lg";
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Payments" sub={`${org} · Payment methods and invoices`}/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Payments" sub={`${org} · Payment methods and invoices`} onMenuClick={()=>setMobileNavOpen(true)}/>
       <GateBanner org={accountOrg}/>
       {/* Tab bar: Payments | Invoices (invoices now includes every check/wire/cash payment too) */}
       <div className="bg-card border-b border-border px-6 flex items-center shrink-0">
@@ -3433,6 +3452,7 @@ function InvoicesPanel({ invoices, invoicesLoading, onChanged, selected, onSelec
 }) {
   const currentUser = useCurrentUser();
   const org = currentUser?.org ?? "";
+  const { setOpen: setMobileNavOpen } = useMobileNav();
 
   const all = useMemo(() => buildUnifiedInvoices(invoices), [invoices]);
   // "Outstanding" covers both untouched and partially-paid invoices —
@@ -3448,8 +3468,8 @@ function InvoicesPanel({ invoices, invoicesLoading, onChanged, selected, onSelec
   const paid = useMemo(() => all.filter(i => i.status === "paid"), [all]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Invoices" sub={`All invoices · ${org}`}/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Invoices" sub={`All invoices · ${org}`} onMenuClick={()=>setMobileNavOpen(true)}/>
       <div className="flex-1 overflow-auto p-6">
         {invoicesLoading && <div className="text-sm text-muted-foreground mb-4">Loading…</div>}
         {outstanding.length === 0 && !invoicesLoading ? (
@@ -3505,6 +3525,7 @@ const INBOX_MSGS = [
 type MessagingMode = "empty" | "compose" | "view";
 
 function MessagingScreen() {
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [messages, setMessages] = useState(INBOX_MSGS);
   const [mode, setMode] = useState<MessagingMode>("empty");
   const [selectedId, setSelectedId] = useState<number|null>(null);
@@ -3547,8 +3568,8 @@ function MessagingScreen() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Messaging" sub="Organization and agency communications"
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Messaging" sub="Organization and agency communications" onMenuClick={()=>setMobileNavOpen(true)}
         actions={<Btn variant="primary" size="sm" icon={<Edit3 size={13}/>} onClick={startNewMessage}>New Message</Btn>}/>
       <div className="flex-1 flex min-h-0">
         <div className="w-80 shrink-0 border-r border-border flex flex-col min-h-0">
@@ -3754,6 +3775,7 @@ function MessageDetailPane({ msg, allMessages, onReply, onToggleRead, onOpenRela
 // ─── DIRECTORY ───────────────────────────────────────────────────────────────
 
 function DirectoryScreen() {
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [filterAccess, setFilterAccess] = useState("all");
   const [search, setSearch] = useState("");
   const [showAddUser, setShowAddUser] = useState(false);
@@ -3779,8 +3801,8 @@ function DirectoryScreen() {
     .filter(u=> !q || [u.name,u.title,u.org,u.email].some(f=>f.toLowerCase().includes(q)));
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Directory" sub="Organization members and agency contacts"
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Directory" sub="Organization members and agency contacts" onMenuClick={()=>setMobileNavOpen(true)}
         actions={<button onClick={()=>setShowAddUser(true)} className="px-4 py-2 text-sm font-medium bg-foreground text-primary-foreground rounded-md hover:bg-[#2a2a2a] cursor-pointer flex items-center gap-2"><Plus size={13}/> Add User</button>}
       />
       <div className="flex-1 overflow-auto p-6">
@@ -3939,6 +3961,7 @@ function DirectoryScreen() {
 
 function ScheduleScreen({ campaigns, realIdShim, openCampaign }: { campaigns: Campaign[]; realIdShim: Map<number, string>; openCampaign: (id: number) => void }) {
   const { profile, org } = useAuth();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedToken, setFeedToken] = useState<string | null>(null);
@@ -3992,8 +4015,8 @@ function ScheduleScreen({ campaigns, realIdShim, openCampaign }: { campaigns: Ca
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Calendar" sub="Across every active campaign"/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Calendar" sub="Across every active campaign" onMenuClick={()=>setMobileNavOpen(true)}/>
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
       ) : (
@@ -4004,6 +4027,7 @@ function ScheduleScreen({ campaigns, realIdShim, openCampaign }: { campaigns: Ca
 }
 
 function Reports() {
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [running, setRunning] = useState<string|null>(null);
   const reportTypes = [
     { id:"ytd-finance",  label:"YTD Finance Report",       desc:"Total spend, invoices, payments, and budget utilization for the current fiscal year.", icon:BarChart2  },
@@ -4015,8 +4039,8 @@ function Reports() {
     { id:"declines",     label:"Decline Reasons Report",    desc:"Reasons talent was declined across all campaigns — identify patterns and brief alignment issues.", icon:X },
   ];
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Reports" sub="Generate reports from available data"/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Reports" sub="Generate reports from available data" onMenuClick={()=>setMobileNavOpen(true)}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl">
           <p className="text-sm text-muted-foreground mb-6">Generate reports from any data available in <DvureSignature size={13}/>. Select a report type and configure the date range to export.</p>
@@ -4057,6 +4081,7 @@ function Reports() {
 // ─── NETWORK ──────────────────────────────────────────────────────────────────
 
 function Network() {
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const [added, setAdded] = useState(["Vantage Model Management","Meridian Models"]);
   const agencies = [
     { name:"Vantage Model Management", loc:"New York · London · Paris", talent:420, bookings:8, spend:"$24,500", lastSub:"2 days ago",  responseRate:"94%", preferred:true  },
@@ -4065,8 +4090,8 @@ function Network() {
     { name:"Vector Models",             loc:"New York",                   talent:180, bookings:1, spend:"$3,600",  lastSub:"3 days ago",  responseRate:"91%", preferred:false },
   ];
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Network" sub="Agency relationships and partners"/>
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Network" sub="Agency relationships and partners" onMenuClick={()=>setMobileNavOpen(true)}/>
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-3 gap-3 mb-6">
           <Stat label="Agencies" value="4" sub="3 with active bookings"/>
@@ -4250,6 +4275,7 @@ function AuditLogPanel() {
 
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
   const user = useCurrentUser();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const isAdmin = user?.access === "administrator";
   const [tab, setTab] = useState<"profile"|"subscription"|"billing"|"security"|"org"|"notifications"|"audit">("profile");
   const [channels, setChannels] = useState<string[]>(["Email"]);
@@ -4269,17 +4295,17 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
     ...(isAdmin ? [["audit","Audit Log"] as [string,string]] : []),
   ];
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Settings" sub={`${user?.org ?? ""} · Account settings`}/>
-      <div className="flex-1 flex min-h-0">
-        <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <TopBar title="Settings" sub={`${user?.org ?? ""} · Account settings`} onMenuClick={()=>setMobileNavOpen(true)}/>
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        <div className="shrink-0 border-b md:border-b-0 md:border-r glass px-2 py-2 md:py-4 flex md:block gap-0.5 md:space-y-0.5 overflow-x-auto md:w-44">
           {TABS.map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id as typeof tab)}
-              className={cx("w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
+              className={cx("shrink-0 md:w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
                 tab===id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}>{label}</button>
           ))}
-          <div className="pt-4 border-t border-border mt-4">
+          <div className="hidden md:block pt-4 border-t border-border mt-4">
             <button onClick={onLogout} className="w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-2">
               <LogOut size={13}/> Sign out
             </button>
@@ -4288,7 +4314,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             </div>
           </div>
         </div>
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8">
           <div className={tab === "audit" ? "max-w-4xl" : "max-w-xl"}>
             {tab === "profile" && (
               <div className="space-y-5">
@@ -4499,13 +4525,14 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:org?.name ?? "", email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>handleGlobalNav("settings") }}>
+      <MobileNavProvider>
       <div className="h-screen flex bg-background overflow-hidden">
         {activeCampaignId != null ? (
           <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onArchived={async()=>{ await refetchCampaigns(); backToCampaigns(); }}/>
         ) : (
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onLogout={onLogout}/>
-            <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <main className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
               {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} updatedAt={campaignsUpdatedAt}/>}
               {view==="schedule"         && <ScheduleScreen campaigns={allCampaigns} realIdShim={realIdShim} openCampaign={openCampaign}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
@@ -4587,6 +4614,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
       </div>
+      </MobileNavProvider>
     </CurrentUserProvider>
   );
 }

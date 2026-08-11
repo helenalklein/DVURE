@@ -469,6 +469,25 @@ export function MobileNavDrawer({ open, onClose, children }: { open: boolean; on
   );
 }
 
+// For app shells with many sibling top-level views that each mount
+// their own TopBar (Brand's dozen-odd screens) — threading open/setOpen
+// through every one of those call sites as props isn't worth it when
+// they're all independent JSX children of the same shell, not a render
+// chain. One provider at the shell root, one hook wherever a TopBar or
+// sidebar needs it.
+const MobileNavContext = createContext<{ open: boolean; setOpen: (v: boolean) => void } | null>(null);
+
+export function MobileNavProvider({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return <MobileNavContext.Provider value={{ open, setOpen }}>{children}</MobileNavContext.Provider>;
+}
+
+export function useMobileNav() {
+  const ctx = useContext(MobileNavContext);
+  if (!ctx) throw new Error("useMobileNav must be used within MobileNavProvider");
+  return ctx;
+}
+
 // Drop into any screen that gates on verification/payment (Authorize
 // Payment, sending an invite, adding a teammate, etc.) — reads the same
 // getAccessGate() every gated action-handler checks before running, so
