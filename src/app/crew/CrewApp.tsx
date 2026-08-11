@@ -7,7 +7,7 @@ import {
   redeemCrewAccess, fetchMyCrewGrants, updateCrewPayee, updateMyProfile,
   type CrewAccessDetails,
 } from "../../lib/queries/crewAccess";
-import { fetchPendingConfirmationsForCrew } from "../../lib/queries/payments";
+import { fetchPendingConfirmationsForCrew, fetchInvoicesForCrewPayee, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 
 const CREW_DISCIPLINES: { key: string; label: string }[] = [
@@ -57,44 +57,53 @@ function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
   );
 }
 
-// Real, DB-derived — not tracked-yet fields dressed up as data. Every
-// job the crew member has been granted access to shows here so the
-// page isn't empty, but the payment column is an honest placeholder
-// until crew rates/payouts are actually wired up (no schema for it
-// yet — bookings today is model-only, see 0001's own table shape).
+// Real invoice history, not a placeholder — every invoice naming any
+// of this crew member's crew_payees rows as payee (fetchInvoicesForCrewPayee),
+// merged across campaigns the same way the pending-confirmation queue
+// already is.
+const INVOICE_STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: "default"|"active"|"pending"|"draft" }> = {
+  outstanding: { label: "Awaiting payment", variant: "draft" },
+  partially_paid: { label: "Partially paid", variant: "pending" },
+  paid: { label: "Paid", variant: "active" },
+};
+
 function PaymentsTab({ grants }: { grants: CrewAccessDetails[] | null }) {
-  if (grants === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
+  const [invoices, setInvoices] = useState<Invoice[] | null>(null);
 
   // A crew member can hold a distinct crew_payees row per campaign
   // (one per booking relationship, not one global identity) — merge
-  // the pending queue across every payee id from their grants rather
-  // than assuming a single one.
-  const payeeIds = [...new Set(grants.map(g => g.payeeId).filter((id): id is string => id != null))];
+  // both the pending queue and the full history across every payee id
+  // from their grants rather than assuming a single one.
+  const payeeIds = [...new Set((grants ?? []).map(g => g.payeeId).filter((id): id is string => id != null))];
+  const payeeKey = payeeIds.join(",");
+
+  useEffect(() => {
+    if (payeeIds.length === 0) { setInvoices([]); return; }
+    Promise.all(payeeIds.map(id => fetchInvoicesForCrewPayee(id))).then(results => setInvoices(results.flat()));
+  }, [payeeKey]);
 
   async function fetchPending() {
     const results = await Promise.all(payeeIds.map(id => fetchPendingConfirmationsForCrew(id)));
     return results.flat();
   }
 
+  if (grants === null || invoices === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
+
   return (
     <div>
       {payeeIds.length > 0 && <div className="mb-6"><PaymentConfirmQueue fetchPending={fetchPending}/></div>}
-      <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground mb-6 flex items-start gap-2">
-        <AlertCircle size={13} className="shrink-0 mt-0.5"/>
-        <div>Full payout history for crew isn't wired up yet — once it's built, your rate and payout status for each job will show here. Any payment already recorded for you will show above, awaiting your confirmation.</div>
-      </div>
 
-      {grants.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No jobs to show payment status for yet.</div>
+      {invoices.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No payment history yet — it'll show here once a brand records a payment against one of your jobs.</div>
       ) : (
         <div className="glass-subtle border rounded-md overflow-hidden">
-          {grants.map((g, i) => (
-            <div key={g.grantId} className={cx("px-4 py-3 flex items-center justify-between gap-3", i>0 && "border-t border-border")}>
+          {invoices.map((inv, i) => (
+            <div key={inv.id} className={cx("px-4 py-3 flex items-center justify-between gap-3", i>0 && "border-t border-border")}>
               <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{g.campaignName}</div>
-                <div className="text-xs text-muted-foreground">{g.brandName}</div>
+                <div className="text-sm font-medium truncate">{inv.campaignName}</div>
+                <div className="text-xs text-muted-foreground">${inv.acceptedAmount.toLocaleString()} of ${inv.totalAmount.toLocaleString()} confirmed</div>
               </div>
-              <Badge label="Not tracked yet" variant="default"/>
+              <Badge {...INVOICE_STATUS_BADGE[inv.status]}/>
             </div>
           ))}
         </div>

@@ -99,10 +99,15 @@ export async function voidInvoicePayment(paymentId: string, reason: string): Pro
 // invoice_line_items has three mutually-exclusive payee columns (0051) —
 // each embed is aliased so the row shape stays uniform regardless of
 // which one is actually set.
+// !inner (not a plain left join) is what lets fetchInvoicesForCrewPayee
+// below filter on this embed's payee_crew_payee_id — safe because
+// every invoice always has exactly one line item (0051's one-invoice-
+// per-payee design), so switching join type changes nothing for the
+// brand/id-scoped fetches that don't filter on it.
 const INVOICE_SELECT = `
   id, campaign_id, status, total_amount, created_at,
   campaigns(name),
-  invoice_line_items(
+  invoice_line_items!inner(
     payee_org_id, payee_model_id, payee_crew_payee_id,
     agency:organizations(id, name),
     model:model_profiles(id, full_name),
@@ -182,6 +187,22 @@ export async function fetchInvoiceById(invoiceId: string): Promise<Invoice | nul
     .maybeSingle();
   if (error || !data) return null;
   return mapRow(data as any);
+}
+
+// A crew member's full payment history — every invoice naming this
+// crew_payees row as payee, any status, not just the pending ones
+// (fetchPendingConfirmationsForCrew). A crew member can hold a
+// distinct crew_payees row per campaign, so the caller merges this
+// across every payeeId from their own grants the same way it already
+// does for the pending queue.
+export async function fetchInvoicesForCrewPayee(crewPayeeId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(INVOICE_SELECT)
+    .eq("invoice_line_items.payee_crew_payee_id", crewPayeeId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map(mapRow);
 }
 
 // One flat row per payment event awaiting this payee's confirmation —
