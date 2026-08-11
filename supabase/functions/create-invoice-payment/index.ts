@@ -56,6 +56,29 @@ Deno.serve(async (req) => {
       throw new Error("Only an org administrator can authorize a payment");
     }
 
+    // Same Stripe Customer create-setup-intent uses (organizations.
+    // stripe_customer_id) — attaching it here is what lets a brand's
+    // already-saved card actually show up as a selectable option in
+    // this charge's PaymentElement instead of only ever offering a
+    // blank "type a new card" form.
+    const { data: org, error: orgErr } = await supabaseAdmin
+      .from("organizations")
+      .select("id, name, stripe_customer_id")
+      .eq("id", membership.org_id)
+      .single();
+    if (orgErr || !org) throw new Error("Organization not found");
+
+    let customerId = org.stripe_customer_id as string | null;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ name: org.name, metadata: { org_id: org.id } });
+      customerId = customer.id;
+      const { error: updateErr } = await supabaseAdmin
+        .from("organizations")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", org.id);
+      if (updateErr) throw new Error(`Failed to save Stripe customer id: ${updateErr.message}`);
+    }
+
     // bookings_select already scopes this to the caller's own org
     // relationship, so any id in bookingIds the caller doesn't actually
     // have access to just silently won't come back here — not a 403,
@@ -126,9 +149,18 @@ Deno.serve(async (req) => {
       reservations.push({ invoiceId: invoiceId as string, group });
     }
 
+    // customer is attached so this charge shows up under the org's
+    // Stripe Customer and future work can surface it as a saved method
+    // — actually listing it as selectable in the PaymentElement needs a
+    // Customer Session too, which was tried and reverted here (real
+    // cuss_secret_... returned, PaymentElement accepted it without
+    // erroring, but the saved card still didn't appear as an option —
+    // needs more research, likely a payment-method allow_redisplay
+    // consent setting, before trying again).
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "usd",
+      customer: customerId,
       automatic_payment_methods: { enabled: true },
       metadata: { booking_count: String(bookings.length), campaign_id: campaignId },
     });

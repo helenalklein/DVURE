@@ -57,7 +57,7 @@ function ConfirmStep({ totalCents, onDone, onBack }: { totalCents: number; onDon
 
   return (
     <div className="space-y-4">
-      <PaymentElement />
+      <PaymentElement options={{ wallets: { link: "never" } }} />
       {error && <div className="text-xs text-[#C0392B]">{error}</div>}
       <div className="flex gap-2">
         <Btn variant="primary" disabled={!stripe || submitting} onClick={handleConfirm}>

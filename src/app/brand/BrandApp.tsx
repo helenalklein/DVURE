@@ -1003,7 +1003,10 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
 }) {
   const isSingle = payees.length === 1;
   const anyCrew = payees.some(p => p.bookingId == null);
-  const [method, setMethod] = useState<PaymentMethod>("check");
+  // Card is the default whenever it's actually available — falls back
+  // to check for a crew-only selection, since the Card pill is disabled
+  // there (crew has no booking to charge against).
+  const [method, setMethod] = useState<PaymentMethod>(anyCrew ? "check" : "card");
   const [note, setNote] = useState("");
   const [amountInput, setAmountInput] = useState(isSingle ? String(payees[0].remaining) : "");
   const [submitting, setSubmitting] = useState(false);
