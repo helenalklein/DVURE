@@ -2868,6 +2868,17 @@ function GlobalPayments() {
   const [selectedInvoice, setSelectedInvoice] = useState<UnifiedInvoice | null>(null);
   const [showAddCard, setShowAddCard] = useState(false);
   const [showAddBank, setShowAddBank] = useState(false);
+  // Authorize Payment — a cross-campaign shortcut into the same real
+  // RecordPaymentModal each campaign's own Payments tab uses. Picking an
+  // outstanding invoice here resolves its real OutstandingPayee (by
+  // matching Invoice.payeeKind/payeeId against the campaign's live
+  // fetchOutstandingPayees rows) so it's the exact same check/wire/cash/
+  // card flow, not a second implementation of it.
+  const [showAuthorize, setShowAuthorize] = useState(false);
+  const [authorizeInvoice, setAuthorizeInvoice] = useState<UnifiedInvoice | null>(null);
+  const [authorizePayee, setAuthorizePayee] = useState<OutstandingPayee | null>(null);
+  const [resolvingAuthorize, setResolvingAuthorize] = useState(false);
+  const [authorizeError, setAuthorizeError] = useState<string | null>(null);
 
   // Both check/wire/cash and card now go through the same real,
   // per-campaign Payments tab (fetchOutstandingPayees + RecordPaymentModal)
@@ -2902,6 +2913,31 @@ function GlobalPayments() {
   function openInvoice(inv: UnifiedInvoice) {
     setSelectedInvoice(inv);
     setPaymentsTab("invoices");
+  }
+
+  function closeAuthorize() {
+    setShowAuthorize(false);
+    setAuthorizeInvoice(null);
+    setAuthorizePayee(null);
+    setAuthorizeError(null);
+  }
+
+  async function selectAuthorizeTarget(inv: UnifiedInvoice) {
+    setAuthorizeInvoice(inv);
+    setAuthorizeError(null);
+    setResolvingAuthorize(true);
+    const payees = await fetchOutstandingPayees(inv.invoice.campaignId);
+    const match = payees.find(p =>
+      inv.invoice.payeeKind === "agency" ? p.agencyOrgId === inv.invoice.payeeId :
+      inv.invoice.payeeKind === "independent-model" ? p.modelId === inv.invoice.payeeId :
+      p.crewPayeeId === inv.invoice.payeeId
+    );
+    setResolvingAuthorize(false);
+    if (!match || match.remaining <= 0) {
+      setAuthorizeError("Couldn't find a live outstanding balance for this payee — try refreshing.");
+      return;
+    }
+    setAuthorizePayee(match);
   }
 
   // Quiet history column, not another call to action — most recent first.
@@ -3026,9 +3062,15 @@ function GlobalPayments() {
           {/* Header row */}
           <div className="flex items-center justify-between mb-3 shrink-0 gap-3">
             <h2 className="text-heading text-base shrink-0">Outstanding Invoices</h2>
-            <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer shrink-0" onClick={() => setPaymentsTab("invoices")}>
-              See all invoices →
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer" onClick={() => setPaymentsTab("invoices")}>
+                See all invoices →
+              </button>
+              <button onClick={()=>setShowAuthorize(true)} disabled={outstandingInvoices.length===0}
+                className={`px-4 py-2 rounded-md text-sm ${goldBtn} disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}>
+                Authorize Payment
+              </button>
+            </div>
           </div>
           {/* Same card as the Invoices tab — unpaid only */}
           <div className="flex-1 overflow-auto">
@@ -3131,6 +3173,42 @@ function GlobalPayments() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Authorize Payment — pick any outstanding invoice across every
+          campaign, then hand off to the real RecordPaymentModal scoped
+          to that one payee. */}
+      {showAuthorize && !authorizePayee && (
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+              <div>
+                <div className="text-heading text-sm">Authorize Payment</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Pick who you're paying — any campaign.</div>
+              </div>
+              <button onClick={closeAuthorize} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {authorizeError && <div className="text-xs text-red-500 px-2 pb-2">{authorizeError}</div>}
+              {outstandingInvoices.length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-6">No outstanding invoices.</div>
+              ) : outstandingInvoices.map(inv => (
+                <button key={inv.key} onClick={()=>selectAuthorizeTarget(inv)} disabled={resolvingAuthorize}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-md border border-border hover:border-foreground/40 hover:bg-secondary/50 transition-colors text-left disabled:opacity-50 cursor-pointer disabled:cursor-wait">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{inv.payee}</div>
+                    <div className="text-xs text-muted-foreground truncate">{inv.campaign}</div>
+                  </div>
+                  <div className="text-sm font-mono shrink-0">${inv.amount.toLocaleString()}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {authorizePayee && authorizeInvoice && (
+        <RecordPaymentModal campaignId={authorizeInvoice.invoice.campaignId} payees={[authorizePayee]}
+          onClose={closeAuthorize} onDone={()=>{ closeAuthorize(); reloadInvoices(); }}/>
       )}
 
     </div>
