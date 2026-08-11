@@ -1052,8 +1052,8 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
 
   return (
     <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-card border border-border rounded-md w-full max-w-md shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+      <div className="bg-card border border-border rounded-md w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div>
             <div className="text-heading text-sm">{cardClientSecret ? "Confirm payment" : "Record Payment"}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{payees.length} {payees.length===1?"person":"people"} · ${total.toLocaleString()} total</div>
@@ -1061,7 +1061,7 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={16}/></button>
         </div>
         {cardClientSecret ? (
-          <div className="p-5">
+          <div className="p-5 overflow-y-auto">
             <CardPaymentStep
               clientSecret={cardClientSecret}
               totalCents={Math.round(total * 100)}
@@ -1070,7 +1070,7 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
             />
           </div>
         ) : (
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto">
           {isSingle ? (
             <div>
               <FieldLabel>Amount</FieldLabel>
@@ -3112,15 +3112,9 @@ function GlobalPayments() {
           {/* Header row */}
           <div className="flex items-center justify-between mb-3 shrink-0 gap-3">
             <h2 className="text-heading text-base shrink-0">Outstanding Invoices</h2>
-            <div className="flex items-center gap-3 shrink-0">
-              <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer" onClick={() => setPaymentsTab("invoices")}>
-                See all invoices →
-              </button>
-              <button onClick={()=>setShowAuthorize(true)} disabled={outstandingInvoices.length===0}
-                className={`px-4 py-2 rounded-md text-sm ${goldBtn} disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}>
-                Authorize Payment
-              </button>
-            </div>
+            <button className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer shrink-0" onClick={() => setPaymentsTab("invoices")}>
+              See all invoices →
+            </button>
           </div>
           {/* Same card as the Invoices tab — unpaid only */}
           <div className="flex-1 overflow-auto">
@@ -3135,6 +3129,10 @@ function GlobalPayments() {
             )}
           </div>
 
+          <button onClick={()=>setShowAuthorize(true)} disabled={outstandingInvoices.length===0}
+            className={`w-full shrink-0 mt-4 py-3.5 rounded-md text-sm ${goldBtn} disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none`}>
+            Authorize Payment
+          </button>
         </div>
 
         {/* RIGHT — Recent Activity, small quiet column */}
@@ -3165,13 +3163,13 @@ function GlobalPayments() {
           treatment as CardPaymentStep, saved for reuse against future
           invoice payments. */}
       {showAddCard && (
-        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60]">
-          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
               <div className="text-heading text-sm">Add Payment Card</div>
               <button onClick={closeAddCard} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto">
               {addCardLoading && <div className="text-sm text-muted-foreground py-6 text-center">Preparing secure card form…</div>}
               {addCardError && !addCardLoading && (
                 <div className="text-xs text-[#C0392B] bg-[#C0392B]/10 border border-[#C0392B]/30 rounded-md px-3 py-2.5 mb-4">{addCardError}</div>
