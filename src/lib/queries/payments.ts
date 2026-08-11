@@ -176,6 +176,21 @@ export async function fetchInvoicesForBrand(brandOrgId: string): Promise<Invoice
   return (data as any[]).map(mapRow);
 }
 
+// Every invoice naming this agency as payee, any status — the agency's
+// own record of what campaigns still owe them vs. have paid out,
+// distinct from fetchAgencyPayouts (payouts.ts), which is the
+// line-item-level Stripe Connect transfer record rather than the
+// invoice-level accepted/outstanding balance.
+export async function fetchInvoicesForAgency(agencyOrgId: string): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(INVOICE_SELECT)
+    .eq("invoice_line_items.payee_org_id", agencyOrgId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map(mapRow);
+}
+
 // One invoice with its full payment trail — used to open the detail/
 // trail view directly from a spreadsheet row that already knows its
 // invoiceId (fetchOutstandingPayees) without refetching the whole list.

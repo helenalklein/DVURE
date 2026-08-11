@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
                   });
                   await supabaseAdmin
                     .from("invoice_line_items")
-                    .update({ stripe_transfer_id: transfer.id, transfer_status: "transferred" })
+                    .update({ stripe_transfer_id: transfer.id, transfer_status: "transferred", transferred_at: new Date().toISOString() })
                     .eq("id", line.id);
                 } catch (transferErr) {
                   console.error(`Transfer failed for invoice ${invoiceId}:`, transferErr);

@@ -10,7 +10,8 @@ import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
 import { fetchAgencyInvitations, type AgencyInvitation } from "../../lib/queries/agencyInvitations";
-import { fetchPendingConfirmationsForAgency } from "../../lib/queries/payments";
+import { fetchPendingConfirmationsForAgency, fetchInvoicesForAgency, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
+import { fetchAgencyPayouts, type AgencyPayout, type TransferStatus } from "../../lib/queries/payouts";
 import SubscriptionPanel from "../shared/SubscriptionPanel";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 
@@ -663,59 +664,83 @@ function AgencyMessagingView() {
   );
 }
 
+const TRANSFER_STATUS_BADGE: Record<TransferStatus, { label: string; variant: "default"|"active"|"pending"|"draft"|"warning" }> = {
+  pending: { label: "Awaiting payment", variant: "draft" },
+  awaiting_payee_onboarding: { label: "Awaiting your Connect onboarding", variant: "pending" },
+  transferred: { label: "Paid out", variant: "active" },
+  failed: { label: "Failed — needs attention", variant: "warning" },
+};
+
+const INVOICE_STATUS_BADGE: Record<InvoiceStatus, { label: string; variant: "default"|"active"|"pending"|"draft" }> = {
+  outstanding: { label: "Outstanding", variant: "draft" },
+  partially_paid: { label: "Partially paid", variant: "pending" },
+  paid: { label: "Paid", variant: "active" },
+};
+
 function PaymentsView() {
-  const currentUser = useCurrentUser();
   const { org } = useAuth();
-  const [tab, setTab] = useState<"receivable"|"invoices">("receivable");
-  const myBookings = BOOKINGS.filter(b=>b.agency===currentUser?.org);
+  const [tab, setTab] = useState<"payouts"|"invoices">("payouts");
+  const [payouts, setPayouts] = useState<AgencyPayout[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!org) return;
+    setLoading(true);
+    Promise.all([fetchAgencyPayouts(org.id), fetchInvoicesForAgency(org.id)]).then(([p, i]) => {
+      setPayouts(p);
+      setInvoices(i);
+      setLoading(false);
+    });
+  }, [org?.id]);
+
+  const now = new Date();
+  const pendingTotal = payouts.filter(p=>p.transferStatus==="pending"||p.transferStatus==="awaiting_payee_onboarding").reduce((s,p)=>s+p.payoutAmount,0);
+  const failedCount = payouts.filter(p=>p.transferStatus==="failed").length;
+  const paidThisMonth = payouts.filter(p=>p.transferStatus==="transferred" && p.transferredAt && new Date(p.transferredAt).getMonth()===now.getMonth() && new Date(p.transferredAt).getFullYear()===now.getFullYear()).reduce((s,p)=>s+p.payoutAmount,0);
 
   return (
     <div className="max-w-2xl space-y-4">
       {org && <PaymentConfirmQueue fetchPending={()=>fetchPendingConfirmationsForAgency(org.id)}/>}
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Pending payout" value={myBookings.filter(b=>b.paymentStatus==="pending").length}/>
-        <Stat label="Processing" value={myBookings.filter(b=>b.paymentStatus==="processing").length}/>
-        <Stat label="Paid this month" value={myBookings.filter(b=>b.paymentStatus==="paid").length}/>
+        <Stat label="Pending payout" value={`$${pendingTotal.toLocaleString()}`}/>
+        <Stat label="Needs attention" value={failedCount}/>
+        <Stat label="Paid this month" value={`$${paidThisMonth.toLocaleString()}`}/>
       </div>
       <div className="flex items-center gap-1 border-b border-border">
-        {(["receivable","invoices"] as const).map(t=>(
+        {(["payouts","invoices"] as const).map(t=>(
           <button key={t} onClick={()=>setTab(t)}
             className={cx("px-4 py-2.5 text-sm capitalize border-b-2 -mb-px transition-colors",
               tab===t?"border-foreground text-foreground font-medium":"border-transparent text-muted-foreground hover:text-foreground"
-            )}>{t==="receivable"?"Commission Payouts":"Invoices Sent"}</button>
+            )}>{t==="payouts"?"Payouts":"Invoices"}</button>
         ))}
       </div>
-      {tab==="receivable" && (
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      ) : tab==="payouts" ? (
         <div className="space-y-2">
-          {myBookings.map(b=>{
-            const bd = bookingBreakdown(b);
-            return (
-              <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="text-sm font-semibold">{b.model}</div>
-                  <div className="text-xs text-muted-foreground">{b.campaign} · {b.brand}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] text-muted-foreground font-mono">Your commission ({b.agencyPct}%)</div>
-                  <div className="font-mono text-sm font-semibold">${bd.agencyFee.toLocaleString()}</div>
-                </div>
-                <Badge label={b.paymentStatus==="paid"?"Paid":b.paymentStatus==="processing"?"Processing":"Pending"} variant={b.paymentStatus==="paid"?"active":b.paymentStatus==="processing"?"pending":"draft"}/>
+          {payouts.length===0 && <div className="text-sm text-muted-foreground">No payouts yet.</div>}
+          {payouts.map(p=>(
+            <div key={p.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{p.campaignName}</div>
+                <div className="text-xs text-muted-foreground">{p.brandName}</div>
               </div>
-            );
-          })}
+              <div className="font-mono text-sm font-semibold shrink-0">${p.payoutAmount.toLocaleString()}</div>
+              <Badge {...TRANSFER_STATUS_BADGE[p.transferStatus]}/>
+            </div>
+          ))}
         </div>
-      )}
-      {tab==="invoices" && (
+      ) : (
         <div className="space-y-2">
-          {myBookings.map(b=>(
-            <div key={b.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
-              <div className="flex-1">
-                <div className="text-sm font-semibold">{b.campaign}</div>
-                <div className="text-xs text-muted-foreground">{b.model} · Shoot {b.shootDate}</div>
+          {invoices.length===0 && <div className="text-sm text-muted-foreground">No invoices yet.</div>}
+          {invoices.map(inv=>(
+            <div key={inv.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{inv.campaignName}</div>
+                <div className="text-xs text-muted-foreground">${inv.acceptedAmount.toLocaleString()} of ${inv.totalAmount.toLocaleString()} confirmed</div>
               </div>
-              <Btn variant={b.paymentStatus==="pending"?"primary":"outline"} size="sm" disabled={b.paymentStatus!=="pending"}>
-                {b.paymentStatus==="pending"?"Send Invoice":"Sent"}
-              </Btn>
+              <Badge {...INVOICE_STATUS_BADGE[inv.status]}/>
             </div>
           ))}
         </div>
