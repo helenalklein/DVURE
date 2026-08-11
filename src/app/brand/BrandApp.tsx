@@ -209,10 +209,10 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
   return withCallSheet.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, onArchive }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, canArchive, onArchive }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
   onBack: () => void; onNewCampaign: () => void; onHome: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
-  isReal?: boolean; onArchive?: () => void;
+  isReal?: boolean; canArchive?: boolean; onArchive?: () => void;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
@@ -253,7 +253,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
             ? <span className="text-urgent font-semibold">Closed</span>
             : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
         </div>
-        {campaign.status!=="archived" && onArchive && (
+        {campaign.status!=="archived" && onArchive && (!isReal || canArchive) && (
           <button onClick={onArchive} disabled={!isReal} title={isReal?undefined:"Demo campaigns can't be archived"}
             className="w-full mt-2.5 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-muted-foreground border border-dashed border-border rounded-md hover:border-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground">
             <Check size={11}/> Mark Complete & Archive
@@ -1138,23 +1138,15 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
 // payment history at all (pending/partial/paid) opens the full trail
 // via InvoiceDetailModal — that's also where a follow-up or partial
 // payment gets added, and where a still-pending one gets voided.
-function CampaignPaymentsTab({ realCampaignId }: { realCampaignId: string | null }) {
-  const [payees, setPayees] = useState<OutstandingPayee[]>([]);
-  const [loading, setLoading] = useState(true);
+function CampaignPaymentsTab({ realCampaignId, payees, loading, reload }: {
+  realCampaignId: string | null; payees: OutstandingPayee[]; loading: boolean; reload: () => Promise<void>;
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [payModal, setPayModal] = useState<OutstandingPayee[] | null>(null);
   const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  async function reload() {
-    if (!realCampaignId) return;
-    setLoading(true);
-    setPayees(await fetchOutstandingPayees(realCampaignId));
-    setLoading(false);
-    setSelected(new Set());
-  }
-
-  useEffect(() => { reload(); }, [realCampaignId]);
+  useEffect(() => { setSelected(new Set()); }, [payees]);
 
   async function openDetail(invoiceId: string) {
     setDetailLoading(true);
@@ -1522,6 +1514,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [bookForm, setBookForm] = useState<Record<number, { dayRate: string; days: string; shootDate: string }>>({});
   const [bookSaving, setBookSaving] = useState(false);
   const [bookError, setBookError] = useState<string | null>(null);
+  // Lifted out of CampaignPaymentsTab so the sidebar's Mark Complete &
+  // Archive gate (due date passed + everyone paid) sees the same live
+  // payment data the Payments tab itself does, without a second fetch
+  // path drifting out of sync.
+  const [payees, setPayees] = useState<OutstandingPayee[]>([]);
+  const [payeesLoading, setPayeesLoading] = useState(true);
 
   const campaign = campaigns.find(c=>c.id===campaignId);
 
@@ -1532,10 +1530,18 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     setComments(await fetchSubmissionComments(realShim));
   }
 
+  async function reloadPayees(realId: string | null) {
+    if (!realId) { setPayeesLoading(false); return; }
+    setPayeesLoading(true);
+    setPayees(await fetchOutstandingPayees(realId));
+    setPayeesLoading(false);
+  }
+
   useEffect(() => {
     let active = true;
     const realId = realIdShim.get(campaignId) ?? null;
     setRealCampaignId(realId);
+    reloadPayees(realId);
     if (!realId) return; // no real campaign for this id — mock data already seeded above
     (async () => {
       const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
@@ -1548,6 +1554,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     })();
     return () => { active = false; };
   }, [campaignId, realIdShim]);
+
+  // Crew rates (Call Sheet) and manual/card payments can change what's
+  // owed without going through this component's own mutation paths —
+  // re-check the archive gate's inputs on every section switch so a
+  // rate edited on Call Sheet, then viewed from elsewhere, isn't stale.
+  useEffect(() => { reloadPayees(realCampaignId); }, [section]);
 
   if (!campaign) {
     return (
@@ -1664,6 +1676,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     persistingSetTalent(prev => prev.map(t => ids.includes(t.id) ? { ...t, stage: "booked" as SubmissionStage } : t));
     setBookSaving(false);
     setBookModal(null);
+    // A fresh booking is a new unpaid payee — refresh so the archive
+    // gate (due date passed + everyone paid) doesn't stay stale and
+    // show Mark Complete & Archive as available when it no longer is.
+    reloadPayees(realCampaignId);
   }
 
   function handlePostComment(talentId: number, text: string) {
@@ -1695,10 +1711,20 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   };
 
   const sectionLabel = campaignNavFor(campaign.type).find(n=>n.id===section)?.label ?? "";
+  // Mark Complete & Archive only becomes available once the shoot date
+  // has passed AND every payee on this campaign is fully paid — it's a
+  // live derived value (not a one-time check), so it appears the moment
+  // the later of those two conditions becomes true, e.g. right after the
+  // final payment is confirmed. Dismissing the confirm modal doesn't
+  // hide it again; visibility is driven purely by this data, not by
+  // whether the user already saw the modal once.
+  const dueDatePassed = !!campaign.dueDateISO && new Date(campaign.dueDateISO) < new Date();
+  const allPaid = !payeesLoading && payees.every(p => p.status === "paid");
+  const canArchive = dueDatePassed && allPaid;
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined} isReal={!!realCampaignId} onArchive={openArchiveConfirm}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined} isReal={!!realCampaignId} canArchive={canArchive} onArchive={openArchiveConfirm}/>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name}
           actions={viewingAgency ? <Btn variant="primary" size="sm" icon={<Send size={13}/>}
@@ -1803,7 +1829,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="contracts" && <ContractsTab realCampaignId={realCampaignId} talent={talent} shim={shim} profileId={profile?.id}/>}
 
-          {section==="payments" && <CampaignPaymentsTab realCampaignId={realCampaignId}/>}
+          {section==="payments" && <CampaignPaymentsTab realCampaignId={realCampaignId} payees={payees} loading={payeesLoading} reload={()=>reloadPayees(realCampaignId)}/>}
 
           {section==="activity" && (
             <div className="flex-1 overflow-auto p-6">
