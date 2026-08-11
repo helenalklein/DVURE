@@ -100,7 +100,7 @@ export function CrewTab({ campaignId }: { campaignId: string; campaignName: stri
         {CALL_SHEET_CATEGORIES.map((cat) => (
           <div key={cat.key}>
             <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-2">{cat.label}</div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {cat.roles.map((r) => {
                 const a = assignments.get(r.key);
                 const editable = canEditRole(r.key);
@@ -211,7 +211,7 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
         {CALL_SHEET_CATEGORIES.map((cat) => (
           <div key={cat.key}>
             <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-2">{cat.label}</div>
-            <div className="grid grid-cols-4 gap-2 print:grid-cols-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 print:grid-cols-4 gap-2">
               {cat.roles.map((r) => {
                 const a = assignments.get(r.key);
                 const isLead = !!a?.isDepartmentLead;

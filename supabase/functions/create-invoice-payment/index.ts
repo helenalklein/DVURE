@@ -147,33 +147,38 @@ Deno.serve(async (req) => {
       groups.set(key, group);
     }
 
-    const grossTotalCents = bookings.reduce((sum, b) => sum + Math.round(Number(b.day_rate) * Number(b.days) * 100), 0);
-    if (grossTotalCents <= 0) throw new Error("Invoice total must be greater than zero");
-    // The fee is on top of what's owed to payees, not carved out of it
-    // — invoices stay at gross (below), only the actual Stripe charge
-    // is gross + fee.
-    const feePct = PLATFORM_FEE_PCT[chargeMethod as "ach" | "card"];
-    const feeCents = Math.round(grossTotalCents * feePct / 100);
-    const totalCents = grossTotalCents + feeCents;
-
-    // Reserve every payee's invoice — and validate the remaining
-    // balance actually covers this charge — before Stripe is ever
-    // called, so a rejection here never leaves a live, unusable
-    // PaymentIntent behind.
-    const reservations: { invoiceId: string; group: PayeeGroup }[] = [];
+    // Reserve every payee's invoice first — reserve_invoice_for_card_payment
+    // is the sole source of truth for what's actually still owed (never
+    // just the raw booking gross: a booking already partially paid by
+    // check before this charge started owes less than its full value,
+    // and the RPC is the only place that knows the real remaining
+    // balance). Reserving before Stripe is ever called also means a
+    // rejection here never leaves a live, unusable PaymentIntent behind.
+    const reservations: { invoiceId: string; group: PayeeGroup; remainingCents: number }[] = [];
     for (const group of groups.values()) {
-      const groupTotalCents = group.bookings.reduce((sum, b) => sum + b.grossCents, 0);
-      const { data: invoiceId, error: reserveErr } = await supabaseUser.rpc("reserve_invoice_for_card_payment", {
+      const groupGrossCents = group.bookings.reduce((sum, b) => sum + b.grossCents, 0);
+      const { data, error: reserveErr } = await supabaseUser.rpc("reserve_invoice_for_card_payment", {
         p_campaign_id: campaignId,
-        p_invoice_total: groupTotalCents / 100,
-        p_amount: groupTotalCents / 100,
+        p_invoice_total: groupGrossCents / 100,
         p_agency_org_id: group.agencyOrgId,
         p_model_id: group.modelId,
         p_crew_payee_id: null,
       });
-      if (reserveErr || !invoiceId) throw new Error(reserveErr?.message ?? "Could not reserve an invoice for this payment");
-      reservations.push({ invoiceId: invoiceId as string, group });
+      if (reserveErr || !data || data.length === 0) throw new Error(reserveErr?.message ?? "Could not reserve an invoice for this payment");
+      const row = data[0] as { invoice_id: string; remaining_amount: number };
+      reservations.push({ invoiceId: row.invoice_id, group, remainingCents: Math.round(Number(row.remaining_amount) * 100) });
     }
+
+    // The fee is on top of what's owed to payees, not carved out of it
+    // — invoices stay at gross, only the actual Stripe charge is
+    // gross + fee. "Gross" here is each group's real remaining balance
+    // (above), not the raw booking value, so a prior manual payment on
+    // the same invoice is never charged again.
+    const grossTotalCents = reservations.reduce((sum, r) => sum + r.remainingCents, 0);
+    if (grossTotalCents <= 0) throw new Error("Invoice total must be greater than zero");
+    const feePct = PLATFORM_FEE_PCT[chargeMethod as "ach" | "card"];
+    const feeCents = Math.round(grossTotalCents * feePct / 100);
+    const totalCents = grossTotalCents + feeCents;
 
     // customer is attached so this charge shows up under the org's
     // Stripe Customer — actually listing a saved card as selectable in
@@ -203,15 +208,25 @@ Deno.serve(async (req) => {
       },
     });
 
-    const stagingRows = reservations.flatMap(({ invoiceId, group }) =>
-      group.bookings.map((b) => ({
+    // Scaled to the group's real remaining balance, not each booking's
+    // full original value — equal to the raw value whenever nothing's
+    // been paid against this invoice yet (the common case), reduced
+    // proportionally across a group's bookings when a prior manual
+    // payment already covered part of it. Keeps invoice_payments.amount
+    // (stripe-webhook sums these staged rows) matching what Stripe
+    // actually charged, instead of double-counting the portion already
+    // collected by another method.
+    const stagingRows = reservations.flatMap(({ invoiceId, group, remainingCents }) => {
+      const groupGrossCents = group.bookings.reduce((sum, b) => sum + b.grossCents, 0);
+      const scale = remainingCents / groupGrossCents;
+      return group.bookings.map((b) => ({
         stripe_payment_intent_id: paymentIntent.id,
         invoice_id: invoiceId,
         booking_id: b.bookingId,
-        gross_amount: b.grossCents / 100,
-        payout_amount: b.payoutCents / 100,
-      }))
-    );
+        gross_amount: Math.round(b.grossCents * scale) / 100,
+        payout_amount: Math.round(b.payoutCents * scale) / 100,
+      }));
+    });
     const { error: stagingErr } = await supabaseAdmin.from("invoice_card_payment_lines").insert(stagingRows);
     if (stagingErr) throw new Error(`Failed to stage payment: ${stagingErr.message}`);
 
