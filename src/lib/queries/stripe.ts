@@ -61,3 +61,26 @@ export async function listPaymentMethods(): Promise<{ cards: SavedCard[]; error:
   if (error) return { cards: [], error: await functionErrorMessage(error) };
   return { cards: data?.cards ?? [], error: null };
 }
+
+export interface SubscriptionPlan {
+  priceId: string;
+  productName: string;
+  unitAmount: number | null;
+  currency: string;
+  interval: string | null;
+}
+
+export async function listSubscriptionPlan(): Promise<{ plan: SubscriptionPlan | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<{ plan: SubscriptionPlan | null }>("list-subscription-plan");
+  if (error) return { plan: null, error: await functionErrorMessage(error) };
+  return { plan: data?.plan ?? null, error: null };
+}
+
+export async function createSubscription(paymentMethodId: string): Promise<{ status: string | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke<{ status: string }>(
+    "create-subscription",
+    { body: { paymentMethodId } }
+  );
+  if (error) return { status: null, error: await functionErrorMessage(error) };
+  return { status: data?.status ?? null, error: null };
+}

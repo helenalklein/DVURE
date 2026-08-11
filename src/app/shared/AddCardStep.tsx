@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Check, Loader2 } from "lucide-react";
-import { Btn } from "../shared/ui";
+import { Btn } from "./ui";
 import { getStripe } from "../../lib/stripeClient";
 
 // Same shape as CardPaymentStep — mounts inside <Elements> against a
 // SetupIntent's clientSecret instead of a PaymentIntent's, so it's
 // confirmSetup here rather than confirmPayment. No amount to show; this
-// only ever saves the card, it never moves money.
+// only ever saves the card, it never moves money. Shared between the
+// brand Payment Cards flow and the (brand/agency) subscription flow.
 function ConfirmStep({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const stripe = useStripe();
   const elements = useElements();

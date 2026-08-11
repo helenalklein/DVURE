@@ -11,10 +11,11 @@ import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
 import { fetchAgencyInvitations, type AgencyInvitation } from "../../lib/queries/agencyInvitations";
 import { fetchPendingConfirmationsForAgency, confirmInvoicePayment, type PendingConfirmation, type ManualPaymentMethod } from "../../lib/queries/payments";
+import SubscriptionPanel from "../shared/SubscriptionPanel";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
-type View = "invitations" | "submit" | "roster" | "payments" | "messaging";
+type View = "invitations" | "submit" | "roster" | "payments" | "messaging" | "settings";
 
 const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
   { id:"invitations", label:"Campaign Invitations", Icon:Inbox                 },
@@ -23,6 +24,73 @@ const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
   { id:"payments",     label:"Payments",             Icon:CreditCard            },
   { id:"messaging",    label:"Messaging",            Icon:MessageSquare, count:1 },
 ];
+
+// Agency's own Settings — leaner than the brand's (no Billing/Security/
+// Org/Notifications/Audit placeholders that were never real), just
+// Profile plus the one real, working surface: the pilot subscription.
+function AgencySettingsScreen({ onLogout }: { onLogout: () => void }) {
+  const { profile, org } = useAuth();
+  const isAdmin = org?.accessLevel === "administrator";
+  const [tab, setTab] = useState<"profile"|"subscription">("profile");
+  const TABS: [string,string][] = [
+    ["profile","Profile"],
+    ...(isAdmin ? [["subscription","Subscription"] as [string,string]] : []),
+  ];
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <TopBar title="Settings" sub={`${org?.name ?? ""} · Account settings`}/>
+      <div className="flex-1 flex min-h-0">
+        <div className="w-44 shrink-0 border-r glass px-2 py-4 space-y-0.5">
+          {TABS.map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id as typeof tab)}
+              className={cx("w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer transition-colors",
+                tab===id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
+              )}>{label}</button>
+          ))}
+          <div className="pt-4 border-t border-border mt-4">
+            <button onClick={onLogout} className="w-full text-left px-3 py-2 text-sm rounded-md cursor-pointer text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-2">
+              <LogOut size={13}/> Sign out
+            </button>
+            <div className="px-3 pt-3 text-[10px] text-muted-foreground leading-relaxed">
+              Need help? <span className="text-foreground font-medium">support@dvure.com</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-8">
+          <div className="max-w-xl">
+            {tab === "profile" && (
+              <div className="space-y-5">
+                <div><h2 className="text-heading text-base mb-0.5">Profile</h2><p className="text-sm text-muted-foreground">Your personal account details.</p></div>
+                {!isAdmin && (
+                  <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
+                    Your title is set by your organization's administrator and can't be changed here.
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <div>
+                    <FieldLabel>Name</FieldLabel>
+                    <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm">{profile?.fullName}</div>
+                  </div>
+                  <div>
+                    <FieldLabel>Organization</FieldLabel>
+                    <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{org?.name}</div>
+                  </div>
+                  <TextInput label="Email" type="email" placeholder="you@agency.com" defaultValue={profile?.email}/>
+                </div>
+              </div>
+            )}
+            {tab === "subscription" && (
+              <div className="space-y-5">
+                <div><h2 className="text-heading text-base mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your DVURE Agency subscription.</p></div>
+                <SubscriptionPanel/>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Mock-only invitations — AW25 has no realCampaignId attached since its
 // real counterpart is matched by name (findCampaignIdByName) for
@@ -733,7 +801,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:agencyName, email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic" }}>
+    <CurrentUserProvider user={{ name:profile?.fullName ?? "", title:org?.title ?? "", org:agencyName, email:profile?.email ?? "", phone:profile?.phone ?? "", access:org?.accessLevel ?? "basic", onSettings:()=>setView("settings") }}>
       <div className="h-screen flex bg-background overflow-hidden">
         <aside className="w-52 shrink-0 glass border-r flex flex-col">
           <div className="px-4 py-2.5 min-h-14 flex items-start border-b border-border gap-2.5">
@@ -767,16 +835,20 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
             </div>
           </div>
         </aside>
-        <main className="flex-1 flex flex-col min-h-0">
-          <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`}/>
-          <div className="flex-1 overflow-auto p-6">
-            {view === "invitations" && <InvitationsView invitations={invitations} onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
-            {view === "submit" && <SubmitTalentView roster={roster} invitations={invitations} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
-            {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
-            {view === "payments" && <PaymentsView/>}
-            {view === "messaging" && <AgencyMessagingView/>}
-          </div>
-        </main>
+        {view === "settings" ? (
+          <AgencySettingsScreen onLogout={onLogout}/>
+        ) : (
+          <main className="flex-1 flex flex-col min-h-0">
+            <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`}/>
+            <div className="flex-1 overflow-auto p-6">
+              {view === "invitations" && <InvitationsView invitations={invitations} onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
+              {view === "submit" && <SubmitTalentView roster={roster} invitations={invitations} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
+              {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
+              {view === "payments" && <PaymentsView/>}
+              {view === "messaging" && <AgencyMessagingView/>}
+            </div>
+          </main>
+        )}
       </div>
     </CurrentUserProvider>
   );

@@ -13,6 +13,7 @@ import {
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
+import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
@@ -23,7 +24,8 @@ import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../l
 import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
 import { createInvoicePayment, createSetupIntent, listPaymentMethods, type SavedCard } from "../../lib/queries/stripe";
 import CardPaymentStep from "./CardPaymentStep";
-import AddCardStep from "./AddCardStep";
+import AddCardStep from "../shared/AddCardStep";
+import SubscriptionPanel from "../shared/SubscriptionPanel";
 import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries/outstandingPayments";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
@@ -387,7 +389,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           <span className={cx("font-semibold", daysRemaining<=3?"text-foreground":"text-muted-foreground")}>{daysRemaining} days left</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {realCampaignId && (
+          {realCampaignId && INDEPENDENT_MODELS_ENABLED && (
             <button onClick={()=>setShowIndependentModal(true)}
               className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
               <Plus size={10}/> Add Independent Model
@@ -678,7 +680,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         </div>
       )}
 
-      {showIndependentModal && realCampaignId && (
+      {INDEPENDENT_MODELS_ENABLED && showIndependentModal && realCampaignId && (
         <AddIndependentModelModal campaignId={realCampaignId}
           onClose={()=>setShowIndependentModal(false)}
           onAdded={()=>{ setShowIndependentModal(false); onIndependentAdded?.(); }}/>
@@ -4232,17 +4234,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
             {tab === "subscription" && (
               <div className="space-y-5">
                 <div><h2 className="text-heading text-base mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your <DvureWordmark size={11}/> Brand subscription.</p></div>
-                <div className="glass-subtle border rounded-md overflow-hidden">
-                  <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                    <div><div className="text-sm font-semibold"><DvureWordmark size={11}/> Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
-                    <Badge label="Active Trial" variant="success"/>
-                  </div>
-                  <div className="px-5 py-4 space-y-3 text-sm">
-                    {[["Plan","Brand Professional"],["Monthly price","$99 / month"],["Trial ends","July 3, 2026"]].map(([k,v])=>(
-                      <div key={k} className="flex justify-between border-b border-border last:border-0 pb-3 last:pb-0"><span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span></div>
-                    ))}
-                  </div>
-                </div>
+                <SubscriptionPanel/>
               </div>
             )}
             {tab === "billing" && (

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Mail, Lock, Building, Users, User, X, ChevronLeft, ChevronRight, Check, Sparkles, AlertCircle } from "lucide-react";
 import { FieldLabel, Modal, Btn, TextInput } from "./shared/ui";
 import { useAuth } from "./shared/auth";
+import { INDEPENDENT_MODELS_ENABLED } from "./shared/featureFlags";
 import dvureMarkD from "../assets/dvure-mark-d.png";
 import dvureMarkWordmark from "../assets/dvure-mark-wordmark.png";
 
@@ -280,17 +281,19 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
               <div>Repped by an agency? They add you to DVURE directly — contact them to get connected.</div>
               <div>Artists and production crew get a real login once a production sends their first access — sign in above the same way, no separate portal.</div>
             </div>
-            <div className="pt-2 border-t border-border">
-              <button onClick={()=>{ setModelInfoOpen(false); setIndependentOpen(true); }}
-                className="text-xs text-foreground font-medium hover:underline cursor-pointer">
-                Not repped by an agency? Sign up as an independent model →
-              </button>
-            </div>
+            {INDEPENDENT_MODELS_ENABLED && (
+              <div className="pt-2 border-t border-border">
+                <button onClick={()=>{ setModelInfoOpen(false); setIndependentOpen(true); }}
+                  className="text-xs text-foreground font-medium hover:underline cursor-pointer">
+                  Not repped by an agency? Sign up as an independent model →
+                </button>
+              </div>
+            )}
           </div>
         </Modal>
       )}
 
-      {independentOpen && (
+      {INDEPENDENT_MODELS_ENABLED && independentOpen && (
         <Modal onClose={closeIndependent} maxWidth="max-w-sm">
           {independentSuccess ? (
             <div className="p-6 space-y-4 text-center">
