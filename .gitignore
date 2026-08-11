@@ -6,3 +6,14 @@ dist/
 *.log
 .vite/
 supabase/.temp/
+
+# Capacitor native build artifacts — the ios/ and android/ projects
+# themselves are checked in (standard Capacitor convention), just not
+# their build output.
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
