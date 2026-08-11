@@ -187,7 +187,7 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
       <div className="h-screen flex bg-background overflow-hidden">
         <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
           <aside className="w-full h-full glass border-r flex flex-col">
-            <div className="px-4 h-14 flex items-center border-b border-border gap-2.5">
+            <div className="px-4 min-h-14 flex items-center border-b border-border gap-2.5" style={{ paddingTop: "env(safe-area-inset-top)" }}>
               <div className="w-9 h-9 bg-gold rounded-full flex items-center justify-center shrink-0">
                 <span className="text-gold-foreground text-xs font-bold">{initials}</span>
               </div>

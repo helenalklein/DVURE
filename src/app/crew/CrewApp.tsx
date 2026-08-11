@@ -197,7 +197,7 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+      <div className="border-b border-border px-6 py-4 flex items-center justify-between" style={{ paddingTop: "calc(1rem + env(safe-area-inset-top))" }}>
         <DvureSignature size={16}/>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -298,7 +298,7 @@ function EmergencyAccessView({ accessCode }: { accessCode: string }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+      <div className="border-b border-border px-6 py-4 flex items-center justify-between" style={{ paddingTop: "calc(1rem + env(safe-area-inset-top))" }}>
         <DvureSignature size={16}/>
         <div className="text-xs text-muted-foreground font-mono uppercase tracking-widest">Emergency Access</div>
       </div>

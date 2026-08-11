@@ -138,7 +138,7 @@ function BrandSidebar({ active, onNav, onLogout }: {
   return (
     <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
     <aside className="w-full h-full glass border-r flex flex-col">
-      <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2">
+      <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2" style={{ paddingTop: "calc(0.625rem + env(safe-area-inset-top))" }}>
         <div className="shrink-0 mt-0.5"><OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
         <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
           <span className="text-sm font-medium break-words">{orgName}</span>
@@ -248,13 +248,13 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
   return (
     <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
     <aside className="w-full h-full glass border-r flex flex-col">
-      <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2">
+      <div className="px-3 py-2.5 min-h-14 flex items-start border-b border-border gap-2" style={{ paddingTop: "calc(0.625rem + env(safe-area-inset-top))" }}>
         <div className="shrink-0 mt-0.5"><OrgLogoBox org={accountOrg} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
         <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
           <span className="text-sm font-medium break-words">{orgName}</span>
           <span className="text-heading text-xs shrink-0 text-muted-foreground">Brand</span>
         </div>
-        <button onClick={onHome} title="Projects"
+        <button onClick={onBack} title="Projects"
           className="shrink-0 mt-0.5 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors cursor-pointer">
           <Home size={13}/>
         </button>

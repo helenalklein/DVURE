@@ -788,7 +788,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
       <div className="h-screen flex bg-background overflow-hidden">
         <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
           <aside className="w-full h-full glass border-r flex flex-col">
-            <div className="px-4 py-2.5 min-h-14 flex items-start border-b border-border gap-2.5">
+            <div className="px-4 py-2.5 min-h-14 flex items-start border-b border-border gap-2.5" style={{ paddingTop: "calc(0.625rem + env(safe-area-inset-top))" }}>
               <div className="shrink-0 mt-0.5"><OrgLogoBox org={org} canEdit={canEditLogo} onLogoChange={handleLogoChange} size={32}/></div>
               <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0 self-center">
                 <span className="text-sm font-medium break-words inline-flex items-center gap-1.5">{agencyName} <CountryFlag country={ORG_COUNTRY[agencyName]} className="text-xs"/></span>

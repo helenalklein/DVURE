@@ -432,7 +432,7 @@ export function TopBar({ title, sub, actions, updatedAt, onMenuClick }: { title:
     return () => clearInterval(id);
   }, [updatedAt]);
   return (
-    <div className="h-14 border-b glass flex items-center px-4 md:px-6 gap-3 md:gap-4 shrink-0 z-20 relative">
+    <div className="min-h-14 border-b glass flex items-center px-4 md:px-6 gap-3 md:gap-4 shrink-0 z-20 relative" style={{ paddingTop: "env(safe-area-inset-top)" }}>
       {onMenuClick && (
         <button onClick={onMenuClick} className="md:hidden shrink-0 -ml-1 p-1.5 text-foreground cursor-pointer" aria-label="Open menu">
           <Menu size={20}/>
