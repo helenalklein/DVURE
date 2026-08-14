@@ -19,6 +19,7 @@ import { fetchAgencyPayouts, type AgencyPayout, type TransferStatus } from "../.
 import SubscriptionPanel from "../shared/SubscriptionPanel";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 import NetworkView from "../shared/NetworkView";
+import SupportTicketForm from "../shared/SupportTicketForm";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
@@ -84,6 +85,10 @@ function AgencySettingsScreen({ onLogout, onMenuClick }: { onLogout: () => void;
                     <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{org?.name}</div>
                   </div>
                   <TextInput label="Email" type="email" placeholder="you@agency.com" defaultValue={profile?.email}/>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">Support</p>
+                  <SupportTicketForm defaultCategory="delete_organization"/>
                 </div>
               </div>
             )}

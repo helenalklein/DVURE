@@ -40,6 +40,7 @@ import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "../../lib/q
 import { fetchOrgMembers, updateOrgMember, type OrgMember, type AccessLevel } from "../../lib/queries/orgMembers";
 import { createOrgStaffInvite, fetchPendingOrgInvites, type PendingInvite } from "../../lib/queries/invites";
 import NetworkView from "../shared/NetworkView";
+import SupportTicketForm from "../shared/SupportTicketForm";
 
 type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -4369,6 +4370,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                     <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>
                   </div>
                 </div>
+                <SupportTicketForm defaultCategory="delete_organization"/>
               </div>
             )}
             {tab === "notifications" && (
