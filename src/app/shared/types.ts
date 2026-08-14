@@ -29,6 +29,10 @@ export interface Talent {
   // Who actually clicked submit — real profile data, not a placeholder.
   submittedByName?: string;
   submittedByEmail?: string;
+  // The model's own contact email (model_profiles.email) — distinct
+  // from submittedByEmail (whoever at the agency clicked submit).
+  // Surfaced on the flip side of CompCard.
+  modelEmail?: string;
   location: string;
   rate: string;
   stage: SubmissionStage;

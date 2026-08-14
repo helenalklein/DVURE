@@ -6,6 +6,8 @@ import { useAuth } from "../shared/auth";
 import { fetchPendingConfirmationsForModel, fetchInvoicesForModel, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
 import { fetchBookingsForModel, type ModelBooking } from "../../lib/queries/bookings";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
+import { CompCard } from "../shared/CompCard";
+import type { Talent } from "../shared/types";
 
 type View = "bookings" | "availability" | "contracts" | "earnings" | "profile" | "messages";
 
@@ -168,13 +170,46 @@ function EarningsView() {
   );
 }
 
+// The model's own digital comp card — same CompCard component that
+// backs a submitted model's flip-card everywhere else. A model isn't
+// "submitted" on their own profile page, so the submission-only
+// fields (stage, score, duplicate flags) are filled with neutral
+// values CompCard doesn't render when there's no duplicateBadge/
+// actions/etc. passed in.
+function MyCompCardView() {
+  const { modelProfile, modelAgencies } = useAuth();
+  const motherAgency = modelAgencies?.find(a => a.isMotherAgency)?.name ?? modelAgencies?.[0]?.name ?? "";
+  const boutiqueAgencies = (modelAgencies ?? []).filter(a => !a.isMotherAgency).map(a => a.name);
+
+  if (!modelProfile) {
+    return <div className="text-sm text-muted-foreground">Your profile isn't set up yet — reach out to your agency.</div>;
+  }
+
+  const talent: Talent = {
+    id: 0, name: modelProfile.fullName,
+    photo: modelProfile.photoUrl ?? undefined, modelEmail: modelProfile.email ?? undefined,
+    agency: motherAgency, motherAgency, boutiqueAgencies,
+    location: modelProfile.location ?? "", rate: modelProfile.dayRate != null ? `$${modelProfile.dayRate}/day` : "",
+    stage: "submitted", avail: "available", note: "",
+    height: modelProfile.height ?? "", bust: modelProfile.bust ?? "", waist: modelProfile.waist ?? "", dress: modelProfile.dress ?? "",
+    exp: "", score: 0,
+  };
+
+  return (
+    <div className="max-w-xs">
+      <div className="text-xs text-muted-foreground mb-3">This is what brands and agencies see when you're submitted — hover the card and click the flip icon to see the back.</div>
+      <CompCard talent={talent}/>
+    </div>
+  );
+}
+
 export default function ModelApp({ onLogout }: { onLogout: () => void }) {
   const { profile, modelProfile, modelAgencies } = useAuth();
   const [view, setView] = useState<View>("bookings");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const name = modelProfile?.fullName ?? profile?.fullName ?? "";
-  const primaryAgency = modelAgencies?.find(a => a.relationshipType === "mother")?.name ?? modelAgencies?.[0]?.name ?? "";
+  const primaryAgency = modelAgencies?.find(a => a.isMotherAgency)?.name ?? modelAgencies?.[0]?.name ?? "";
   const initials = name.trim().split(/\s+/).map(p => p[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   function selectView(v: View) {
@@ -225,7 +260,8 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
             {view === "bookings" && <BookingsView/>}
             {view === "earnings" && <EarningsView/>}
             {view === "messages" && <MessagesView/>}
-            {view !== "bookings" && view !== "earnings" && view !== "messages" && (
+            {view === "profile" && <MyCompCardView/>}
+            {view !== "bookings" && view !== "earnings" && view !== "messages" && view !== "profile" && (
               <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
                 <div className="text-sm text-muted-foreground">{NAV.find(n=>n.id===view)?.label} · coming soon</div>
               </div>

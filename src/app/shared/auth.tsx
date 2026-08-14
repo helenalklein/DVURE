@@ -26,13 +26,24 @@ export interface OrgInfo {
 export interface ModelAgencyInfo {
   orgId: string;
   name: string;
-  relationshipType: "mother" | "boutique";
+  // Free text (agencies describe the relationship however fits, see
+  // AddModelModal) — is_mother_agency is the reliable boolean signal,
+  // not a string match against this.
+  relationshipType: string;
+  isMotherAgency: boolean;
 }
 
 export interface ModelInfo {
   id: string;
   fullName: string;
   location: string | null;
+  photoUrl: string | null;
+  height: string | null;
+  bust: string | null;
+  waist: string | null;
+  dress: string | null;
+  dayRate: number | null;
+  email: string | null;
 }
 
 export interface CrewInfo {
@@ -93,11 +104,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({
         status: "signedIn",
         ...base,
-        modelProfile: { id: modelProfile.id, fullName: modelProfile.full_name, location: modelProfile.location },
+        modelProfile: {
+          id: modelProfile.id, fullName: modelProfile.full_name, location: modelProfile.location,
+          photoUrl: modelProfile.photo_url, height: modelProfile.height, bust: modelProfile.bust,
+          waist: modelProfile.waist, dress: modelProfile.dress, dayRate: modelProfile.default_day_rate,
+          email: modelProfile.email,
+        },
         modelAgencies: (rels ?? []).map((r: any) => ({
           orgId: r.organizations.id,
           name: r.organizations.name,
           relationshipType: r.relationship_type,
+          isMotherAgency: !!r.is_mother_agency,
         })),
       });
       return;

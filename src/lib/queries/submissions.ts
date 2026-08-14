@@ -32,6 +32,7 @@ interface ModelRow {
   dress: string | null;
   experience: string | null;
   photo_url: string | null;
+  email: string | null;
 }
 
 function formatRate(n: number | null): string {
@@ -52,7 +53,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
       submitted_by:profiles!submissions_submitted_by_profile_id_fkey(full_name, email),
-      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url)
+      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url, email)
     `)
     .eq("campaign_id", campaignId);
 
@@ -116,6 +117,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       boutiqueAgencies: boutiqueByModel.get(modelId) ?? [],
       submittedByName: canonical.submitted_by?.full_name ?? undefined,
       submittedByEmail: canonical.submitted_by?.email ?? undefined,
+      modelEmail: m?.email ?? undefined,
       location: m?.location ?? "",
       rate: canonical.rate_quoted != null ? formatRate(canonical.rate_quoted) : formatRate(m?.default_day_rate ?? null),
       stage: canonical.stage as SubmissionStage,

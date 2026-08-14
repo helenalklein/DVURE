@@ -27,7 +27,7 @@ export async function updateOrgLogo(orgId: string, dataUri: string | null): Prom
 export async function fetchModelProfile(profileId: string) {
   return supabase
     .from("model_profiles")
-    .select("id, full_name, location")
+    .select("id, full_name, location, photo_url, height, bust, waist, dress, default_day_rate, email")
     .eq("profile_id", profileId)
     .maybeSingle();
 }
@@ -43,7 +43,7 @@ export async function fetchCrewProfile(profileId: string) {
 export async function fetchModelAgencies(modelId: string) {
   return supabase
     .from("agency_model_relationships")
-    .select("relationship_type, organizations(id, name)")
+    .select("relationship_type, is_mother_agency, organizations(id, name)")
     .eq("model_id", modelId)
     .eq("status", "active");
 }
