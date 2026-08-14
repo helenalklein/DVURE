@@ -41,6 +41,7 @@ import { fetchOrgMembers, updateOrgMember, type OrgMember, type AccessLevel } fr
 import { createOrgStaffInvite, fetchPendingOrgInvites, type PendingInvite } from "../../lib/queries/invites";
 import NetworkView from "../shared/NetworkView";
 import SupportTicketForm from "../shared/SupportTicketForm";
+import { fetchBrandCrew, type BrandCrewMember } from "../../lib/queries/crew";
 
 type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -3809,8 +3810,62 @@ function MessageDetailPane({ msg, allMessages, onReply, onToggleRead, onOpenRela
 
 // ─── DIRECTORY ───────────────────────────────────────────────────────────────
 
+// Real crew who've actually worked one of this brand's campaigns —
+// distinct from the Team section's org members/agency contacts (that
+// side stays mock/local-state, out of scope here). One row per crew
+// member even when they've filled multiple roles across campaigns.
+function CrewDirectorySection() {
+  const { org } = useAuth();
+  const [crew, setCrew] = useState<BrandCrewMember[] | null>(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (org) fetchBrandCrew(org.id).then(setCrew);
+  }, [org?.id]);
+
+  if (crew === null) return <div className="text-sm text-muted-foreground">Loading…</div>;
+
+  const q = search.trim().toLowerCase();
+  const filtered = crew.filter(c => !q || [c.fullName, c.email, c.discipline ?? ""].some(f => f.toLowerCase().includes(q)));
+
+  return (
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between mb-3 gap-3">
+        <h2 className="text-heading text-sm shrink-0">Crew ({crew.length})</h2>
+        <div className="flex items-center border border-border rounded-md bg-input-background overflow-hidden w-48">
+          <Search size={13} className="text-muted-foreground ml-2.5 shrink-0"/>
+          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
+            className="flex-1 min-w-0 px-2 py-1.5 text-xs bg-transparent focus:outline-none placeholder:text-muted-foreground"/>
+        </div>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">
+          {crew.length === 0 ? "No crew have worked your campaigns yet." : `No crew match "${search}"`}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(c=>(
+            <div key={c.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
+              <XBox className="w-10 h-10 rounded-md shrink-0"/>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold">{c.fullName}</div>
+                <div className="text-xs text-muted-foreground">{c.email}{c.discipline ? ` · ${c.discipline}` : ""}</div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate">
+                  {c.roles.map(r => `${r.campaignName}${r.isDepartmentLead ? " (lead)" : ""}`).join(", ")}
+                </div>
+              </div>
+              {c.hasLogin && <Badge label="Has login" variant="active"/>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DirectoryScreen() {
   const { setOpen: setMobileNavOpen } = useMobileNav();
+  const [section, setSection] = useState<"team"|"crew">("team");
   const [filterAccess, setFilterAccess] = useState("all");
   const [search, setSearch] = useState("");
   const [showAddUser, setShowAddUser] = useState(false);
@@ -3837,10 +3892,20 @@ function DirectoryScreen() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      <TopBar title="Directory" sub="Organization members and agency contacts" onMenuClick={()=>setMobileNavOpen(true)}
-        actions={<button onClick={()=>setShowAddUser(true)} className="px-4 py-2 text-sm font-medium bg-foreground text-primary-foreground rounded-md hover:bg-[#2a2a2a] cursor-pointer flex items-center gap-2"><Plus size={13}/> Add User</button>}
+      <TopBar title="Directory" sub="Organization members, agency contacts, and crew who've worked your campaigns" onMenuClick={()=>setMobileNavOpen(true)}
+        actions={section==="team" ? <button onClick={()=>setShowAddUser(true)} className="px-4 py-2 text-sm font-medium bg-foreground text-primary-foreground rounded-md hover:bg-[#2a2a2a] cursor-pointer flex items-center gap-2"><Plus size={13}/> Add User</button> : undefined}
       />
       <div className="flex-1 overflow-auto p-6">
+        <div className="flex items-center gap-1 mb-5 w-fit border border-border rounded-md p-0.5">
+          {(["team","crew"] as const).map(s=>(
+            <button key={s} onClick={()=>setSection(s)}
+              className={cx("px-3 py-1.5 text-xs font-medium rounded-md cursor-pointer transition-colors capitalize",
+                section===s?"bg-foreground text-primary-foreground":"text-muted-foreground hover:text-foreground"
+              )}>{s}</button>
+          ))}
+        </div>
+        {section==="crew" && <CrewDirectorySection/>}
+        {section==="team" && (
         <div className="grid grid-cols-2 gap-5">
 
           {/* Left: Member roster */}
@@ -3927,6 +3992,7 @@ function DirectoryScreen() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Add User modal */}

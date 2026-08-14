@@ -21,6 +21,8 @@ export interface OrgInfo {
   trialEndsAt: string | null;
   logoUrl: string | null;
   paymentLocked: boolean;
+  // Purely descriptive (spec §20) — never read by any RLS/RPC decision.
+  selfDescribedServices: string | null;
 }
 
 export interface ModelAgencyInfo {
@@ -152,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         trialEndsAt: orgRow.trial_ends_at,
         logoUrl: orgRow.logo_url,
         paymentLocked: !!orgRow.payment_locked,
+        selfDescribedServices: orgRow.self_described_services,
       },
     });
   }, []);

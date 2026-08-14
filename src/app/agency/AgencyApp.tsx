@@ -20,6 +20,7 @@ import SubscriptionPanel from "../shared/SubscriptionPanel";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 import NetworkView from "../shared/NetworkView";
 import SupportTicketForm from "../shared/SupportTicketForm";
+import { updateSelfDescribedServices } from "../../lib/queries/organizations";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
@@ -45,6 +46,23 @@ function AgencySettingsScreen({ onLogout, onMenuClick }: { onLogout: () => void;
     ["profile","Profile"],
     ...(isAdmin ? [["subscription","Subscription"] as [string,string]] : []),
   ];
+  // Purely descriptive (spec §20) — never read by any RLS/RPC decision,
+  // does not affect which territories or models this agency is
+  // authorized to represent (that's set per relationship, see
+  // AddModelModal). Save requires administrator access
+  // (organizations_update RLS), same posture as every other
+  // organizations column.
+  const [services, setServices] = useState(org?.selfDescribedServices ?? "");
+  const [savingServices, setSavingServices] = useState(false);
+  const [servicesSaved, setServicesSaved] = useState(false);
+  async function handleSaveServices() {
+    if (!org) return;
+    setSavingServices(true);
+    setServicesSaved(false);
+    const { error } = await updateSelfDescribedServices(org.id, services);
+    setSavingServices(false);
+    if (!error) setServicesSaved(true);
+  }
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <TopBar title="Settings" sub={`${org?.name ?? ""} · Account settings`} onMenuClick={onMenuClick}/>
@@ -85,6 +103,19 @@ function AgencySettingsScreen({ onLogout, onMenuClick }: { onLogout: () => void;
                     <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{org?.name}</div>
                   </div>
                   <TextInput label="Email" type="email" placeholder="you@agency.com" defaultValue={profile?.email}/>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-3">Self-Described Services</p>
+                  <Textarea placeholder="e.g. Mother management, market/booking representation, styling…" rows={4}
+                    value={services} onChange={e=>{ setServices(e.target.value); setServicesSaved(false); }}/>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-1">
+                    Visible to brands you partner with. Describes your agency generally — it doesn't affect which territories or models you're authorized to represent, that's set per relationship when you add a model.
+                  </div>
+                  {!isAdmin && <div className="text-xs text-muted-foreground mt-2">Only an administrator can edit this.</div>}
+                  <div className="flex items-center gap-2 mt-2">
+                    <Btn variant="primary" size="sm" disabled={!isAdmin || savingServices} onClick={handleSaveServices}>{savingServices ? "Saving…" : "Save"}</Btn>
+                    {servicesSaved && <span className="text-xs text-muted-foreground">Saved.</span>}
+                  </div>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-3">Support</p>
