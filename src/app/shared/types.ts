@@ -21,7 +21,14 @@ export interface Talent {
   // full representation picture, not just the submitter.
   agency: string;
   motherAgency: string;
-  boutiqueAgency?: string;
+  // Every OTHER active agency relationship on this model (i.e. every
+  // relationship that isn't the mother one) — a model can have more
+  // than one non-exclusive representation at once, so this is a list,
+  // not a single name.
+  boutiqueAgencies: string[];
+  // Who actually clicked submit — real profile data, not a placeholder.
+  submittedByName?: string;
+  submittedByEmail?: string;
   location: string;
   rate: string;
   stage: SubmissionStage;

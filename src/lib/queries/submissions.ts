@@ -51,6 +51,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       id, model_id, stage, availability, rate_quoted, notes, brand_score,
       submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
+      submitted_by:profiles!submissions_submitted_by_profile_id_fkey(full_name, email),
       model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url)
     `)
     .eq("campaign_id", campaignId);
@@ -61,7 +62,9 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
   // is_mother_agency (0038), not relationship_type — representation_type
   // is free text now (agencies describe the relationship however fits,
   // see AddModelModal), so a literal 'mother' string match no longer
-  // reliably identifies the mother-agency relationship.
+  // reliably identifies the mother-agency relationship. A model can have
+  // more than one non-mother (boutique) relationship at once, so that
+  // side is a list, not a single name.
   const { data: rels } = await supabase
     .from("agency_model_relationships")
     .select("model_id, is_mother_agency, organizations(name)")
@@ -69,11 +72,11 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
     .eq("status", "active");
 
   const motherByModel = new Map<string, string>();
-  const boutiqueByModel = new Map<string, string>();
+  const boutiqueByModel = new Map<string, string[]>();
   for (const r of (rels ?? []) as any[]) {
     const orgName = r.organizations?.name ?? "";
     if (r.is_mother_agency) motherByModel.set(r.model_id, orgName);
-    else if (!boutiqueByModel.has(r.model_id)) boutiqueByModel.set(r.model_id, orgName);
+    else boutiqueByModel.set(r.model_id, [...(boutiqueByModel.get(r.model_id) ?? []), orgName]);
   }
 
   // Group submission rows by model_id — the brand sees one card per
@@ -110,7 +113,9 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       photo: m?.photo_url ?? undefined,
       agency: canonical.submitting_agency?.name ?? "Independent",
       motherAgency: motherByModel.get(modelId) ?? "",
-      boutiqueAgency: boutiqueByModel.get(modelId),
+      boutiqueAgencies: boutiqueByModel.get(modelId) ?? [],
+      submittedByName: canonical.submitted_by?.full_name ?? undefined,
+      submittedByEmail: canonical.submitted_by?.email ?? undefined,
       location: m?.location ?? "",
       rate: canonical.rate_quoted != null ? formatRate(canonical.rate_quoted) : formatRate(m?.default_day_rate ?? null),
       stage: canonical.stage as SubmissionStage,

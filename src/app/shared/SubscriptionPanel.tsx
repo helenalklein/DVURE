@@ -20,11 +20,15 @@ const STATUS_BADGE: Record<string, { label: string; variant: "success"|"warning"
   canceled: { label: "Canceled", variant: "default" },
 };
 
-// Shared between BrandApp and AgencyApp's Settings — the plan shown
-// and subscribed to is resolved server-side from the caller's own
-// org_type (list-subscription-plan / create-subscription), so a brand
-// can only ever see/subscribe to the Brand Pilot Subscription and vice
-// versa; this component never picks a plan itself.
+// Shared between BrandApp and AgencyApp's Settings, but only agencies
+// actually pay a DVURE platform subscription — a brand's only real cost
+// on DVURE is the campaign payments they make to models/agencies
+// (invoices), which is where DVURE's platform fee is already collected.
+// A "Brand Pilot Subscription" Stripe price exists from an earlier,
+// incorrect assumption that brands would pay too; it's never called
+// from here now (this component short-circuits before ever hitting
+// list-subscription-plan for a brand org) — safe to archive in the
+// Stripe dashboard whenever, nothing in the app references it anymore.
 export default function SubscriptionPanel() {
   const { org, refreshIdentity } = useAuth();
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
@@ -37,6 +41,8 @@ export default function SubscriptionPanel() {
   const [addCardSecret, setAddCardSecret] = useState<string | null>(null);
   const [addCardLoading, setAddCardLoading] = useState(false);
 
+  const isBrand = org?.orgType === "brand";
+
   async function reloadCards() {
     setCardsLoading(true);
     const { cards: fetched } = await listPaymentMethods();
@@ -45,9 +51,18 @@ export default function SubscriptionPanel() {
   }
 
   useEffect(() => {
+    if (isBrand) { setPlanLoading(false); setCardsLoading(false); return; }
     listSubscriptionPlan().then(({ plan, error }) => { setPlan(plan); setPlanError(error); setPlanLoading(false); });
     reloadCards();
-  }, []);
+  }, [isBrand]);
+
+  if (isBrand) {
+    return (
+      <div className="glass-subtle border rounded-md p-5 text-sm text-muted-foreground">
+        DVURE doesn't charge brands a platform subscription. Your only cost is the platform fee already included when you pay a model or agency through a campaign.
+      </div>
+    );
+  }
 
   // organizations.subscription_status defaults to "trialing" for every
   // org from signup (0014) — that's also the only state where a

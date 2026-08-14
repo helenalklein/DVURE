@@ -18,7 +18,7 @@ import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADG
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
-import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
+import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, PLATFORM_FEE_PCT_ACH, PLATFORM_FEE_PCT_CARD } from "../../lib/queries/bookings";
 import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
@@ -316,10 +316,11 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
 
-function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded }: {
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded, duplicates }: {
   talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
-  realCampaignId?: string | null; onIndependentAdded?: () => void;
+  realCampaignId?: string | null; onIndependentAdded?: () => void; duplicates?: DuplicatesShim;
 }) {
+  const duplicatesShim: DuplicatesShim = duplicates ?? new Map();
   const [selected, setSelected] = useState<number[]>([]);
   const [showIndependentModal, setShowIndependentModal] = useState(false);
   const [dragging, setDragging] = useState<number|null>(null);
@@ -487,9 +488,14 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                               </div>
                               <div className="text-[10px] text-muted-foreground truncate">
                                 <span className="text-muted-foreground/70">Boutique:</span>{" "}
-                                {t.boutiqueAgency ? (
-                                  <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.boutiqueAgency!); }}
-                                    className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.boutiqueAgency}</button>
+                                {t.boutiqueAgencies.length > 0 ? (
+                                  t.boutiqueAgencies.map((a, i) => (
+                                    <span key={a}>
+                                      {i > 0 && ", "}
+                                      <button onClick={e=>{ e.stopPropagation(); onViewAgency(a); }}
+                                        className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{a}</button>
+                                    </span>
+                                  ))
                                 ) : "None"}
                               </div>
                             </>) : (
@@ -565,14 +571,36 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                     <button onClick={()=>onViewAgency(drawer.motherAgency)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.motherAgency}</button>
                   </div>
                   <div className="pt-2 border-t border-border">
-                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agency</div>
-                    {drawer.boutiqueAgency ? (
-                      <button onClick={()=>onViewAgency(drawer.boutiqueAgency!)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.boutiqueAgency}</button>
+                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agenc{drawer.boutiqueAgencies.length===1?"y":"ies"}</div>
+                    {drawer.boutiqueAgencies.length > 0 ? (
+                      <div className="flex flex-wrap gap-x-1.5">
+                        {drawer.boutiqueAgencies.map((a, i) => (
+                          <span key={a} className="text-xs font-semibold">
+                            {i > 0 && ", "}
+                            <button onClick={()=>onViewAgency(a)} className="hover:underline underline-offset-2 cursor-pointer">{a}</button>
+                          </span>
+                        ))}
+                      </div>
                     ) : <div className="text-xs font-semibold">None</div>}
                   </div>
                   <div className="pt-2 border-t border-border text-[10px] text-muted-foreground">
-                    Submitted via {drawer.agency} · Sophie Chen · sophie@elitemodels.com
+                    Submitted via {drawer.agency}
+                    {drawer.submittedByName ? ` · ${drawer.submittedByName}` : ""}
+                    {drawer.submittedByEmail ? ` · ${drawer.submittedByEmail}` : ""}
                   </div>
+                  {drawer.duplicateFlag && duplicatesShim.get(drawer.id) && (
+                    <div className="pt-2 border-t border-border">
+                      <div className="text-[9px] font-mono text-urgent uppercase tracking-wide mb-1">Submitted by {duplicatesShim.get(drawer.id)!.length} agencies</div>
+                      <div className="space-y-1">
+                        {duplicatesShim.get(drawer.id)!.map(d => (
+                          <div key={d.submissionId} className="flex items-center justify-between text-[10px]">
+                            <button onClick={()=>onViewAgency(d.agencyName)} className="hover:underline underline-offset-2 cursor-pointer">{d.agencyName}</button>
+                            <span className="text-muted-foreground capitalize">{d.stage}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div>
@@ -1554,7 +1582,7 @@ function ExtendSubmissionModal({ campaign, onClose, onGrant }: {
 function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   agencyName: string; campaign: Campaign; talent: Talent[]; onBack: () => void;
 }) {
-  const submittedHere = talent.filter(t => t.agency===agencyName || t.motherAgency===agencyName || t.boutiqueAgency===agencyName);
+  const submittedHere = talent.filter(t => t.agency===agencyName || t.motherAgency===agencyName || t.boutiqueAgencies.includes(agencyName));
   const isDistributed = (CAMPAIGN_AGENCIES[campaign.id] ?? []).includes(agencyName);
 
   return (
@@ -1602,6 +1630,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [shim, setShim] = useState<SubmissionShim>(new Map());
+  const [duplicates, setDuplicates] = useState<DuplicatesShim>(new Map());
   // Non-null once `campaignId` resolves to a real Supabase campaign via
   // realIdShim — only then do talent/comments reflect real data instead
   // of the SAMPLE_TALENT/CARD_COMMENTS mock.
@@ -1625,9 +1654,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const campaign = campaigns.find(c=>c.id===campaignId);
 
   async function refetchTalent(realId: string) {
-    const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
+    const { talent: realTalent, shim: realShim, duplicates: realDuplicates } = await fetchCampaignSubmissions(realId);
     setTalent(realTalent);
     setShim(realShim);
+    setDuplicates(realDuplicates);
     setComments(await fetchSubmissionComments(realShim));
   }
 
@@ -1645,10 +1675,11 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     reloadPayees(realId);
     if (!realId) return; // no real campaign for this id — mock data already seeded above
     (async () => {
-      const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
+      const { talent: realTalent, shim: realShim, duplicates: realDuplicates } = await fetchCampaignSubmissions(realId);
       if (!active) return;
       setTalent(realTalent);
       setShim(realShim);
+      setDuplicates(realDuplicates);
       const realComments = await fetchSubmissionComments(realShim);
       if (!active) return;
       setComments(realComments);
@@ -1887,7 +1918,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }} duplicates={duplicates}/>}
 
 
           {section==="crew" && (
