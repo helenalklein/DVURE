@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight, AlertCircle } from "lucide-react";
+import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight, AlertCircle, Share2 } from "lucide-react";
 import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox, MobileNavDrawer, Chip } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage, RepresentationExclusivity } from "../shared/types";
@@ -18,15 +18,17 @@ import { fetchPendingConfirmationsForAgency, fetchInvoicesForAgency, type Invoic
 import { fetchAgencyPayouts, type AgencyPayout, type TransferStatus } from "../../lib/queries/payouts";
 import SubscriptionPanel from "../shared/SubscriptionPanel";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
+import NetworkView from "../shared/NetworkView";
 
 type Invitation = { brand: string; campaign: string; type: string; due: string; budget: string; models: number; submissionOpen: string; submissionClose: string; realCampaignId?: string };
 
-type View = "invitations" | "submit" | "roster" | "payments" | "messaging" | "settings";
+type View = "invitations" | "submit" | "roster" | "network" | "payments" | "messaging" | "settings";
 
 const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
   { id:"invitations", label:"Campaign Invitations", Icon:Inbox                 },
   { id:"submit",       label:"Talent Submissions",   Icon:Send                  },
   { id:"roster",       label:"Talent Roster",        Icon:Users2                },
+  { id:"network",      label:"Network",              Icon:Share2                },
   { id:"payments",     label:"Payments",             Icon:CreditCard            },
   { id:"messaging",    label:"Messaging",            Icon:MessageSquare, count:1 },
 ];
@@ -1125,6 +1127,8 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
         </MobileNavDrawer>
         {view === "settings" ? (
           <AgencySettingsScreen onLogout={onLogout} onMenuClick={()=>setMobileNavOpen(true)}/>
+        ) : view === "network" ? (
+          <NetworkView onMenuClick={()=>setMobileNavOpen(true)}/>
         ) : (
           <main className="flex-1 flex flex-col min-h-0 min-w-0">
             <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${agencyName} · Agency`} onMenuClick={()=>setMobileNavOpen(true)}/>

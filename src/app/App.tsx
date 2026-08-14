@@ -12,6 +12,7 @@ import CrewApp from "./crew/CrewApp";
 import TermsPage from "./TermsPage";
 import PrivacyPage from "./PrivacyPage";
 import SupportPage from "./SupportPage";
+import PartnerInvitePage from "./PartnerInvitePage";
 
 // One app, one login, three role-based views, each at a real URL. Role/org/
 // access come from a real Supabase Auth session (src/app/shared/auth.tsx),
@@ -90,6 +91,7 @@ export default function App() {
           </RoleRoute>
         }/>
         <Route path="/accept-invite/:token" element={<AcceptInvitePage/>}/>
+        <Route path="/partner-invite/:token" element={<PartnerInvitePage/>}/>
         <Route path="/crew/link/:accessCode" element={<CrewApp/>}/>
         <Route path="/terms" element={<TermsPage/>}/>
         <Route path="/terms-of-service" element={<TermsPage/>}/>

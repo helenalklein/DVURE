@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
   X, Check, Star, Search, Briefcase,
   AlertCircle, Camera, XCircle,
-  MessageSquare, Download, CreditCard, MapPin,
+  MessageSquare, Download, CreditCard,
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
@@ -39,6 +39,7 @@ import { fetchScheduleEvents } from "../../lib/queries/schedule";
 import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "../../lib/queries/calendarFeed";
 import { fetchOrgMembers, updateOrgMember, type OrgMember, type AccessLevel } from "../../lib/queries/orgMembers";
 import { createOrgStaffInvite, fetchPendingOrgInvites, type PendingInvite } from "../../lib/queries/invites";
+import NetworkView from "../shared/NetworkView";
 
 type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
@@ -4112,58 +4113,13 @@ function Reports() {
 }
 
 // ─── NETWORK ──────────────────────────────────────────────────────────────────
+// Real Invite Partner flow, shared with AgencyApp — see src/app/shared/NetworkView.tsx.
+// Replaces the old decorative version (hardcoded 4-agency array, an "Add"
+// toggle that only touched local state and never persisted anywhere).
 
 function Network() {
   const { setOpen: setMobileNavOpen } = useMobileNav();
-  const [added, setAdded] = useState(["Vantage Model Management","Meridian Models"]);
-  const agencies = [
-    { name:"Vantage Model Management", loc:"New York · London · Paris", talent:420, bookings:8, spend:"$24,500", lastSub:"2 days ago",  responseRate:"94%", preferred:true  },
-    { name:"Meridian Models",             loc:"New York · London · Milan",  talent:380, bookings:5, spend:"$11,100", lastSub:"5 days ago",  responseRate:"87%", preferred:false },
-    { name:"Solenne",             loc:"New York · Los Angeles",     talent:210, bookings:2, spend:"$4,400",  lastSub:"12 days ago", responseRate:"76%", preferred:false },
-    { name:"Vector Models",             loc:"New York",                   talent:180, bookings:1, spend:"$3,600",  lastSub:"3 days ago",  responseRate:"91%", preferred:false },
-  ];
-  return (
-    <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      <TopBar title="Network" sub="Agency relationships and partners" onMenuClick={()=>setMobileNavOpen(true)}/>
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <Stat label="Agencies" value="4" sub="3 with active bookings"/>
-          <Stat label="Added" value={String(added.length)} sub="Instant campaign alerts"/>
-          <Stat label="Submissions" value="44" sub="Across active campaigns"/>
-        </div>
-        <div className="space-y-2">
-          {agencies.map(a=>{
-            const isAdded = added.includes(a.name);
-            return (
-              <div key={a.name} className="glass-subtle border rounded-md p-4 flex items-center gap-4 hover:border-foreground/30">
-                <XBox className="w-10 h-10 rounded-md"/>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-medium">{a.name}</span>
-                    {isAdded && <Badge label="Added" variant="info"/>}
-                    {a.preferred && <Badge label="Preferred Partner" variant="success"/>}
-                  </div>
-                  <div className="text-xs text-muted-foreground font-mono flex items-center gap-1"><MapPin size={10}/>{a.loc} · {a.talent} talent</div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-[10px] text-muted-foreground font-mono">Last submission: <span className="text-foreground">{a.lastSub}</span></span>
-                    <span className="text-[10px] text-muted-foreground font-mono">Response rate: <span className="text-foreground font-semibold">{a.responseRate}</span></span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-5 shrink-0">
-                  <div className="text-center hidden md:block"><div className="text-sm font-semibold">{a.bookings}</div><div className="text-xs text-muted-foreground">Bookings</div></div>
-                  <div className="text-center hidden md:block"><div className="text-sm font-semibold font-mono">{a.spend}</div><div className="text-xs text-muted-foreground">Spend</div></div>
-                  <button onClick={()=>setAdded(p=>isAdded?p.filter(x=>x!==a.name):[...p,a.name])}
-                    className={cx("px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
-                      isAdded?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                    )}>{isAdded?"Added":"Add"}</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+  return <NetworkView onMenuClick={()=>setMobileNavOpen(true)}/>;
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
