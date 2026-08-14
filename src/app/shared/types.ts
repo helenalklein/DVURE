@@ -6,6 +6,8 @@ export type Availability = "available" | "pending" | "unavailable";
 
 export type PaymentStatus = "pending" | "processing" | "paid";
 
+export type RepresentationExclusivity = "exclusive" | "non_exclusive" | "limited" | "not_specified";
+
 export interface Talent {
   id: number;
   name: string;
@@ -31,6 +33,11 @@ export interface Talent {
   dress: string;
   exp: string;
   score: number;
+  // True when this same model was submitted to this campaign by more
+  // than one agency — surfaced as a flag, never auto-resolved (a
+  // brand should see the model once, not once per agency, but should
+  // still know more than one agency is involved before booking).
+  duplicateFlag?: boolean;
 }
 
 export type IconFn = (props: { size?: number; className?: string }) => JSX.Element | null;
@@ -51,6 +58,13 @@ export interface CardComment {
 // like a brand adding a teammate) — models don't self-register.
 // This becomes the `talent_profiles` table in Milestone B, with
 // campaign submissions as a separate table referencing it.
+//
+// The relationship* fields describe THIS agency's own representation
+// relationship with the model, not the model globally — a model can
+// have other agencies' relationships DVURE never surfaces here. Terms
+// (type, territory, exclusivity, dates) live on the relationship, not
+// the agency account, since the same agency can represent different
+// models under very different terms (see agency_model_relationships).
 export interface RosterModel {
   id: string;
   name: string;
@@ -64,6 +78,13 @@ export interface RosterModel {
   // .profile_id is set) — drives whether the agency sees "Invite to
   // DVURE" or a "Has login" badge on their roster card.
   hasLogin: boolean;
+  relationshipId?: string;
+  relationshipType?: string;
+  isMotherAgency?: boolean;
+  territories?: string[];
+  exclusivity?: RepresentationExclusivity;
+  effectiveStartDate?: string;
+  effectiveEndDate?: string | null;
 }
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
@@ -117,6 +138,12 @@ export interface Campaign {
   // walking the same physical show". Multiple campaigns (different
   // brands) can point at the same RunwayShow id.
   runwayShowId?: number;
+  // Which market this campaign is running in — read by submit_talent
+  // server-side to decide whether another agency's active representation
+  // relationship "applies" here (territory-matched) when flagging a
+  // duplicate submission. Optional: a campaign with no territory set
+  // just means every relationship's territory is treated as applicable.
+  territory?: string;
   // Card cover art shown to the brand itself (mood/editorial stock,
   // black & white) — mock-only placeholder for the real photo-picker
   // this stands in for. Agencies/models see the brand's own logo

@@ -475,6 +475,9 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                           <div className="p-2.5 space-y-0.5">
                             <div className="text-xs font-semibold leading-tight truncate flex items-center gap-1">
                               {t.name} <CountryFlag location={t.location} className="text-[11px] shrink-0"/>
+                              {t.duplicateFlag && (
+                                <span title="Submitted by more than one agency" className="w-1.5 h-1.5 rounded-full bg-[#D4A017] shrink-0"/>
+                              )}
                             </div>
                             {t.motherAgency ? (<>
                               <div className="text-[10px] text-muted-foreground truncate">

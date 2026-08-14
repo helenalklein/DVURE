@@ -1,11 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
-import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox, MobileNavDrawer } from "../shared/ui";
+import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight, AlertCircle } from "lucide-react";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox, MobileNavDrawer, Chip } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
-import type { RosterModel, CampaignThreadMessage } from "../shared/types";
+import type { RosterModel, CampaignThreadMessage, RepresentationExclusivity } from "../shared/types";
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
-import { fetchAgencyRoster, insertRosterModel } from "../../lib/queries/roster";
+import {
+  fetchAgencyRoster, checkPossibleModelDuplicate, addNewModelToRoster, linkModelToExistingRoster,
+  type RelationshipTerms,
+} from "../../lib/queries/roster";
+import { createModelDocument, uploadModelDocumentFile, type DocumentCategory } from "../../lib/queries/documents";
 import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
@@ -269,19 +273,21 @@ function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
   );
 }
 
-// A model already submitted (pending or declined) for a given campaign
-// can't be submitted again for that same campaign — regardless of which
-// agency does the resubmitting, a decline is final. modelId/campaign
-// pairs are unique to a specific campaign, so the same model can still
-// be freely submitted to a *different* open campaign.
+// A model already submitted (pending) or declined by THIS agency for a
+// given campaign can't be resubmitted by this agency — a decline is
+// final. This no longer blocks a *different* agency from submitting the
+// same model to the same campaign (submissions dropped its
+// unique(campaign_id, model_id) constraint — see submit_talent): that
+// case succeeds and comes back with duplicateSubmission/overlapWarning
+// instead of an error, since more than one agency legitimately
+// representing (or believing they represent) the same model is a real,
+// expected scenario, not something DVURE should silently pick a winner
+// for.
 //
-// This is only ever populated from THIS session's own successful
-// submits (see handleSubmit below) — it can't pre-block a model another
-// agency already submitted, since RLS hides that agency's submission row
-// entirely. The real "one submission wins" rule is enforced by the
-// database's unique(campaign_id, model_id) constraint: a genuinely
-// blocked submit is only discovered by attempting it and getting
-// rejected, surfaced below as submitError rather than a pre-check.
+// This local status is only ever populated from THIS session's own
+// successful submits (see handleSubmit below) — it can't pre-block a
+// model another agency already submitted, since RLS hides that agency's
+// submission row entirely.
 type CampaignSubmissionStatus = { modelId: string; campaign: string; status: "pending" | "declined" };
 
 function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }: { roster: RosterModel[]; invitations: Invitation[]; onGoToRoster: () => void; initialCampaign?: string }) {
@@ -293,6 +299,8 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
   const [pickedModelId, setPickedModelId] = useState<string | "">("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitNote, setSubmitNote] = useState("");
+  const [overlapWarning, setOverlapWarning] = useState<string | null>(null);
 
   function statusFor(modelId: string, campaign: string) {
     return submitted.find(s => s.modelId === modelId && s.campaign === campaign);
@@ -326,11 +334,10 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
       setSubmitError("This campaign isn't connected yet — check back once it's set up.");
       return;
     }
-    const { error } = await insertSubmission({
+    const { overlapWarning: warning, error } = await insertSubmission({
       campaignId: realCampaignId,
       modelId: pickedModel.id,
-      submittingAgencyId: org.id,
-      submittedByProfileId: profile.id,
+      notes: submitNote.trim() || undefined,
     });
     setSubmitting(false);
     if (error) {
@@ -342,7 +349,15 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
       return;
     }
     setSubmitted(p => [...p, { modelId: pickedModel.id, campaign: pickedCampaign, status: "pending" }]);
+    setSubmitNote("");
     setShowForm(false);
+    // Never a hard block — submit_talent already recorded the
+    // submission. This just surfaces its territory/overlap finding so
+    // the agency can confirm they're actually authorized here, per the
+    // representation-relationship spec ("flag, don't silently pick a
+    // winner"). Shown until dismissed rather than a toast, since it's
+    // worth actually reading.
+    if (warning) setOverlapWarning(warning);
   }
 
   return (
@@ -351,6 +366,14 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
         <p className="text-sm text-muted-foreground">Submit models from your roster to open campaigns.</p>
         <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={()=>setShowPicker(true)} disabled={roster.length===0}>Submit Talent</Btn>
       </div>
+
+      {overlapWarning && (
+        <div className="flex items-start gap-2 text-xs text-[#D4A017] bg-[#D4A017]/10 border border-[#D4A017]/30 rounded-md px-3 py-2.5">
+          <AlertCircle size={13} className="mt-0.5 shrink-0"/>
+          <span className="flex-1">{overlapWarning}</span>
+          <button onClick={()=>setOverlapWarning(null)} className="text-[#D4A017] hover:opacity-70 shrink-0"><X size={13}/></button>
+        </div>
+      )}
 
       {roster.length===0 && (
         <div className="border border-dashed border-border rounded-md p-8 text-center space-y-3">
@@ -433,7 +456,7 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
             {submitError && (
               <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">{submitError}</div>
             )}
-            <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3}/>
+            <Textarea label="Note to brand" placeholder="Optional — why this model fits the brief…" rows={3} value={submitNote} onChange={e=>setSubmitNote(e.target.value)}/>
           </div>
           <div className="px-5 pb-5 flex gap-2">
             <Btn variant="primary" disabled={submissionClosed || !!pickedStatus || submitting} onClick={handleSubmit}>
@@ -447,39 +470,312 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
   );
 }
 
-function AddModelModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Omit<RosterModel,"id"|"agency"|"hasLogin">) => void }) {
+// Curated options exist to nudge toward consistent, comparable values
+// (so territory/type matching across relationships actually lines up)
+// without enforcing a closed set — both fields accept free custom entry,
+// since DVURE shouldn't be the one deciding what representation types
+// exist in this industry.
+const CURATED_REPRESENTATION_TYPES = [
+  "Mother Agency / Mother Management", "Market / Booking Agency", "Modeling Agency",
+  "Management", "Exclusive Representation", "Non-Exclusive Representation", "Other",
+];
+const CURATED_TERRITORIES = [
+  "New York", "Los Angeles", "Miami", "Chicago", "Paris", "Milan", "London", "Tokyo", "Shanghai",
+  "United States", "Europe", "North America", "Worldwide",
+];
+const EXCLUSIVITY_OPTIONS: { value: RepresentationExclusivity; label: string }[] = [
+  { value: "not_specified", label: "Not specified" },
+  { value: "exclusive", label: "Exclusive" },
+  { value: "non_exclusive", label: "Non-exclusive" },
+  { value: "limited", label: "Limited" },
+];
+const RESTRICTED_DOC_CATEGORIES: { value: DocumentCategory; label: string }[] = [
+  { value: "representation_agreement", label: "Representation Agreement" },
+  { value: "management_agreement", label: "Management Agreement" },
+  { value: "commission_agreement", label: "Commission Agreement" },
+  { value: "placement_agreement", label: "Placement Agreement" },
+  { value: "amendment", label: "Amendment" },
+  { value: "other_restricted", label: "Other" },
+];
+
+type AddModelStep = 1 | 2 | 3;
+
+// Every model added goes through a real representation relationship —
+// type, territory, exclusivity, effective dates, an optional supporting
+// document, and (if a document's attached) the 4 attestations DVURE
+// requires rather than interpreting the agreement itself. Step 1 also
+// runs a live duplicate-person check (check_possible_model_duplicate)
+// so two agencies uploading the same person become one canonical
+// model_profiles row with two relationships, not two disconnected
+// profiles.
+function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m: RosterModel) => void }) {
+  const { org } = useAuth();
+  const [step, setStep] = useState<AddModelStep>(1);
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [location, setLocation] = useState("");
   const [rate, setRate] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const [checkingDup, setCheckingDup] = useState(false);
+  const [dupConfidence, setDupConfidence] = useState<"high" | "low" | null>(null);
+  const [dupModelId, setDupModelId] = useState<string | null>(null);
+  const [dupResolved, setDupResolved] = useState(false);
+  const [linkExisting, setLinkExisting] = useState(false);
+
+  const [representationType, setRepresentationType] = useState("");
+  const [isMotherAgency, setIsMotherAgency] = useState(false);
+  const [territories, setTerritories] = useState<string[]>([]);
+  const [territoryInput, setTerritoryInput] = useState("");
+  const [exclusivity, setExclusivity] = useState<RepresentationExclusivity>("not_specified");
+  const [effectiveStartDate, setEffectiveStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [effectiveEndDate, setEffectiveEndDate] = useState("");
+
+  const [file, setFile] = useState<File | null>(null);
+  const [docCategory, setDocCategory] = useState<DocumentCategory>("representation_agreement");
+  const [attestAuthority, setAttestAuthority] = useState(false);
+  const [attestUploadRights, setAttestUploadRights] = useState(false);
+  const [attestAccurate, setAttestAccurate] = useState(false);
+  const [attestWillUpdate, setAttestWillUpdate] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ model: RosterModel; overlapWarning: string | null } | null>(null);
+
+  async function runDuplicateCheck() {
+    if (!name.trim() || (!email.trim() && !phone.trim() && !dateOfBirth)) return;
+    setCheckingDup(true);
+    const r = await checkPossibleModelDuplicate({ fullName: name, email, phone, dateOfBirth, location });
+    setCheckingDup(false);
+    setDupConfidence(r.matchConfidence);
+    setDupModelId(r.existingModelId);
+    setDupResolved(r.matchConfidence !== "high");
+    setLinkExisting(false);
+  }
+
+  function toggleTerritory(t: string) {
+    setTerritories(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t]);
+  }
+  function addCustomTerritory() {
+    const v = territoryInput.trim();
+    if (v && !territories.includes(v)) setTerritories(p => [...p, v]);
+    setTerritoryInput("");
+  }
+
+  const allAttested = attestAuthority && attestUploadRights && attestAccurate && attestWillUpdate;
+  const step1Valid = !!name && !!email && (dupConfidence !== "high" || dupResolved);
+  const step2Valid = !!representationType && territories.length > 0;
+  const step3Valid = !file || allAttested; // document is optional, but attestations are required if one is attached
+
+  async function handleFinalSubmit() {
+    if (!org) return;
+    setSaving(true);
+    setError(null);
+    const terms: RelationshipTerms = {
+      representationType, isMotherAgency, territories, exclusivity,
+      effectiveStartDate, effectiveEndDate: effectiveEndDate || undefined,
+    };
+
+    let modelId: string | null = null;
+    let relationshipId: string | null = null;
+    let overlapWarning: string | null = null;
+
+    if (linkExisting && dupModelId) {
+      const r = await linkModelToExistingRoster(dupModelId, terms);
+      if (r.error) { setSaving(false); setError(r.error); return; }
+      modelId = dupModelId;
+      relationshipId = r.relationshipId;
+      overlapWarning = r.overlapWarning;
+    } else {
+      const r = await addNewModelToRoster(
+        { name, email, location, rate, height: "—", exp: "—", dateOfBirth: dateOfBirth || undefined, phone: phone || undefined },
+        terms
+      );
+      if (r.error) { setSaving(false); setError(r.error); return; }
+      modelId = r.modelId;
+      relationshipId = r.relationshipId;
+      overlapWarning = r.overlapWarning;
+    }
+
+    if (file && modelId) {
+      const created = await createModelDocument({
+        modelId, relationshipId: relationshipId || undefined, category: docCategory,
+        fileName: file.name, mimeType: file.type,
+        attestations: { authority: attestAuthority, uploadRights: attestUploadRights, accurate: attestAccurate, willUpdate: attestWillUpdate },
+      });
+      if (created.error || !created.storageBucket || !created.storagePath) {
+        setSaving(false); setError(created.error ?? "Couldn't record the document."); return;
+      }
+      const uploaded = await uploadModelDocumentFile(created.storageBucket, created.storagePath, file);
+      if (uploaded.error) { setSaving(false); setError(uploaded.error); return; }
+    }
+
+    const newModel: RosterModel = {
+      id: modelId!, name, email, agency: org.name, location: location || "—", rate: rate || "—",
+      height: "—", exp: "—", hasLogin: false,
+      relationshipId: relationshipId!, relationshipType: representationType, isMotherAgency,
+      territories, exclusivity, effectiveStartDate, effectiveEndDate: effectiveEndDate || null,
+    };
+    setSaving(false);
+    setResult({ model: newModel, overlapWarning });
+    onAdded(newModel);
+  }
+
+  // Once the RPCs have actually run, replace the form with a summary —
+  // most importantly the overlap warning, if any, which needs its own
+  // explicit acknowledgment rather than just flashing and closing.
+  if (result) {
+    return (
+      <Modal onClose={onClose}>
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div className="text-heading text-sm">{result.model.name} added</div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+        </div>
+        <div className="p-5 space-y-3">
+          {result.overlapWarning ? (
+            <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">{result.overlapWarning}</div>
+          ) : (
+            <div className="text-xs text-muted-foreground">Representation relationship created.</div>
+          )}
+        </div>
+        <div className="px-5 pb-5">
+          <Btn variant="primary" fullWidth onClick={onClose}>Done</Btn>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} maxWidth="max-w-lg">
       <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-        <div className="text-heading text-sm">Add Model to Roster</div>
+        <div>
+          <div className="text-heading text-sm">Add Model to Roster</div>
+          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">Step {step} of 3</div>
+        </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
       </div>
-      <div className="p-5 space-y-3">
-        <TextInput label="Full Name" placeholder="e.g. Nadia Petrov" value={name} onChange={e=>setName(e.target.value)}/>
-        <TextInput label="Email" placeholder="model@example.com" type="email" value={email} onChange={e=>setEmail(e.target.value)}/>
-        <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
-        <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
-        <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
-          An invitation email will be sent to this model to set up their <DvureSignature size={11}/> login, so they can see their own bookings and payment status.
+
+      {step === 1 && (
+        <div className="p-5 space-y-3">
+          <TextInput label="Full Name" placeholder="e.g. Nadia Petrov" value={name} onChange={e=>setName(e.target.value)}/>
+          <TextInput label="Email" placeholder="model@example.com" type="email" value={email}
+            onChange={e=>setEmail(e.target.value)} onBlur={runDuplicateCheck}/>
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Phone" placeholder="Optional" value={phone} onChange={e=>setPhone(e.target.value)} onBlur={runDuplicateCheck}/>
+            <TextInput label="Date of Birth" placeholder="YYYY-MM-DD" type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} onBlur={runDuplicateCheck}/>
+          </div>
+          <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
+          <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
+
+          {checkingDup && <div className="text-[10px] text-muted-foreground font-mono">Checking for an existing profile…</div>}
+
+          {dupConfidence === "high" && !dupResolved && (
+            <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2.5 space-y-2">
+              <div className="font-medium">This model may already have a DVURE profile.</div>
+              <div>Confirm whether this is the same person before continuing.</div>
+              <div className="flex gap-2 pt-1">
+                <Btn variant="primary" size="sm" onClick={()=>{ setLinkExisting(true); setDupResolved(true); }}>Yes — link representation</Btn>
+                <Btn variant="outline" size="sm" onClick={()=>{ setLinkExisting(false); setDupResolved(true); }}>No — different person</Btn>
+              </div>
+            </div>
+          )}
+          {dupConfidence === "low" && (
+            <Badge label="A similarly-named model may already exist — double check before continuing" variant="warning"/>
+          )}
+
+          <div className="bg-secondary border border-border rounded-md px-3 py-2 text-xs text-muted-foreground">
+            An invitation email will be sent to this model to set up their <DvureSignature size={11}/> login, so they can see their own bookings and payment status.
+          </div>
         </div>
-      </div>
+      )}
+
+      {step === 2 && (
+        <div className="p-5 space-y-3">
+          <div>
+            <FieldLabel>Representation Type</FieldLabel>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {CURATED_REPRESENTATION_TYPES.map(t=>(
+                <Chip key={t} active={representationType===t} onClick={()=>setRepresentationType(t)}>{t}</Chip>
+              ))}
+            </div>
+            <TextInput placeholder="Or describe the relationship…" value={representationType} onChange={e=>setRepresentationType(e.target.value)}/>
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" checked={isMotherAgency} onChange={e=>setIsMotherAgency(e.target.checked)}/>
+            Mother / worldwide representation
+          </label>
+          <div>
+            <FieldLabel>Territories</FieldLabel>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {CURATED_TERRITORIES.map(t=>(
+                <Chip key={t} active={territories.includes(t)} onClick={()=>toggleTerritory(t)}>{t}</Chip>
+              ))}
+              {territories.filter(t=>!CURATED_TERRITORIES.includes(t)).map(t=>(
+                <Chip key={t} active onClick={()=>toggleTerritory(t)}>{t}</Chip>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <TextInput placeholder="Add a custom territory…" value={territoryInput} onChange={e=>setTerritoryInput(e.target.value)}/>
+              <Btn variant="outline" size="sm" onClick={addCustomTerritory}>Add</Btn>
+            </div>
+          </div>
+          <FSelect label="Exclusivity" options={EXCLUSIVITY_OPTIONS.map(o=>o.label)}
+            value={EXCLUSIVITY_OPTIONS.find(o=>o.value===exclusivity)?.label}
+            onChange={label=>setExclusivity(EXCLUSIVITY_OPTIONS.find(o=>o.label===label)?.value ?? "not_specified")}/>
+          <div className="grid grid-cols-2 gap-4">
+            <TextInput label="Effective From" placeholder="YYYY-MM-DD" type="date" value={effectiveStartDate} onChange={e=>setEffectiveStartDate(e.target.value)}/>
+            <TextInput label="Effective Until" placeholder="YYYY-MM-DD" type="date" value={effectiveEndDate} onChange={e=>setEffectiveEndDate(e.target.value)}/>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="p-5 space-y-3">
+          <FSelect label="Document Type" options={RESTRICTED_DOC_CATEGORIES.map(c=>c.label)}
+            value={RESTRICTED_DOC_CATEGORIES.find(c=>c.value===docCategory)?.label}
+            onChange={label=>setDocCategory(RESTRICTED_DOC_CATEGORIES.find(c=>c.label===label)?.value ?? "representation_agreement")}/>
+          <div>
+            <FieldLabel>Supporting Representation Agreement</FieldLabel>
+            <input type="file" onChange={e=>setFile(e.target.files?.[0] ?? null)}
+              className="w-full text-xs border border-border rounded-md px-3 py-2 bg-input-background"/>
+            <div className="text-[10px] text-muted-foreground font-mono mt-1">Stored as a restricted document — visible only to your agency, never to the brand or other agencies.</div>
+          </div>
+          {file && (
+            <div className="space-y-1.5 border border-border rounded-md p-3 bg-secondary/50">
+              <FieldLabel>Confirm before uploading</FieldLabel>
+              {[
+                ["authority", "We have authority to represent this model in the territories specified.", attestAuthority, setAttestAuthority],
+                ["upload", "We are authorized to upload and display this model's submitted materials.", attestUploadRights, setAttestUploadRights],
+                ["accurate", "The representation information entered is accurate to the best of our knowledge.", attestAccurate, setAttestAccurate],
+                ["update", "We will update DVURE if this representation relationship changes or terminates.", attestWillUpdate, setAttestWillUpdate],
+              ].map(([key, label, checked, setter]: any) => (
+                <label key={key} className="flex items-start gap-2 text-xs cursor-pointer">
+                  <input type="checkbox" checked={checked} onChange={e=>setter(e.target.checked)} className="mt-0.5"/>
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {error && <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">{error}</div>}
+        </div>
+      )}
+
       <div className="px-5 pb-5 flex gap-2">
-        <Btn variant="primary" disabled={!name || !email} onClick={()=>{
-          onAdd({ name, email, location: location||"—", rate: rate||"—", height:"—", exp:"—" });
-          onClose();
-        }}>Send Invitation</Btn>
+        {step > 1 && <Btn variant="outline" onClick={()=>setStep((step-1) as AddModelStep)}>Back</Btn>}
+        {step < 3 ? (
+          <Btn variant="primary" disabled={step===1 ? !step1Valid : !step2Valid} onClick={()=>setStep((step+1) as AddModelStep)}>Continue</Btn>
+        ) : (
+          <Btn variant="primary" disabled={!step3Valid || saving} onClick={handleFinalSubmit}>{saving ? "Adding…" : "Add Model"}</Btn>
+        )}
         <Btn variant="outline" onClick={onClose}>Cancel</Btn>
       </div>
     </Modal>
   );
 }
 
-function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel: (m: Omit<RosterModel,"id"|"agency"|"hasLogin">) => void }) {
+function RosterView({ roster, onModelAdded }: { roster: RosterModel[]; onModelAdded: (m: RosterModel) => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [invitingModel, setInvitingModel] = useState<RosterModel | null>(null);
   return (
@@ -495,6 +791,11 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold flex items-center gap-1.5">{m.name} <CountryFlag location={m.location} className="text-xs"/></div>
               <div className="text-xs text-muted-foreground">{m.location} · {m.email}</div>
+              {(m.relationshipType || (m.territories && m.territories.length > 0)) && (
+                <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                  {m.relationshipType}{m.relationshipType && m.territories?.length ? " · " : ""}{m.territories?.join(", ")}
+                </div>
+              )}
             </div>
             <div className="text-xs font-mono">{m.rate}</div>
             {m.hasLogin ? (
@@ -508,7 +809,7 @@ function RosterView({ roster, onAddModel }: { roster: RosterModel[]; onAddModel:
           <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No models yet — add your first one.</div>
         )}
       </div>
-      {showAdd && <AddModelModal onClose={()=>setShowAdd(false)} onAdd={onAddModel}/>}
+      {showAdd && <AddModelModal onClose={()=>setShowAdd(false)} onAdded={onModelAdded}/>}
       {invitingModel && <InviteModelModal model={invitingModel} onClose={()=>setInvitingModel(null)}/>}
     </div>
   );
@@ -777,10 +1078,12 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
     return () => { active = false; };
   }, [org?.id, org?.name]);
 
-  async function addModel(m: Omit<RosterModel,"id"|"agency"|"hasLogin">) {
-    if (!org) return;
-    const { model } = await insertRosterModel(org.id, agencyName, m);
-    if (model) setRoster(prev => [...prev, model]);
+  // AddModelModal now does its own RPC calls (representation relationship
+  // + optional document) and only calls this once they've actually
+  // succeeded, so there's nothing left to do here but reflect the new
+  // model into local state.
+  function addModel(m: RosterModel) {
+    setRoster(prev => [...prev, m]);
   }
 
   return (
@@ -828,7 +1131,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
             <div className="flex-1 overflow-auto p-4 md:p-6">
               {view === "invitations" && <InvitationsView invitations={invitations} onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
               {view === "submit" && <SubmitTalentView roster={roster} invitations={invitations} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
-              {view === "roster" && <RosterView roster={roster} onAddModel={addModel}/>}
+              {view === "roster" && <RosterView roster={roster} onModelAdded={addModel}/>}
               {view === "payments" && <PaymentsView/>}
               {view === "messaging" && <AgencyMessagingView/>}
             </div>
