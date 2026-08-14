@@ -26,6 +26,31 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
+// Our subscription_status enum ('trialing' | 'active' | 'past_due' |
+// 'canceled') is deliberately narrower than Stripe's own status
+// vocabulary — 'trialing' here means our own app-managed trial
+// (organizations.trial_ends_at), not a Stripe-side trial, since
+// create-subscription-checkout never creates one. "incomplete" (first
+// payment not yet confirmed) returns null on purpose: the org should
+// stay however it already was (almost always still 'trialing') until a
+// real payment outcome exists, rather than jumping to a status that
+// implies something happened.
+function mapStripeSubscriptionStatus(status: Stripe.Subscription.Status): "active" | "past_due" | "canceled" | null {
+  switch (status) {
+    case "active":
+    case "trialing":
+      return "active";
+    case "past_due":
+    case "unpaid":
+      return "past_due";
+    case "canceled":
+    case "incomplete_expired":
+      return "canceled";
+    default:
+      return null;
+  }
+}
+
 async function verifyAgainstAnySecret(body: string, signature: string): Promise<Stripe.Event> {
   let lastErr: unknown;
   for (const secret of webhookSecrets) {
@@ -145,6 +170,33 @@ Deno.serve(async (req) => {
           .from("invoices")
           .update({ status: "failed" })
           .eq("stripe_payment_intent_id", pi.id);
+        break;
+      }
+
+      // A subscription's status is the one source of truth for whether an
+      // org's platform subscription is actually paid up — created fires
+      // once at creation (still "incomplete" until the first invoice's
+      // PaymentIntent confirms), updated fires on every later transition
+      // (confirmed -> active, a renewal failing -> past_due, etc). Both
+      // are handled identically: re-read the status and write it through.
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const sub = event.data.object as Stripe.Subscription;
+        const status = mapStripeSubscriptionStatus(sub.status);
+        if (!status) break; // "incomplete" — no payment confirmed yet, nothing to record
+        await supabaseAdmin
+          .from("organizations")
+          .update({ subscription_status: status })
+          .eq("stripe_subscription_id", sub.id);
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        await supabaseAdmin
+          .from("organizations")
+          .update({ subscription_status: "canceled" })
+          .eq("stripe_subscription_id", sub.id);
         break;
       }
 

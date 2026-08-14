@@ -62,6 +62,27 @@ export function XBox({ className = "" }: { className?: string }) {
 
 // Staff/org user profiles use initials, not photos — distinct from talent
 // cards (XBox), which stand in for real casting/portfolio images.
+// Deterministic tile color per org name — no real logo assets exist
+// anywhere in this app (no upload flow for one), so this stands in for
+// an agency's/brand's own mark wherever one is called for, same idea as
+// AgencyApp.tsx's card-scale BrandLogoBadge but sized for inline use
+// (a comp card's agency line, not a whole card background).
+const ORG_MONOGRAM_COLORS = ["#1E1C1A", "#3D3A35", "#5B5650", "#2A2E35", "#33241F"];
+function orgMonogramColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return ORG_MONOGRAM_COLORS[hash % ORG_MONOGRAM_COLORS.length];
+}
+export function OrgMonogram({ name, className = "" }: { name: string; className?: string }) {
+  const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div className={cx("rounded-sm flex items-center justify-center text-white font-semibold shrink-0", className)}
+      style={{ background: orgMonogramColor(name) }}>
+      {initials}
+    </div>
+  );
+}
+
 export function UserAvatar({ name, className = "" }: { name: string; className?: string }) {
   const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2);
   return (
@@ -123,9 +144,10 @@ export function FieldLabel({ children }: { children: string }) {
 }
 
 // ─── DVURE BRAND MARKS ──────────────────────────────────────────────────
-// The brand's own "big 3" system, same idea as DIOR/CD-monogram/Dior —
-// all three cropped directly from real reference artwork, not redrawn
-// or font-matched, per the brand's own trademark-filing board:
+// The brand's own "big 3" system — a wordmark, a monogram, and a
+// signature mark, all three cropped directly from real reference
+// artwork, not redrawn or font-matched, per the brand's own
+// trademark-filing board:
 // 1. The Wordmark — DVURE, upright, all-caps — "Authority. Institution."
 //    Formal, official, legal, and billing contexts.
 // 2. The Monogram — the standalone "D" (DvureMark), cropped from the
@@ -158,13 +180,13 @@ export function DvureMark({ size = 24, className }: { size?: number; className?:
   return <img src={dvureMarkD} alt="DVURE" style={{ height: size, width: "auto" }} className={cx("inline-block", className)}/>;
 }
 
-export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, readOnly }: {
-  label?: string; placeholder: string; type?: string; defaultValue?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; readOnly?: boolean;
+export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, onBlur, readOnly }: {
+  label?: string; placeholder: string; type?: string; defaultValue?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; readOnly?: boolean;
 }) {
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <input type={type} placeholder={placeholder} defaultValue={defaultValue} value={value} onChange={onChange} readOnly={readOnly}
+      <input type={type} placeholder={placeholder} defaultValue={defaultValue} value={value} onChange={onChange} onBlur={onBlur} readOnly={readOnly}
         className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground"/>
     </div>
   );
@@ -341,14 +363,14 @@ function RefreshButton() {
   );
 }
 
-export function TopBar({ title, sub, actions }: { title: string; sub?: string; actions?: JSX.Element }) {
+export function TopBar({ title, sub, actions, showRefresh = true }: { title: string; sub?: string; actions?: JSX.Element; showRefresh?: boolean }) {
   return (
     <div className="h-14 border-b glass flex items-center px-6 gap-4 shrink-0 z-20 relative">
       <div className="flex-1 min-w-0">
         <div className="text-heading text-lg truncate">{title}</div>
         {sub && <div className="text-subtext text-xs">{sub}</div>}
       </div>
-      <div className="flex items-center gap-2 shrink-0">{actions}<RefreshButton/><UserMenuButton/><BellButton/></div>
+      <div className="flex items-center gap-2 shrink-0">{actions}{showRefresh && <RefreshButton/>}<UserMenuButton/><BellButton/></div>
     </div>
   );
 }

@@ -6,16 +6,29 @@ export type Availability = "available" | "pending" | "unavailable";
 
 export type PaymentStatus = "pending" | "processing" | "paid";
 
+// Matches the `representation_exclusivity` Postgres enum (0027).
+export type RepresentationExclusivity = "exclusive" | "non_exclusive" | "limited" | "not_specified";
+
 export interface Talent {
   id: number;
+  // Real model_profiles uuid backing this card — needed to group
+  // multiple agencies' submissions of the same person into one card
+  // (see duplicateFlag below). Mock talent doesn't have a real row, so
+  // this is empty string there.
+  modelId: string;
   name: string;
+  photoUrl: string;
+  modelEmail: string;
+  modelPhone: string;
   // agency = who actually submitted this candidate (mother or boutique —
-  // whichever agency clicked submit). motherAgency/boutiqueAgency show on
-  // the card regardless of who submitted, so the brand always knows the
-  // full representation picture, not just the submitter.
+  // whichever agency clicked submit). motherAgency/boutiqueAgencies show
+  // on the card regardless of who submitted, so the brand always knows
+  // the full representation picture, not just the submitter.
   agency: string;
+  submittedByName: string;
+  submittedByEmail: string;
   motherAgency: string;
-  boutiqueAgency?: string;
+  boutiqueAgencies: string[];
   location: string;
   rate: string;
   stage: SubmissionStage;
@@ -27,6 +40,11 @@ export interface Talent {
   dress: string;
   exp: string;
   score: number;
+  // True when more than one agency has submitted this same model to
+  // this campaign — the brand sees one card, not one per agency, with
+  // per-agency stage/actions living in the drawer instead of the card.
+  duplicateFlag: boolean;
+  submittedByAgencies: string[];
 }
 
 export type IconFn = (props: { size?: number; className?: string }) => JSX.Element | null;
@@ -60,6 +78,16 @@ export interface RosterModel {
   // .profile_id is set) — drives whether the agency sees "Invite to
   // DVURE" or a "Has login" badge on their roster card.
   hasLogin: boolean;
+  // The specific agency_model_relationships row backing THIS agency's
+  // view of this model — a model can appear on several agencies'
+  // rosters, each with its own relationship row/terms.
+  relationshipId: string;
+  relationshipType: string;
+  isMotherAgency: boolean;
+  territories: string[];
+  exclusivity: RepresentationExclusivity;
+  effectiveStartDate: string;
+  effectiveEndDate: string | null;
 }
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
@@ -113,6 +141,10 @@ export interface Campaign {
   // walking the same physical show". Multiple campaigns (different
   // brands) can point at the same RunwayShow id.
   runwayShowId?: number;
+  // The campaign's primary casting/shoot territory — compared against
+  // agency_model_relationships.territories when resolving which
+  // relationship applies to a submission (see submit_talent RPC, 0029).
+  territory?: string;
   // Card cover art shown to the brand itself (mood/editorial stock,
   // black & white) — mock-only placeholder for the real photo-picker
   // this stands in for. Agencies/models see the brand's own logo

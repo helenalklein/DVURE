@@ -14,7 +14,7 @@ export async function fetchProfile(userId: string) {
 export async function fetchOrgMembership(profileId: string) {
   return supabase
     .from("org_memberships")
-    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at)")
+    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at, self_described_services, founding_member)")
     .eq("profile_id", profileId)
     .maybeSingle();
 }
@@ -22,7 +22,7 @@ export async function fetchOrgMembership(profileId: string) {
 export async function fetchModelProfile(profileId: string) {
   return supabase
     .from("model_profiles")
-    .select("id, full_name, location")
+    .select("id, full_name, location, photo_url, height, bust, waist, dress, default_day_rate, email, phone")
     .eq("profile_id", profileId)
     .maybeSingle();
 }
@@ -38,7 +38,7 @@ export async function fetchCrewProfile(profileId: string) {
 export async function fetchModelAgencies(modelId: string) {
   return supabase
     .from("agency_model_relationships")
-    .select("relationship_type, organizations(id, name)")
+    .select("relationship_type, is_mother_agency, territories, organizations(id, name)")
     .eq("model_id", modelId)
     .eq("status", "active");
 }

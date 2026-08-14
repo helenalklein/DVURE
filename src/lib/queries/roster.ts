@@ -1,5 +1,5 @@
 import { supabase } from "../supabaseClient";
-import type { RosterModel } from "../../app/shared/types";
+import type { RosterModel, RepresentationExclusivity } from "../../app/shared/types";
 
 function parseRate(rate: string): number | null {
   const n = parseFloat(rate.replace(/[^0-9.]/g, ""));
@@ -9,7 +9,11 @@ function parseRate(rate: string): number | null {
 export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string): Promise<RosterModel[]> {
   const { data, error } = await supabase
     .from("agency_model_relationships")
-    .select("model_id, model_profiles(id, full_name, email, location, default_day_rate, height, experience, profile_id)")
+    .select(`
+      id, relationship_type, is_mother_agency, territories, exclusivity,
+      effective_start_date, effective_end_date,
+      model_id, model_profiles(id, full_name, email, location, default_day_rate, height, experience, profile_id)
+    `)
     .eq("agency_org_id", agencyOrgId)
     .eq("status", "active");
 
@@ -29,53 +33,137 @@ export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string)
         height: m.height ?? "",
         exp: m.experience ?? "",
         hasLogin: m.profile_id != null,
+        relationshipId: r.id as string,
+        relationshipType: r.relationship_type as string,
+        isMotherAgency: r.is_mother_agency as boolean,
+        territories: (r.territories ?? []) as string[],
+        exclusivity: r.exclusivity as RepresentationExclusivity,
+        effectiveStartDate: r.effective_start_date as string,
+        effectiveEndDate: (r.effective_end_date as string | null) ?? null,
       };
     });
 }
 
-// The agency directly adding a model to their own roster is the mother
-// relationship — a boutique link (a second agency also representing an
-// already-mothered model) is a separate, not-yet-built flow. profile_id
-// stays null: no real auth.users row exists until the model accepts an
-// invite (a separate feature), same as 0003_seed.sql's Zara pattern.
-export async function insertRosterModel(
-  agencyOrgId: string,
-  agencyName: string,
-  input: { name: string; email: string; location: string; rate: string; height: string; exp: string }
-): Promise<{ model: RosterModel | null; error: string | null }> {
-  const { data: model, error: modelError } = await supabase
-    .from("model_profiles")
-    .insert({
-      full_name: input.name,
-      email: input.email,
-      location: input.location,
-      default_day_rate: parseRate(input.rate),
-      height: input.height,
-      experience: input.exp,
-    })
-    .select("id")
-    .single();
+export interface DuplicateCheckResult {
+  matchConfidence: "high" | "low" | null;
+  existingModelId: string | null;
+}
 
-  if (modelError || !model) return { model: null, error: modelError?.message ?? "Couldn't add model." };
-
-  const { error: relError } = await supabase
-    .from("agency_model_relationships")
-    .insert({ model_id: model.id, agency_org_id: agencyOrgId, relationship_type: "mother" });
-
-  if (relError) return { model: null, error: relError.message };
-
+// Composite identity-signal check (see check_possible_model_duplicate,
+// 0027) — deliberately not restricted to agencies (the RPC itself has no
+// role check), so this same client wrapper is reusable by a future
+// independent-model self-signup flow without changes.
+export async function checkPossibleModelDuplicate(input: {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  dateOfBirth?: string; // ISO date (YYYY-MM-DD)
+  location?: string;
+}): Promise<DuplicateCheckResult> {
+  const { data, error } = await supabase.rpc("check_possible_model_duplicate", {
+    p_full_name: input.fullName,
+    p_email: input.email || null,
+    p_phone: input.phone || null,
+    p_date_of_birth: input.dateOfBirth || null,
+    p_location: input.location || null,
+  });
+  const row = Array.isArray(data) ? data[0] : null;
+  if (error || !row) return { matchConfidence: null, existingModelId: null };
   return {
-    model: {
-      id: model.id as string,
-      name: input.name,
-      email: input.email,
-      agency: agencyName,
-      location: input.location,
-      rate: input.rate,
-      height: input.height,
-      exp: input.exp,
-      hasLogin: false,
-    },
+    matchConfidence: (row.match_confidence as "high" | "low" | null) ?? null,
+    existingModelId: (row.existing_model_id as string | null) ?? null,
+  };
+}
+
+export interface RelationshipTerms {
+  representationType: string;
+  isMotherAgency: boolean;
+  territories: string[];
+  exclusivity: RepresentationExclusivity;
+  effectiveStartDate: string;
+  effectiveEndDate?: string;
+  // Task 34's real money split — deliberately simple for the pilot
+  // (0038): commissionPct is this relationship's own cut (0-1), null
+  // falls back to the platform default. feeEntitlement "always" means
+  // this agency is paid on every booking of this model regardless of
+  // who actually books it (the real "mother agency" case — a model can
+  // have more than one); "when_booking" (the default) means paid only
+  // when this specific agency is the one who booked.
+  commissionPct?: number | null;
+  feeEntitlement?: "always" | "when_booking";
+}
+
+export interface RelationshipResult {
+  relationshipId: string | null;
+  overlapWarning: string | null;
+  error: string | null;
+}
+
+// The "brand-new person" path — creates model_profiles + the first
+// relationship in one transaction (add_new_model_to_roster, 0027).
+export async function addNewModelToRoster(
+  input: {
+    name: string; email: string; location: string; rate: string; height: string; exp: string;
+    dateOfBirth?: string; phone?: string;
+  },
+  terms: RelationshipTerms
+): Promise<{ modelId: string | null; relationshipId: string | null; overlapWarning: string | null; duplicateConfidence: string | null; error: string | null }> {
+  const { data, error } = await supabase.rpc("add_new_model_to_roster", {
+    p_full_name: input.name,
+    p_email: input.email,
+    p_location: input.location,
+    p_default_day_rate: parseRate(input.rate),
+    p_height: input.height,
+    p_experience: input.exp,
+    p_date_of_birth: input.dateOfBirth || null,
+    p_phone: input.phone || null,
+    p_representation_type: terms.representationType,
+    p_is_mother_agency: terms.isMotherAgency,
+    p_territories: terms.territories,
+    p_exclusivity: terms.exclusivity,
+    p_effective_start_date: terms.effectiveStartDate,
+    p_effective_end_date: terms.effectiveEndDate || null,
+    p_commission_pct: terms.commissionPct ?? null,
+    p_fee_entitlement: terms.feeEntitlement ?? "when_booking",
+  });
+  const row = Array.isArray(data) ? data[0] : null;
+  if (error || !row) {
+    return { modelId: null, relationshipId: null, overlapWarning: null, duplicateConfidence: null, error: error?.message ?? "Couldn't add model." };
+  }
+  return {
+    modelId: row.model_id as string,
+    relationshipId: row.relationship_id as string,
+    overlapWarning: (row.overlap_warning as string | null) ?? null,
+    duplicateConfidence: (row.duplicate_confidence as string | null) ?? null,
     error: null,
   };
+}
+
+// The "link to an existing profile" path — a duplicate check came back
+// 'high' confidence, the agency confirmed it's the same person, so this
+// creates only the relationship row against the existing model_id
+// (create_representation_relationship, 0027) rather than a new profile.
+export async function linkModelToExistingRoster(existingModelId: string, terms: RelationshipTerms): Promise<RelationshipResult> {
+  const { data, error } = await supabase.rpc("create_representation_relationship", {
+    p_model_id: existingModelId,
+    p_representation_type: terms.representationType,
+    p_is_mother_agency: terms.isMotherAgency,
+    p_territories: terms.territories,
+    p_exclusivity: terms.exclusivity,
+    p_effective_start_date: terms.effectiveStartDate,
+    p_effective_end_date: terms.effectiveEndDate || null,
+    p_commission_pct: terms.commissionPct ?? null,
+    p_fee_entitlement: terms.feeEntitlement ?? "when_booking",
+  });
+  const row = Array.isArray(data) ? data[0] : null;
+  if (error || !row) return { relationshipId: null, overlapWarning: null, error: error?.message ?? "Couldn't create representation relationship." };
+  return { relationshipId: row.relationship_id as string, overlapWarning: (row.overlap_warning as string | null) ?? null, error: null };
+}
+
+export async function endRepresentationRelationship(relationshipId: string, effectiveEndDate?: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("end_representation_relationship", {
+    p_relationship_id: relationshipId,
+    p_effective_end_date: effectiveEndDate || new Date().toISOString().slice(0, 10),
+  });
+  return { error: error?.message ?? null };
 }

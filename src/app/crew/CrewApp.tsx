@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Lock, Camera, Clock, LogOut } from "lucide-react";
-import { DvureSignature } from "../shared/ui";
+import { Lock, Camera, Clock, LogOut, ChevronLeft } from "lucide-react";
+import { cx, DvureSignature } from "../shared/ui";
 import { useAuth } from "../shared/auth";
 import { redeemCrewAccess, fetchMyCrewGrants, type CrewAccessDetails } from "../../lib/queries/crewAccess";
+import EventCalendar, { type CalendarEvent } from "../shared/EventCalendar";
+import ShootCallSheet from "../shared/ShootCallSheet";
 
 function fmtDate(d: string | null) {
   if (!d) return null;
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
+function CampaignCard({ g, live, onOpenCallSheet }: { g: CrewAccessDetails; live: boolean; onOpenCallSheet?: (g: CrewAccessDetails) => void }) {
   return (
     <div className="glass-subtle border rounded-lg p-5 mb-3">
       <div className="flex items-start justify-between gap-3 mb-2">
@@ -27,6 +29,12 @@ function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
         {fmtDate(g.dueDate) && <div>Due {fmtDate(g.dueDate)}</div>}
         <div className="capitalize">Status: {g.campaignStatus}</div>
       </div>
+      {onOpenCallSheet && (
+        <button onClick={()=>onOpenCallSheet(g)}
+          className="w-full text-left text-xs font-medium border border-border rounded-md px-3 py-2 mb-3 hover:bg-secondary transition-colors cursor-pointer">
+          View Call Sheet →
+        </button>
+      )}
       <div className="border-t border-border pt-3">
         <div className="text-xs font-semibold mb-1">Payment</div>
         <div className="text-xs text-muted-foreground">
@@ -46,6 +54,8 @@ function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
 function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
   const { crewProfile } = useAuth();
   const [grants, setGrants] = useState<CrewAccessDetails[] | null>(null);
+  const [tab, setTab] = useState<"list" | "calendar">("list");
+  const [viewingCallSheet, setViewingCallSheet] = useState<CrewAccessDetails | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -56,6 +66,13 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
   const now = Date.now();
   const current = (grants ?? []).filter((g) => new Date(g.expiresAt).getTime() > now);
   const past = (grants ?? []).filter((g) => new Date(g.expiresAt).getTime() <= now);
+
+  // Your schedule — only current (live) grants make sense to plot
+  // forward-looking; past ones stay in the list view for your own
+  // record, same as they already did.
+  const events: CalendarEvent[] = useMemo(() => current
+    .map((g): CalendarEvent | null => { const d = g.dueDate ? new Date(g.dueDate) : null; return d && !isNaN(d.getTime()) ? { id: g.grantId, date: d, title: g.campaignName } : null; })
+    .filter((e): e is CalendarEvent => e !== null), [current]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -74,25 +91,54 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-6 py-10">
+      <div className={cx("mx-auto px-6 py-10", viewingCallSheet || tab === "calendar" ? "max-w-3xl" : "max-w-lg")}>
+        {viewingCallSheet ? (
+          <div>
+            <button onClick={()=>setViewingCallSheet(null)} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer mb-3">
+              <ChevronLeft size={12}/> Back
+            </button>
+            <div className="border rounded-lg overflow-hidden" style={{ height: "70vh" }}>
+              <ShootCallSheet campaignId={viewingCallSheet.campaignId} campaignName={viewingCallSheet.campaignName}/>
+            </div>
+          </div>
+        ) : (
+        <>
+        {grants !== null && grants.length > 0 && (
+          <div className="flex items-center gap-1 mb-6 border border-border rounded-md p-0.5 w-fit">
+            {(["list","calendar"] as const).map(t => (
+              <button key={t} onClick={()=>setTab(t)}
+                className={cx("px-3 py-1 text-xs rounded-sm cursor-pointer transition-colors capitalize",
+                  tab===t ? "bg-secondary text-foreground font-medium" : "text-muted-foreground hover:text-foreground")}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+
         {grants === null && <div className="text-sm text-muted-foreground">Loading...</div>}
 
         {grants !== null && grants.length === 0 && (
           <div className="text-sm text-muted-foreground">No campaigns have been shared with you yet. You'll see them here as soon as a production sends you access.</div>
         )}
 
-        {current.length > 0 && (
+        {tab === "calendar" && grants !== null && grants.length > 0 && (
+          <EventCalendar events={events}/>
+        )}
+
+        {tab === "list" && current.length > 0 && (
           <div className="mb-8">
             <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono mb-3">Current</div>
-            {current.map((g) => <CampaignCard key={g.grantId} g={g} live/>)}
+            {current.map((g) => <CampaignCard key={g.grantId} g={g} live onOpenCallSheet={setViewingCallSheet}/>)}
           </div>
         )}
 
-        {past.length > 0 && (
+        {tab === "list" && past.length > 0 && (
           <div>
             <div className="text-xs text-muted-foreground uppercase tracking-widest font-mono mb-3">Past</div>
-            {past.map((g) => <CampaignCard key={g.grantId} g={g} live={false}/>)}
+            {past.map((g) => <CampaignCard key={g.grantId} g={g} live={false} onOpenCallSheet={setViewingCallSheet}/>)}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

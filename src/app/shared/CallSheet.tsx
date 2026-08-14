@@ -87,7 +87,7 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
       <div className="call-sheet-noprint px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
         <div>
           <div className="text-heading text-sm flex items-center gap-2">
-            Call Sheet
+            Crew
             {myRole === "viewer" && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5 flex items-center gap-1"><Lock size={9}/> Read only</span>}
             {myRole === "lead" && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5">Department lead</span>}
           </div>
@@ -101,7 +101,7 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
             <div className="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg py-1 w-52 z-20">
               <button onClick={()=>{ setPrintMenuOpen(false); setPrintMode("standard"); }}
                 className="w-full text-left px-3 py-2 text-xs hover:bg-secondary cursor-pointer">
-                Standard call sheet
+                Standard crew list
                 <div className="text-[10px] text-muted-foreground">Plain list, role and name</div>
               </button>
               <button onClick={()=>{ setPrintMenuOpen(false); setPrintMode("boxes"); }}
@@ -116,7 +116,7 @@ export default function CallSheet({ campaignId, campaignName }: { campaignId: st
 
       {/* Print header — visible only when printing */}
       <div className="hidden print:block px-2 pt-4 pb-2">
-        <div className="text-lg font-semibold">{campaignName} — Call Sheet</div>
+        <div className="text-lg font-semibold">{campaignName} — Crew</div>
         <div className="text-xs text-muted-foreground">{new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
       </div>
 

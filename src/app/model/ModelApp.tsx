@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare } from "lucide-react";
 import { cx, Badge, TopBar, Stat, CurrentUserProvider, useCurrentUser, DvureMark, DvureSignature } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
+import EventCalendar, { type CalendarEvent } from "../shared/EventCalendar";
+import { CompCard } from "../shared/CompCard";
+import type { Talent } from "../shared/types";
 
 type View = "bookings" | "availability" | "contracts" | "earnings" | "profile" | "messages";
 
 const NAV: { id: View; label: string; Icon: typeof Briefcase }[] = [
   { id:"bookings",     label:"My Bookings",   Icon:Briefcase  },
-  { id:"availability", label:"Availability",  Icon:Calendar   },
+  { id:"availability", label:"Calendar",      Icon:Calendar   },
   { id:"contracts",    label:"Contracts",     Icon:FileCheck  },
   { id:"earnings",     label:"Earnings",      Icon:CreditCard },
   { id:"messages",     label:"Campaign Updates", Icon:MessageSquare },
@@ -106,6 +109,25 @@ function BookingsView() {
   );
 }
 
+// Every confirmed shoot date on one month grid — same underlying data as
+// BookingsView, just plotted instead of listed. This fills what used to
+// be an unimplemented "Availability" stub (never had a real content
+// view — every other nav item did).
+function ModelCalendarView() {
+  const currentUser = useCurrentUser();
+  const myBookings = BOOKINGS.filter(b=>b.model===currentUser?.name);
+  const events: CalendarEvent[] = useMemo(() => myBookings
+    .map((b): CalendarEvent | null => { const d = new Date(b.shootDate); return isNaN(d.getTime()) ? null : { id: b.id, date: d, title: `${b.campaign} — Shoot` }; })
+    .filter((e): e is CalendarEvent => e !== null), [myBookings]);
+
+  return (
+    <div className="max-w-3xl">
+      <p className="text-sm text-muted-foreground mb-4">Your confirmed shoot dates.</p>
+      <EventCalendar events={events}/>
+    </div>
+  );
+}
+
 function EarningsView() {
   const currentUser = useCurrentUser();
   const myBookings = BOOKINGS.filter(b=>b.model===currentUser?.name);
@@ -134,12 +156,49 @@ function EarningsView() {
   );
 }
 
+// The model's own digital comp card — same CompCard component the brand's
+// Submissions board and the agency's project view use, so a model sees
+// exactly the same front (headshot, name, physical stats, agency + mark)
+// and the same flip-to-back (additional photos, contact, social) that
+// everyone looking at their submission sees. modelProfile doesn't carry
+// submission-specific fields (stage, score, duplicate flags) since a
+// model isn't submitted to anything on their own profile page — filled
+// in with neutral values CompCard doesn't render when there's no
+// duplicateBadge/actions/etc. passed.
+function MyCompCardView() {
+  const { modelProfile, modelAgencies } = useAuth();
+  const motherAgency = modelAgencies?.find(a => a.isMotherAgency)?.name ?? modelAgencies?.[0]?.name ?? "Not represented";
+  const boutiqueAgencies = (modelAgencies ?? []).filter(a => !a.isMotherAgency).map(a => a.name);
+
+  if (!modelProfile) {
+    return <div className="text-sm text-muted-foreground">Your profile isn't set up yet — reach out to your agency.</div>;
+  }
+
+  const talent: Talent = {
+    id: 0, modelId: modelProfile.id, name: modelProfile.fullName,
+    photoUrl: modelProfile.photoUrl ?? "", modelEmail: modelProfile.email ?? "", modelPhone: modelProfile.phone ?? "",
+    agency: motherAgency, submittedByName: "", submittedByEmail: "",
+    motherAgency, boutiqueAgencies,
+    location: modelProfile.location ?? "", rate: modelProfile.dayRate != null ? `$${modelProfile.dayRate}/day` : "",
+    stage: "submitted", avail: "available", note: "",
+    height: modelProfile.height ?? "", bust: modelProfile.bust ?? "", waist: modelProfile.waist ?? "", dress: modelProfile.dress ?? "",
+    exp: "", score: 0, duplicateFlag: false, submittedByAgencies: [],
+  };
+
+  return (
+    <div className="max-w-xs">
+      <div className="text-xs text-muted-foreground mb-3">This is what brands and agencies see when you're submitted — hover the card and click the flip icon to see the back.</div>
+      <CompCard talent={talent}/>
+    </div>
+  );
+}
+
 export default function ModelApp({ onLogout }: { onLogout: () => void }) {
   const { profile, modelProfile, modelAgencies } = useAuth();
   const [view, setView] = useState<View>("bookings");
 
   const name = modelProfile?.fullName ?? profile?.fullName ?? "";
-  const primaryAgency = modelAgencies?.find(a => a.relationshipType === "mother")?.name ?? modelAgencies?.[0]?.name ?? "";
+  const primaryAgency = modelAgencies?.find(a => a.isMotherAgency)?.name ?? modelAgencies?.[0]?.name ?? "";
   const initials = name.trim().split(/\s+/).map(p => p[0]).join("").slice(0, 2).toUpperCase() || "?";
 
   return (
@@ -181,9 +240,11 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
           <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${name} · Model`}/>
           <div className="flex-1 overflow-auto p-6">
             {view === "bookings" && <BookingsView/>}
+            {view === "availability" && <ModelCalendarView/>}
             {view === "earnings" && <EarningsView/>}
             {view === "messages" && <MessagesView/>}
-            {view !== "bookings" && view !== "earnings" && view !== "messages" && (
+            {view === "profile" && <MyCompCardView/>}
+            {view !== "bookings" && view !== "availability" && view !== "earnings" && view !== "messages" && view !== "profile" && (
               <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
                 <div className="text-sm text-muted-foreground">{NAV.find(n=>n.id===view)?.label} · coming soon</div>
               </div>

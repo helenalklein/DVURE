@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Plus, ChevronRight, ChevronDown, ChevronLeft,
   X, Check, Star, Search, Briefcase,
   AlertCircle, Camera, XCircle,
-  MessageSquare, Download, CreditCard, MapPin,
+  MessageSquare, Download, CreditCard,
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
@@ -12,23 +12,27 @@ import {
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CastingStageId, CastingEntry, Look, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner } from "../shared/ui";
+import { CompCard } from "../shared/CompCard";
+import NetworkView from "../shared/NetworkView";
+import SupportTicketForm from "../shared/SupportTicketForm";
 import { getAccessGate } from "../shared/accessGate";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, CAMPAIGNS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CASTING_STAGES, CASTING_ENTRIES, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies } from "../../lib/queries/campaigns";
-import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim } from "../../lib/queries/submissions";
+import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
-import { createBooking, DEFAULT_AGENCY_PCT, DEFAULT_PLATFORM_PCT } from "../../lib/queries/bookings";
+import { createBooking, DEFAULT_AGENCY_PCT } from "../../lib/queries/bookings";
 import InvoicePaymentPanel from "./InvoicePayment";
 import CampaignCalendar from "./CampaignCalendar";
 import CallSheet from "../shared/CallSheet";
+import ShootCallSheet from "../shared/ShootCallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 
 type GlobalView = "campaigns" | "urgent" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "casting" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "casting" | "call-sheet" | "shoot-call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "bookings" | "activity" | "collaboration" | "users";
 
-const PARTNERED_AGENCIES = ["Elite Model Management","IMG Models","Wilhelmina","DNA Models"];
+const PARTNERED_AGENCIES = ["Halstead Model Management","Larkspur Models","Ashgrove","Cordell Models"];
 
 // ─── CONTRACT MODAL ────────────────────────────────────────────────────────
 
@@ -169,7 +173,8 @@ function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: s
   const withCasting = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
     item,
     { id:"casting" as CampaignSection, label:"Casting Board", Icon:Check },
-    { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:Users },
+    { id:"call-sheet" as CampaignSection, label:"Crew", Icon:Users },
+    { id:"shoot-call-sheet" as CampaignSection, label:"Call Sheet", Icon:Calendar },
   ] : [item]);
   if (type !== "Runway") return withCasting;
   return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
@@ -248,8 +253,9 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
 
-function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook }: {
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, duplicates, onDuplicateAgencyAction }: {
   talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
+  duplicates: DuplicatesShim; onDuplicateAgencyAction: (talentId: number, submissionId: string, newStage: SubmissionStage) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [dragging, setDragging] = useState<number|null>(null);
@@ -347,14 +353,14 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
 
       <div className="flex-1 overflow-hidden flex min-h-0">
         <div className="flex-1 overflow-auto">
-          <div className="flex gap-0 h-full min-w-max">
+          <div className="flex gap-0 h-full">
             {PIPELINE_STAGES.map(stage => {
               const cards = byStage(stage.id);
               const isOver = dragOver === stage.id;
               const actions = STAGE_ACTIONS[stage.id] ?? [];
               return (
                 <div key={stage.id}
-                  className={cx("w-64 flex-shrink-0 flex flex-col border-r border-border last:border-0 transition-colors", isOver?"bg-secondary/60":"bg-background")}
+                  className={cx("flex-1 min-w-64 flex flex-col border-r border-border last:border-0 transition-colors", isOver?"bg-secondary/60":"bg-background")}
                   onDragOver={e=>{e.preventDefault();setDragOver(stage.id);}}
                   onDragLeave={()=>setDragOver(null)}
                   onDrop={()=>{if(dragging!==null){moveWithUndo(dragging,stage.id,stage.label);setDragging(null);setDragOver(null);}}}
@@ -371,77 +377,34 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                       </button>
                     )}
                   </div>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  <div className="flex-1 overflow-y-auto p-3">
                     {cards.length===0&&(
                       <div className={cx("h-20 flex items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground",isOver?"border-foreground bg-secondary":"border-border")}>
                         {isOver?"Drop here":"Empty"}
                       </div>
                     )}
-                    {cards.map(t=>{
-                      const isSel=selected.includes(t.id);
-                      const isDrag=dragging===t.id;
-                      return (
-                        <div key={t.id} draggable
-                          onDragStart={()=>setDragging(t.id)}
-                          onDragEnd={()=>{setDragging(null);setDragOver(null);}}
-                          onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
-                          className={cx("glass-subtle rounded-md border overflow-hidden cursor-pointer select-none transition-all group",
-                            isSel?"border-foreground ring-1 ring-foreground":"border-border hover:border-foreground/40",
-                            isDrag&&"opacity-40"
-                          )}
-                        >
-                          <div className="relative">
-                            <XBox className="w-full h-32"/>
-                            <div className={cx("absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",isSel?"bg-foreground border-foreground":"bg-card/80 border-border")}>
-                              {isSel&&<Check size={11} className="text-primary-foreground"/>}
-                            </div>
-                          </div>
-                          <div className="p-2.5 space-y-0.5">
-                            <div className="text-xs font-semibold leading-tight truncate flex items-center gap-1">
-                              {t.name} <CountryFlag location={t.location} className="text-[11px] shrink-0"/>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground truncate">
-                              <span className="text-muted-foreground/70">Mother:</span>{" "}
-                              <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
-                                className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground truncate">
-                              <span className="text-muted-foreground/70">Boutique:</span>{" "}
-                              {t.boutiqueAgency ? (
-                                <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.boutiqueAgency!); }}
-                                  className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.boutiqueAgency}</button>
-                              ) : "None"}
-                            </div>
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
-                              <span>{t.height}</span><span>·</span><span className="truncate">{t.location.split(",")[0]}</span>
-                            </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <div className="text-[10px] font-mono font-medium">{t.rate}</div>
-                              <div className="flex items-center gap-0.5">
-                                {[0,1,2,3,4].map(i=><Star key={i} size={7} className={i<t.score?"fill-foreground text-foreground":"text-muted-foreground"}/>)}
-                              </div>
-                            </div>
-                            {commentsFor(t.id).length>0 && (
-                              <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-mono pt-0.5">
-                                <Pin size={9}/> {commentsFor(t.id).length} comment{commentsFor(t.id).length!==1?"s":""}
-                              </div>
-                            )}
-                          </div>
-                          {actions.length>0&&(
-                            <div className="border-t border-border flex divide-x divide-border opacity-0 group-hover:opacity-100 transition-opacity" onClick={e=>e.stopPropagation()}>
-                              {actions.map(a=>(
-                                <button key={a.label} onClick={()=>moveWithUndo(t.id,a.stage,a.label)}
-                                  className={cx("flex-1 py-1.5 text-[10px] font-medium transition-colors",
-                                    a.label==="Reject"?"text-muted-foreground hover:bg-muted"
-                                      :a.label==="Book"||a.label==="Approve"?"bg-foreground text-primary-foreground hover:bg-foreground/90"
-                                      :"text-muted-foreground hover:bg-secondary hover:text-foreground"
-                                  )}>{a.label}</button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {/* Comp-card wall — shared CompCard component so Brand and
+                        Agency stay visually identical by construction. Extra
+                        Brand-only behavior (selection, drag, hover actions, and
+                        click opening the full side drawer) is layered on via
+                        CompCard's optional props. */}
+                    <div className="grid grid-cols-2 gap-2">
+                    {cards.map(t=>(
+                      <CompCard key={t.id} talent={t}
+                        onViewAgency={onViewAgency}
+                        onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
+                        draggable onDragStart={()=>setDragging(t.id)} onDragEnd={()=>{setDragging(null);setDragOver(null);}}
+                        selected={selected.includes(t.id)} dragging={dragging===t.id}
+                        duplicateBadge={t.duplicateFlag ? `×${t.submittedByAgencies.length}` : undefined}
+                        commentCount={commentsFor(t.id).length}
+                        // Duplicate (multi-agency) cards hide the flat hover actions — a
+                        // single "Approve" no longer means one unambiguous thing when more
+                        // than one agency's submission is behind this card. Per-agency
+                        // action moves into the drawer's "Submitted By" section instead.
+                        actions={actions.length>0 && !t.duplicateFlag ? actions.map(a=>({ label:a.label, onClick:()=>moveWithUndo(t.id,a.stage,a.label) })) : undefined}
+                      />
+                    ))}
+                    </div>
                   </div>
                 </div>
               );
@@ -458,7 +421,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
             <div className="flex-1 overflow-auto p-4 space-y-4">
               <div>
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Portfolio</div>
-                <XBox className="w-full h-36 rounded-md"/>
+                {drawer.photoUrl ? (
+                  <img src={drawer.photoUrl} alt={drawer.name} className="w-full h-36 rounded-md object-cover"/>
+                ) : (
+                  <XBox className="w-full h-36 rounded-md"/>
+                )}
                 <div className="grid grid-cols-3 gap-1 mt-1">{[0,1,2].map(i=><XBox key={i} className="aspect-square rounded-sm"/>)}</div>
               </div>
               <div>
@@ -480,16 +447,47 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                     <button onClick={()=>onViewAgency(drawer.motherAgency)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.motherAgency}</button>
                   </div>
                   <div className="pt-2 border-t border-border">
-                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agency</div>
-                    {drawer.boutiqueAgency ? (
-                      <button onClick={()=>onViewAgency(drawer.boutiqueAgency!)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.boutiqueAgency}</button>
+                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agenc{drawer.boutiqueAgencies.length===1?"y":"ies"}</div>
+                    {drawer.boutiqueAgencies.length > 0 ? (
+                      <div className="flex flex-wrap gap-x-2">
+                        {drawer.boutiqueAgencies.map(a=>(
+                          <button key={a} onClick={()=>onViewAgency(a)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{a}</button>
+                        ))}
+                      </div>
                     ) : <div className="text-xs font-semibold">None</div>}
                   </div>
                   <div className="pt-2 border-t border-border text-[10px] text-muted-foreground">
-                    Submitted via {drawer.agency} · Sophie Chen · sophie@elitemodels.com
+                    Submitted via {drawer.agency}{drawer.submittedByName && ` · ${drawer.submittedByName}`}{drawer.submittedByEmail && ` · ${drawer.submittedByEmail}`}
                   </div>
                 </div>
               </div>
+              {drawer.duplicateFlag && (
+                <div>
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Submitted By</div>
+                  <div className="bg-secondary rounded-md p-3 space-y-2">
+                    {(duplicates.get(drawer.id) ?? []).map(entry => (
+                      <div key={entry.submissionId} className="flex items-center justify-between gap-2 pt-2 border-t border-border first:pt-0 first:border-0">
+                        <div className="min-w-0">
+                          <button onClick={()=>onViewAgency(entry.agencyName)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer truncate">{entry.agencyName}</button>
+                          <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">{entry.stage}</div>
+                        </div>
+                        {entry.stage === "submitted" && (
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={()=>onDuplicateAgencyAction(drawer.id, entry.submissionId, "approved")}
+                              className="text-[10px] font-medium px-2 py-1 rounded-sm bg-foreground text-primary-foreground hover:bg-foreground/90">Approve</button>
+                            <button onClick={()=>onDuplicateAgencyAction(drawer.id, entry.submissionId, "rejected")}
+                              className="text-[10px] font-medium px-2 py-1 rounded-sm text-muted-foreground hover:bg-muted">Reject</button>
+                          </div>
+                        )}
+                        {entry.stage === "approved" && (
+                          <button onClick={()=>onDuplicateAgencyAction(drawer.id, entry.submissionId, "booked")}
+                            className="text-[10px] font-medium px-2 py-1 rounded-sm bg-foreground text-primary-foreground hover:bg-foreground/90 shrink-0">Book</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Details</div>
                 {[["Location",drawer.location],["Experience",drawer.exp],["Day Rate",drawer.rate]].map(([k,v])=>(
@@ -635,7 +633,7 @@ function CastingBoard({ campaign }: { campaign: Campaign }) {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="h-full overflow-auto p-6">
       <div className="max-w-5xl space-y-4">
         {show && (
           <div className="glass-subtle border rounded-md p-4 flex items-start justify-between gap-4 flex-wrap">
@@ -722,7 +720,7 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
   const crewByRole = (role: string) => CREW.filter(c=>c.role===role);
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="h-full overflow-auto p-6">
       <div className="max-w-4xl">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-muted-foreground">Numbered looks for this show — garments, accessories, and who's assigned to execute each one.</p>
@@ -895,7 +893,7 @@ function ExtendSubmissionModal({ campaign, onClose, onGrant }: {
 function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   agencyName: string; campaign: Campaign; talent: Talent[]; onBack: () => void;
 }) {
-  const submittedHere = talent.filter(t => t.agency===agencyName || t.motherAgency===agencyName || t.boutiqueAgency===agencyName);
+  const submittedHere = talent.filter(t => t.agency===agencyName || t.motherAgency===agencyName || t.boutiqueAgencies.includes(agencyName));
   const isDistributed = (CAMPAIGN_AGENCIES[campaign.id] ?? []).includes(agencyName);
 
   return (
@@ -915,7 +913,7 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
         </div>
         <div className="glass-subtle border rounded-md p-4">
           <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Basic Info</div>
-          {[["Primary Contact","Sophie Chen"],["Email","sophie@elitemodels.com"],["Phone","+1 212 555 0200"]].map(([k,v])=>(
+          {[["Primary Contact","Sophie Chen"],["Email","sophie@halstead.com"],["Phone","+1 212 555 0200"]].map(([k,v])=>(
             <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
               <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
             </div>
@@ -938,6 +936,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [shim, setShim] = useState<SubmissionShim>(new Map());
+  const [duplicates, setDuplicates] = useState<DuplicatesShim>(new Map());
   // Non-null once `campaignId` resolves to a real Supabase campaign via
   // realIdShim — only then do talent/comments reflect real data instead
   // of the SAMPLE_TALENT/CARD_COMMENTS mock.
@@ -960,10 +959,11 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     setRealCampaignId(realId);
     if (!realId) return; // no real campaign for this id — mock data already seeded above
     (async () => {
-      const { talent: realTalent, shim: realShim } = await fetchCampaignSubmissions(realId);
+      const { talent: realTalent, shim: realShim, duplicates: realDuplicates } = await fetchCampaignSubmissions(realId);
       if (!active) return;
       setTalent(realTalent);
       setShim(realShim);
+      setDuplicates(realDuplicates);
       const realComments = await fetchSubmissionComments(realShim);
       if (!active) return;
       setComments(realComments);
@@ -994,6 +994,34 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
       }
       return next;
     });
+  }
+
+  // booked > approved > submitted > rejected — mirrors submissions.ts's
+  // own STAGE_RANK. Used to re-derive a grouped (duplicateFlag) card's
+  // kanban placement after a per-agency drawer action, so the board
+  // never regresses visibility just because one agency's copy fell
+  // behind another's.
+  const STAGE_RANK: Record<SubmissionStage, number> = { booked: 3, approved: 2, submitted: 1, rejected: 0 };
+
+  // Per-agency stage change from the drawer's "Submitted By" section
+  // (only relevant when talent.duplicateFlag) — updates that one
+  // agency's real submission row directly (bypassing shim, which only
+  // ever points at one canonical submission per card), then recomputes
+  // the grouped card's own displayed stage from the updated set.
+  function handleDuplicateAgencyAction(talentId: number, submissionId: string, newStage: SubmissionStage) {
+    updateSubmissionStage(submissionId, newStage, { reviewedByProfileId: profile?.id });
+    setDuplicates(prev => {
+      const next = new Map(prev);
+      const entries = next.get(talentId);
+      if (entries) next.set(talentId, entries.map(e => e.submissionId === submissionId ? { ...e, stage: newStage } : e));
+      return next;
+    });
+    setTalent(prev => prev.map(t => {
+      if (t.id !== talentId) return t;
+      const entries = duplicates.get(talentId)?.map(e => e.submissionId === submissionId ? { ...e, stage: newStage } : e) ?? [];
+      const canonical = entries.reduce((best, e) => STAGE_RANK[e.stage] > STAGE_RANK[best.stage] ? e : best, entries[0]);
+      return canonical ? { ...t, stage: canonical.stage } : t;
+    }));
   }
 
   function parseRateDefault(rate: string): string {
@@ -1033,7 +1061,6 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
         const { error } = await createBooking({
           campaignId: realCampaignId,
           submissionId: entry.submissionId,
-          brandOrgId: org.id,
           agencyOrgId: entry.agencyOrgId,
           modelId: entry.modelId,
           dayRate, days,
@@ -1109,7 +1136,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                 <div className="grid grid-cols-2 gap-4">
                   <div className="glass-subtle border rounded-md p-4">
                     <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Details</div>
-                    {[["Type","Editorial"],["Budget","$800–$1,200/day"],["Dates","07/14–07/16/2025"],["Location","Studio 9, New York"],["Talent needed","3"],["Status","Active"]].map(([k,v])=>(
+                    {[["Type","Editorial"],["Budget","$800–$1,200/day"],["Dates","07/14–07/16/2025"],["Location",campaign.territory || "Not set"],["Talent needed","3"],["Status","Active"]].map(([k,v])=>(
                       <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
                         <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
                       </div>
@@ -1148,13 +1175,19 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} duplicates={duplicates} onDuplicateAgencyAction={handleDuplicateAgencyAction}/>}
 
           {section==="casting" && <CastingBoard campaign={campaign}/>}
 
           {section==="call-sheet" && (
             realCampaignId
               ? <CallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">Crew needs a real, saved campaign — publish this campaign first.</div>
+          )}
+
+          {section==="shoot-call-sheet" && (
+            realCampaignId
+              ? <ShootCallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">Call Sheet needs a real, saved campaign — publish this campaign first.</div>
           )}
 
@@ -1328,7 +1361,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             <div>
               <div className="text-heading text-lg">Confirm booking</div>
               <div className="text-sm text-muted-foreground mt-0.5">
-                Day rate, days, and shoot date for {bookModal.ids.length === 1 ? "this model" : `these ${bookModal.ids.length} models`}. Agency and platform fees use DVURE's standard split ({DEFAULT_AGENCY_PCT}% / {DEFAULT_PLATFORM_PCT}%).
+                Day rate, days, and shoot date for {bookModal.ids.length === 1 ? "this model" : `these ${bookModal.ids.length} models`}. Agency commission is set per relationship; the platform fee (6% card / 5.5% ACH) is chosen when you pay.
               </div>
             </div>
             <div className="space-y-3 max-h-72 overflow-y-auto">
@@ -1781,6 +1814,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
   const [submissionClose, setSubmissionClose] = useState("");
   const [talentNeeded, setTalentNeeded] = useState("3");
   const [budget, setBudget] = useState("");
+  const [territory, setTerritory] = useState("");
   const [partneredAgencies, setPartneredAgencies] = useState<{ id: string; name: string }[]>([]);
   const [selectedAgencies, setSelectedAgencies] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -1813,6 +1847,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       submissionClose: submissionClose || undefined,
       talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
       budget: budget ? Number(budget) : undefined,
+      territory: territory || undefined,
     });
     setSaving(false);
     if (error || !id) { setSaveError(error ?? "Couldn't save draft."); return; }
@@ -1834,6 +1869,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       submissionClose: submissionClose || undefined,
       talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
       budget: budget ? Number(budget) : undefined,
+      territory: territory || undefined,
     });
     if (error || !id) { setSaving(false); setSaveError(error ?? "Couldn't publish campaign."); return; }
     const { error: distError } = await distributeCampaignToAgencies(id, selectedAgencies, profile.id);
@@ -1883,7 +1919,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               <TextInput label="Budget" placeholder="e.g. 18000" type="number" value={budget} onChange={e=>setBudget(e.target.value)}/>
               <TextInput label="Shoot Date" placeholder="MM/DD/YYYY" type="date" value={shootStart} onChange={e=>setShootStart(e.target.value)}/>
             </div>
-            <TextInput label="Location" placeholder="City, state, or studio address"/>
+            <TextInput label="Location" placeholder="City, state, or studio address" value={territory} onChange={e=>setTerritory(e.target.value)}/>
             <div>
               <FieldLabel>Talent Submission Window</FieldLabel>
               <p className="text-xs text-muted-foreground mb-2">Agencies can only submit talent between these dates.</p>
@@ -1985,10 +2021,10 @@ function GlobalContracts() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-border bg-muted/30">{["Reference","Talent","Agency","Campaign","Value","Status","Actions"].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}</tr></thead>
             <tbody>
-              {[["CF-2025-0841","James Whitfield","Elite Model Mgmt.","AW25 Womenswear","$2,850","Fully Executed"],
-                ["CF-2025-0842","Amara Diallo","Elite Model Mgmt.","AW25 Womenswear","$2,300","Awaiting Signature"],
-                ["CF-2025-0843","Zara Okafor","Elite Model Mgmt.","AW25 Womenswear","$1,960","Draft — Not Sent"],
-                ["CF-2025-0791","Mila Tran","IMG Models","SS25 Fragrance","$1,100","Fully Executed"]].map((r,i)=>(
+              {[["CF-2025-0841","James Whitfield","Halstead Model Mgmt.","AW25 Womenswear","$2,850","Fully Executed"],
+                ["CF-2025-0842","Amara Diallo","Halstead Model Mgmt.","AW25 Womenswear","$2,300","Awaiting Signature"],
+                ["CF-2025-0843","Zara Okafor","Halstead Model Mgmt.","AW25 Womenswear","$1,960","Draft — Not Sent"],
+                ["CF-2025-0791","Mila Tran","Larkspur Models","SS25 Fragrance","$1,100","Fully Executed"]].map((r,i)=>(
                 <tr key={i} className="border-b border-border last:border-0 hover:bg-secondary cursor-pointer">
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{r[0]}</td>
                   <td className="px-4 py-3 font-medium">{r[1]}</td>
@@ -2601,21 +2637,21 @@ function GlobalPayments() {
 // ─── INVOICES PANEL ─────────────────────────────────────────────────────────
 
 const INVOICE_DATA = [
-  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"James Whitfield", dayRate:950,  days:3, amount:2850,  due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"Amara Diallo",    dayRate:1150, days:2, amount:2300,  due:"06/24/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    agency:"IMG Models",        talent:"Mila Tran",       dayRate:1100, days:1, amount:1100,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0768", campaign:"FW24 Campaign",            agency:"DNA Models",        talent:"Sofia Brandt",    dayRate:1200, days:3, amount:3600,  due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0804", campaign:"Resort Lookbook 2025",     agency:"Storm Models",      talent:"Ines Ferreira",   dayRate:1340, days:2, amount:2680,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
-  { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Next Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0841", campaign:"AW25 Womenswear Campaign", agency:"Halstead Model Mgmt.", talent:"James Whitfield", dayRate:950,  days:3, amount:2850,  due:"06/20/2025", urgency:"yellow", agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0842", campaign:"AW25 Womenswear Campaign", agency:"Halstead Model Mgmt.", talent:"Amara Diallo",    dayRate:1150, days:2, amount:2300,  due:"06/24/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0791", campaign:"SS25 Fragrance Launch",    agency:"Larkspur Models",        talent:"Mila Tran",       dayRate:1100, days:1, amount:1100,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0768", campaign:"FW24 Campaign",            agency:"Cordell Models",        talent:"Sofia Brandt",    dayRate:1200, days:3, amount:3600,  due:"06/10/2025", urgency:"red",    agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0804", campaign:"Resort Lookbook 2025",     agency:"Northfield Models",      talent:"Ines Ferreira",   dayRate:1340, days:2, amount:2680,  due:"07/03/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
+  { id:"INV-0815", campaign:"Beauty Campaign Q1",       agency:"Aveline Models",       talent:"Chiara Russo",    dayRate:860,  days:2, amount:1720,  due:"07/10/2025", urgency:"green",  agencyPct:20, dvurePct:3, taxPct:8.25 },
 ];
 
 // Already-authorized invoices — same shape as an outstanding one, plus
 // when it was paid, so the fee breakdown modal keeps working unchanged.
 const PAID_INVOICE_DATA = [
-  { id:"INV-0729", campaign:"AW26 Runway Presentation", agency:"Wilhelmina",   talent:"Priya Anand",     dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
-  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    agency:"Next Models",  talent:"Chiara Russo",    dayRate:900,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
-  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", agency:"Elite Model Mgmt.", talent:"James Whitfield", dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
-  { id:"INV-0655", campaign:"Resort Lookbook 2025",     agency:"Storm Models", talent:"Ines Ferreira",   dayRate:460,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
+  { id:"INV-0729", campaign:"AW26 Runway Presentation", agency:"Ashgrove",   talent:"Priya Anand",     dayRate:1600, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 18, 2026" },
+  { id:"INV-0703", campaign:"Holiday 2026 Lookbook",    agency:"Aveline Models",  talent:"Chiara Russo",    dayRate:900,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 14, 2026" },
+  { id:"INV-0681", campaign:"AW25 Womenswear Campaign", agency:"Halstead Model Mgmt.", talent:"James Whitfield", dayRate:1000, days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"Jun 09, 2026" },
+  { id:"INV-0655", campaign:"Resort Lookbook 2025",     agency:"Northfield Models", talent:"Ines Ferreira",   dayRate:460,  days:2, agencyPct:20, dvurePct:3, taxPct:8.25, paidDate:"May 27, 2026" },
 ];
 
 function InvoicesPanel() {
@@ -2803,18 +2839,18 @@ function InvoicesPanel() {
 // ─── MESSAGING ─────────────────────────────────────────────────────────────
 
 const INBOX_MSGS = [
-  { id:1,  urgent:true,  date:"Jun 19, 2:14 PM", subject:"Payout requested — Booking #0841",              sender:"Sophie Chen",   org:"Elite Model Mgmt.", title:"Senior Agent",      campaign:"AW25 Womenswear",     read:false, body:"Please review and authorize payment for the AW25 Womenswear booking. Let us know if you have any questions." },
-  { id:2,  urgent:false, date:"Jun 18, 10:30 AM",subject:"Talent availability confirmed — Amara Diallo",  sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:false, body:"Amara has confirmed availability for the full window, 07/14–07/15. Please proceed with the contract." },
-  { id:3,  urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Following up on rates for Mila's booking. Please advise." },
-  { id:4,  urgent:true,  date:"Jun 17, 11:52 AM",subject:"Fitting rescheduled — need sign-off today",      sender:"Priya Anand",   org:"Wilhelmina",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:false, body:"The 2pm fitting slot moved to 4pm due to a venue conflict. Need your sign-off on the new call sheet before we notify talent." },
-  { id:5,  urgent:false, date:"Jun 16, 5:40 PM", subject:"Usage terms question — Resort Lookbook",         sender:"Marcus Reyes",  org:"DNA Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Client is asking whether the lookbook usage extends to paid social. Can you confirm before we sign?" },
-  { id:6,  urgent:false, date:"Jun 16, 9:15 AM", subject:"Comp cards attached — 3 new submissions",        sender:"Sophie Chen",   org:"Elite Model Mgmt.", title:"Senior Agent",      campaign:"SS25 Fragrance",      read:true,  body:"Sending over three additional comp cards for consideration ahead of Friday's deadline." },
-  { id:7,  urgent:false, date:"Jun 15, 3:22 PM", subject:"Contract executed — Ines Ferreira",              sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW26 Runway Presentation", read:true,  body:"Signed contract attached. Let us know if wardrobe needs measurements ahead of the fitting." },
-  { id:8,  urgent:true,  date:"Jun 15, 8:03 AM", subject:"Overdue invoice — please advise",                sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:false, body:"Invoice #4471 is now five days past due. Can you let us know the status on your end?" },
-  { id:9,  urgent:false, date:"Jun 14, 6:48 PM", subject:"Travel confirmation needed",                     sender:"Marcus Reyes",  org:"DNA Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Can you confirm flight details for the location shoot are finalized on your side?" },
-  { id:10, urgent:false, date:"Jun 14, 1:10 PM", subject:"New talent for consideration — Runway",          sender:"Priya Anand",   org:"Wilhelmina",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:true,  body:"Adding two new faces to the roster ahead of casting. Comp cards to follow shortly." },
-  { id:11, urgent:false, date:"Jun 13, 4:30 PM", subject:"Re: Rate question — SS25 Fragrance",             sender:"Diana Park",    org:"IMG Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Thanks for confirming — we'll move forward at the quoted rate." },
-  { id:12, urgent:false, date:"Jun 12, 9:55 AM", subject:"Deliverables received — Womenswear",             sender:"James Kirk",    org:"Elite Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:true,  body:"All deliverables for the shoot have been received and logged on our end. Thank you." },
+  { id:1,  urgent:true,  date:"Jun 19, 2:14 PM", subject:"Payout requested — Booking #0841",              sender:"Sophie Chen",   org:"Halstead Model Mgmt.", title:"Senior Agent",      campaign:"AW25 Womenswear",     read:false, body:"Please review and authorize payment for the AW25 Womenswear booking. Let us know if you have any questions." },
+  { id:2,  urgent:false, date:"Jun 18, 10:30 AM",subject:"Talent availability confirmed — Amara Diallo",  sender:"James Kirk",    org:"Halstead Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:false, body:"Amara has confirmed availability for the full window, 07/14–07/15. Please proceed with the contract." },
+  { id:3,  urgent:false, date:"Jun 17, 4:05 PM", subject:"Rate question — SS25 Fragrance",                sender:"Diana Park",    org:"Larkspur Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Following up on rates for Mila's booking. Please advise." },
+  { id:4,  urgent:true,  date:"Jun 17, 11:52 AM",subject:"Fitting rescheduled — need sign-off today",      sender:"Priya Anand",   org:"Ashgrove",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:false, body:"The 2pm fitting slot moved to 4pm due to a venue conflict. Need your sign-off on the new call sheet before we notify talent." },
+  { id:5,  urgent:false, date:"Jun 16, 5:40 PM", subject:"Usage terms question — Resort Lookbook",         sender:"Marcus Reyes",  org:"Cordell Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Client is asking whether the lookbook usage extends to paid social. Can you confirm before we sign?" },
+  { id:6,  urgent:false, date:"Jun 16, 9:15 AM", subject:"Comp cards attached — 3 new submissions",        sender:"Sophie Chen",   org:"Halstead Model Mgmt.", title:"Senior Agent",      campaign:"SS25 Fragrance",      read:true,  body:"Sending over three additional comp cards for consideration ahead of Friday's deadline." },
+  { id:7,  urgent:false, date:"Jun 15, 3:22 PM", subject:"Contract executed — Ines Ferreira",              sender:"James Kirk",    org:"Halstead Model Mgmt.", title:"Booking Agent",    campaign:"AW26 Runway Presentation", read:true,  body:"Signed contract attached. Let us know if wardrobe needs measurements ahead of the fitting." },
+  { id:8,  urgent:true,  date:"Jun 15, 8:03 AM", subject:"Overdue invoice — please advise",                sender:"Diana Park",    org:"Larkspur Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:false, body:"Invoice #4471 is now five days past due. Can you let us know the status on your end?" },
+  { id:9,  urgent:false, date:"Jun 14, 6:48 PM", subject:"Travel confirmation needed",                     sender:"Marcus Reyes",  org:"Cordell Models",        title:"Agent",             campaign:"Resort Lookbook 2025",read:true,  body:"Can you confirm flight details for the location shoot are finalized on your side?" },
+  { id:10, urgent:false, date:"Jun 14, 1:10 PM", subject:"New talent for consideration — Runway",          sender:"Priya Anand",   org:"Ashgrove",        title:"Booking Coordinator",campaign:"AW26 Runway Presentation", read:true,  body:"Adding two new faces to the roster ahead of casting. Comp cards to follow shortly." },
+  { id:11, urgent:false, date:"Jun 13, 4:30 PM", subject:"Re: Rate question — SS25 Fragrance",             sender:"Diana Park",    org:"Larkspur Models",        title:"Agent",             campaign:"SS25 Fragrance",      read:true,  body:"Thanks for confirming — we'll move forward at the quoted rate." },
+  { id:12, urgent:false, date:"Jun 12, 9:55 AM", subject:"Deliverables received — Womenswear",             sender:"James Kirk",    org:"Halstead Model Mgmt.", title:"Booking Agent",    campaign:"AW25 Womenswear",     read:true,  body:"All deliverables for the shoot have been received and logged on our end. Thank you." },
 ];
 
 // Split view — an inbox list on the left, a persistent compose/detail pane
@@ -3312,55 +3348,7 @@ function Reports() {
 // ─── NETWORK ──────────────────────────────────────────────────────────────────
 
 function Network() {
-  const [added, setAdded] = useState(["Elite Model Management","IMG Models"]);
-  const agencies = [
-    { name:"Elite Model Management", loc:"New York · London · Paris", talent:420, bookings:8, spend:"$24,500", lastSub:"2 days ago",  responseRate:"94%", preferred:true  },
-    { name:"IMG Models",             loc:"New York · London · Milan",  talent:380, bookings:5, spend:"$11,100", lastSub:"5 days ago",  responseRate:"87%", preferred:false },
-    { name:"Wilhelmina",             loc:"New York · Los Angeles",     talent:210, bookings:2, spend:"$4,400",  lastSub:"12 days ago", responseRate:"76%", preferred:false },
-    { name:"DNA Models",             loc:"New York",                   talent:180, bookings:1, spend:"$3,600",  lastSub:"3 days ago",  responseRate:"91%", preferred:false },
-  ];
-  return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="Network" sub="Agency relationships and partners"/>
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <Stat label="Agencies" value="4" sub="3 with active bookings"/>
-          <Stat label="Added" value={String(added.length)} sub="Instant campaign alerts"/>
-          <Stat label="Submissions" value="44" sub="Across active campaigns"/>
-        </div>
-        <div className="space-y-2">
-          {agencies.map(a=>{
-            const isAdded = added.includes(a.name);
-            return (
-              <div key={a.name} className="glass-subtle border rounded-md p-4 flex items-center gap-4 hover:border-foreground/30">
-                <XBox className="w-10 h-10 rounded-md"/>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-medium">{a.name}</span>
-                    {isAdded && <Badge label="Added" variant="info"/>}
-                    {a.preferred && <Badge label="Preferred Partner" variant="success"/>}
-                  </div>
-                  <div className="text-xs text-muted-foreground font-mono flex items-center gap-1"><MapPin size={10}/>{a.loc} · {a.talent} talent</div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-[10px] text-muted-foreground font-mono">Last submission: <span className="text-foreground">{a.lastSub}</span></span>
-                    <span className="text-[10px] text-muted-foreground font-mono">Response rate: <span className="text-foreground font-semibold">{a.responseRate}</span></span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-5 shrink-0">
-                  <div className="text-center hidden md:block"><div className="text-sm font-semibold">{a.bookings}</div><div className="text-xs text-muted-foreground">Bookings</div></div>
-                  <div className="text-center hidden md:block"><div className="text-sm font-semibold font-mono">{a.spend}</div><div className="text-xs text-muted-foreground">Spend</div></div>
-                  <button onClick={()=>setAdded(p=>isAdded?p.filter(x=>x!==a.name):[...p,a.name])}
-                    className={cx("px-3 py-1.5 text-xs font-medium rounded-md border transition-colors",
-                      isAdded?"bg-foreground text-primary-foreground border-foreground":"border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                    )}>{isAdded?"Added":"Add"}</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+  return <NetworkView/>;
 }
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
@@ -3460,21 +3448,25 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                 <div><h2 className="text-heading text-base mb-0.5">Subscription</h2><p className="text-sm text-muted-foreground">Manage your <DvureWordmark size={11}/> Brand subscription.</p></div>
                 <div className="glass-subtle border rounded-md overflow-hidden">
                   <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                    <div><div className="text-sm font-semibold"><DvureWordmark size={11}/> Brand</div><div className="text-xs text-muted-foreground">Professional plan · Billed monthly</div></div>
-                    <Badge label="Active Trial" variant="success"/>
+                    <div>
+                      <div className="text-sm font-semibold"><DvureWordmark size={11}/> Brand</div>
+                      <div className="text-xs text-muted-foreground">No monthly charge</div>
+                    </div>
+                    <Badge label="Included" variant="success"/>
                   </div>
-                  <div className="px-5 py-4 space-y-3 text-sm">
-                    {[["Plan","Brand Professional"],["Monthly price","$99 / month"],["Trial ends","July 3, 2026"]].map(([k,v])=>(
-                      <div key={k} className="flex justify-between border-b border-border last:border-0 pb-3 last:pb-0"><span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span></div>
-                    ))}
+                  <div className="px-5 py-4 text-xs text-muted-foreground">
+                    Brand accounts don't pay a platform subscription — DVURE's fee is a 6% (card) or 5.5% (bank transfer) platform fee applied when you pay talent through the app, not a monthly charge on top of it.
                   </div>
+                </div>
+                <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">
+                  Larger brand teams that need dedicated support and additional capabilities: an Enterprise tier is coming. <span className="text-foreground font-medium">support@dvure.com</span> to talk to us early.
                 </div>
               </div>
             )}
             {tab === "billing" && (
               <div className="space-y-5">
                 <div><h2 className="text-heading text-base mb-0.5">Billing</h2><p className="text-sm text-muted-foreground">Payment methods and billing history.</p></div>
-                <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">Billing is processed securely by Stripe — wired in Milestone C.</div>
+                <div className="bg-secondary border border-border rounded-md px-4 py-3 text-xs text-muted-foreground">Payment method is managed from the Subscription tab — that's the same Stripe card on file used for every future invoice here.</div>
               </div>
             )}
             {tab === "security" && (
@@ -3500,6 +3492,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                     <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>
                   </div>
                 </div>
+                <SupportTicketForm defaultCategory="delete_organization"/>
               </div>
             )}
             {tab === "notifications" && (
@@ -3550,7 +3543,11 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
   const [realIdShim, setRealIdShim] = useState<Map<number, string>>(new Map());
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [leadsNeededRaw, setLeadsNeededRaw] = useState<CampaignNeedingLeads[]>([]);
-  const allCampaigns = [...CAMPAIGNS, ...realCampaigns];
+  // Projects/CampaignWorkspace show real campaigns only — CAMPAIGNS (mock
+  // demo data with its own broken/placeholder submissions) used to be
+  // concatenated in here, which meant a brand's real campaign count and
+  // real Moodboard photos were invisible behind stale prototype filler.
+  const allCampaigns = realCampaigns;
 
   async function refetchCampaigns() {
     if (!org) return null;

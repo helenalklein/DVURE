@@ -19,18 +19,37 @@ export interface OrgInfo {
   verificationStatus: VerificationStatus;
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: string | null;
+  // Agencies that signed up during the pilot keep $99/mo forever, even
+  // after Phase 2 raises new-agency pricing — see 0034's own comment.
+  foundingMember: boolean;
+  // Optional, purely descriptive (spec §20) — never drives representation
+  // logic, which lives entirely on the per-model relationship instead.
+  selfDescribedServices: string | null;
 }
 
 export interface ModelAgencyInfo {
   orgId: string;
   name: string;
-  relationshipType: "mother" | "boutique";
+  // Free text since 0027 — relationship_type is no longer a fixed
+  // mother/boutique enum. Use isMotherAgency for the actual "is this my
+  // worldwide mother agency" check.
+  relationshipType: string;
+  isMotherAgency: boolean;
+  territories: string[];
 }
 
 export interface ModelInfo {
   id: string;
   fullName: string;
   location: string | null;
+  photoUrl: string | null;
+  height: string | null;
+  bust: string | null;
+  waist: string | null;
+  dress: string | null;
+  dayRate: number | null;
+  email: string | null;
+  phone: string | null;
 }
 
 export interface CrewInfo {
@@ -56,6 +75,11 @@ interface AuthContextValue extends AuthState {
   signUpBrandOrAgency: (params: { email: string; password: string; fullName: string; role: "brand_staff" | "agency_staff" }) => Promise<{ error: string | null }>;
   completeOrgSignup: (orgName: string, orgType: OrgType) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  // Re-runs the same identity load a fresh sign-in would do, without a
+  // page reload — needed after actions that change org state out from
+  // under the client (e.g. subscribing: the webhook writes
+  // subscription_status server-side, this is what picks that change up).
+  refreshIdentity: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -89,11 +113,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState({
         status: "signedIn",
         ...base,
-        modelProfile: { id: modelProfile.id, fullName: modelProfile.full_name, location: modelProfile.location },
+        modelProfile: {
+          id: modelProfile.id, fullName: modelProfile.full_name, location: modelProfile.location,
+          photoUrl: modelProfile.photo_url, height: modelProfile.height, bust: modelProfile.bust,
+          waist: modelProfile.waist, dress: modelProfile.dress, dayRate: modelProfile.default_day_rate,
+          email: modelProfile.email, phone: modelProfile.phone,
+        },
         modelAgencies: (rels ?? []).map((r: any) => ({
           orgId: r.organizations.id,
           name: r.organizations.name,
           relationshipType: r.relationship_type,
+          isMotherAgency: r.is_mother_agency,
+          territories: r.territories ?? [],
         })),
       });
       return;
@@ -129,6 +160,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verificationStatus: orgRow.verification_status,
         subscriptionStatus: orgRow.subscription_status,
         trialEndsAt: orgRow.trial_ends_at,
+        foundingMember: orgRow.founding_member ?? false,
+        selfDescribedServices: orgRow.self_described_services ?? null,
       },
     });
   }, []);
@@ -180,8 +213,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  const refreshIdentity = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session) await loadIdentity(session.user.id);
+  }, [loadIdentity]);
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUpBrandOrAgency, completeOrgSignup, signOut }}>
+    <AuthContext.Provider value={{ ...state, signIn, signUpBrandOrAgency, completeOrgSignup, signOut, refreshIdentity }}>
       {children}
     </AuthContext.Provider>
   );

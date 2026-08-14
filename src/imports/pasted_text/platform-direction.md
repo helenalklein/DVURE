@@ -463,7 +463,7 @@ Campaign Closed
 Submission deadline reached.
 
 Submission Received
-Elite Models submitted 3 models.
+Halstead Model Mgmt. submitted 3 models.
 
 Submission Updated
 Additional portfolio materials received.
@@ -502,7 +502,7 @@ Contract Fully Executed
 All required signatures received.
 
 Invoice Submitted
-Elite Models submitted invoice.
+Halstead Model Mgmt. submitted invoice.
 
 Invoice Approved
 Invoice approved for payment.

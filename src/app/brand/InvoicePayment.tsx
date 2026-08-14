@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
-import { Check, Loader2 } from "lucide-react";
-import { cx, Btn } from "../shared/ui";
+import { Check, Loader2, Landmark, CreditCard } from "lucide-react";
+import { cx, Btn, Badge } from "../shared/ui";
 import { getStripe } from "../../lib/stripeClient";
-import { fetchUnpaidBookings, type UnpaidBooking } from "../../lib/queries/bookings";
+import { fetchUnpaidBookings, type UnpaidBooking, PLATFORM_FEE_PCT_BY_METHOD } from "../../lib/queries/bookings";
 import { createInvoicePayment } from "../../lib/queries/stripe";
 
 function money(n: number) {
@@ -37,7 +37,7 @@ function ConfirmStep({ totalCents, onDone, onBack }: { totalCents: number; onDon
       setError(confirmError.message ?? "Payment failed.");
       return;
     }
-    if (paymentIntent?.status === "succeeded") {
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
       setSucceeded(true);
       setTimeout(onDone, 1800);
     } else {
@@ -71,6 +71,55 @@ function ConfirmStep({ totalCents, onDone, onBack }: { totalCents: number; onDon
   );
 }
 
+// Payment method has to be picked before the PaymentIntent even exists
+// — the platform fee (and so the actual amount charged) depends on it,
+// and locking that in after the fact would mean either recomputing an
+// already-created charge or letting the brand switch methods inside
+// Stripe's own picker after the amount was fixed for the other one.
+function MethodStep({ grossCents, onContinue, onBack, creating, error }: {
+  grossCents: number; onContinue: (method: "ach" | "card") => void; onBack: () => void; creating: boolean; error: string | null;
+}) {
+  const [method, setMethod] = useState<"ach" | "card">("ach");
+  const feePct = PLATFORM_FEE_PCT_BY_METHOD[method];
+  const feeCents = Math.round(grossCents * feePct / 100);
+  const totalCents = grossCents + feeCents;
+
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-muted-foreground">Choose how you'd like to pay — this fixes the platform fee for this charge.</div>
+      <div className="space-y-2">
+        {([
+          { id: "ach" as const, label: "Bank transfer (ACH)", Icon: Landmark, note: "Recommended — cheaper to process" },
+          { id: "card" as const, label: "Card", Icon: CreditCard, note: null },
+        ]).map(opt => (
+          <button key={opt.id} onClick={() => setMethod(opt.id)}
+            className={cx("w-full flex items-center gap-3 p-3 rounded-md border transition-colors text-left cursor-pointer",
+              method === opt.id ? "border-foreground bg-secondary" : "border-border hover:border-foreground/40")}>
+            <opt.Icon size={16} className="text-muted-foreground shrink-0"/>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium flex items-center gap-1.5">{opt.label} {opt.id === "ach" && <Badge label="Recommended" variant="success"/>}</div>
+              {opt.note && <div className="text-[11px] text-muted-foreground">{opt.note}</div>}
+            </div>
+            <div className="text-xs font-mono text-muted-foreground shrink-0">{PLATFORM_FEE_PCT_BY_METHOD[opt.id]}% fee</div>
+          </button>
+        ))}
+      </div>
+      <div className="border-t border-border pt-3 space-y-1.5">
+        <div className="flex justify-between text-xs text-muted-foreground"><span>Subtotal</span><span className="font-mono">{money(grossCents / 100)}</span></div>
+        <div className="flex justify-between text-xs text-muted-foreground"><span>Platform fee ({feePct}%)</span><span className="font-mono">{money(feeCents / 100)}</span></div>
+        <div className="flex justify-between text-sm font-semibold"><span>Total</span><span className="font-mono">{money(totalCents / 100)}</span></div>
+      </div>
+      {error && <div className="text-xs text-[#C0392B]">{error}</div>}
+      <div className="flex gap-2">
+        <Btn variant="primary" disabled={creating} onClick={() => onContinue(method)}>
+          {creating ? "Preparing payment…" : `Continue with ${method === "ach" ? "bank transfer" : "card"}`}
+        </Btn>
+        <Btn variant="outline" disabled={creating} onClick={onBack}>Back</Btn>
+      </div>
+    </div>
+  );
+}
+
 export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId: string; onPaid?: () => void }) {
   const [bookings, setBookings] = useState<UnpaidBooking[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -80,7 +129,9 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
   // only certain people; switching back re-selects everything.
   const [mode, setMode] = useState<"full" | "select">("full");
   const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState<"select" | "method" | "confirm">("select");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [totalCents, setTotalCents] = useState(0);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,15 +162,17 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
   }
 
   const selectedBookings = bookings.filter((b) => selected.has(b.id));
-  const totalCents = Math.round(selectedBookings.reduce((sum, b) => sum + b.grossAmount, 0) * 100);
+  const grossCents = Math.round(selectedBookings.reduce((sum, b) => sum + b.grossAmount, 0) * 100);
 
-  async function startPayment() {
+  async function startPayment(method: "ach" | "card") {
     setCreating(true);
     setError(null);
-    const { clientSecret: secret, error: err } = await createInvoicePayment(Array.from(selected), campaignId);
+    const { clientSecret: secret, totalAmount, error: err } = await createInvoicePayment(Array.from(selected), method, campaignId);
     setCreating(false);
     if (err || !secret) { setError(err ?? "Couldn't start payment."); return; }
     setClientSecret(secret);
+    setTotalCents(Math.round((totalAmount ?? grossCents / 100) * 100));
+    setStep("confirm");
   }
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading bookings…</div>;
@@ -128,7 +181,7 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
     return <div className="p-6 text-sm text-muted-foreground">No outstanding bookings to pay on this campaign right now.</div>;
   }
 
-  if (clientSecret) {
+  if (step === "confirm" && clientSecret) {
     return (
       <div className="max-w-md p-6">
         <div className="text-heading text-sm mb-1">Confirm payment</div>
@@ -158,8 +211,17 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
             },
           },
         }}>
-          <ConfirmStep totalCents={totalCents} onBack={() => setClientSecret(null)} onDone={() => { onPaid?.(); }} />
+          <ConfirmStep totalCents={totalCents} onBack={() => { setStep("method"); setClientSecret(null); }} onDone={() => { onPaid?.(); }} />
         </Elements>
+      </div>
+    );
+  }
+
+  if (step === "method") {
+    return (
+      <div className="max-w-md p-6">
+        <div className="text-heading text-sm mb-1">Pay {selectedBookings.length} {selectedBookings.length === 1 ? "booking" : "bookings"}</div>
+        <MethodStep grossCents={grossCents} creating={creating} error={error} onBack={() => setStep("select")} onContinue={startPayment}/>
       </div>
     );
   }
@@ -168,7 +230,7 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
     <div className="max-w-md p-6 space-y-4">
       <div>
         <div className="text-heading text-sm mb-1">Pay bookings</div>
-        <div className="text-xs text-muted-foreground">Everything is charged to your card in one invoice, split out to each agency automatically.</div>
+        <div className="text-xs text-muted-foreground">Everything is charged in one invoice, split out to each agency automatically. A platform fee applies on top, based on how you pay.</div>
       </div>
       <div className="flex border border-border rounded-md p-0.5 gap-0.5">
         <button
@@ -199,12 +261,11 @@ export default function InvoicePaymentPanel({ campaignId, onPaid }: { campaignId
         ))}
       </div>
       <div className="flex items-center justify-between border-t border-border pt-3">
-        <div className="text-xs text-muted-foreground">Total</div>
-        <div className="text-base font-semibold">{money(totalCents / 100)}</div>
+        <div className="text-xs text-muted-foreground">Subtotal</div>
+        <div className="text-base font-semibold">{money(grossCents / 100)}</div>
       </div>
-      {error && <div className="text-xs text-[#C0392B]">{error}</div>}
-      <Btn variant="primary" disabled={selected.size === 0 || creating} onClick={startPayment}>
-        {creating ? "Preparing payment…" : `Continue to payment`}
+      <Btn variant="primary" disabled={selected.size === 0} onClick={() => setStep("method")}>
+        Continue to payment
       </Btn>
     </div>
   );

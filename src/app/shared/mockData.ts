@@ -34,28 +34,28 @@ export const MOCK_NOW = new Date("2026-07-21");
 // (Negotiation/counter-offer states are a deliberate Phase-1 cut, not an oversight.)
 
 export const SAMPLE_TALENT: Talent[] = [
-  { id:1,  name:"Zara Okafor",     agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", boutiqueAgency:"IMG Models", location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
-  { id:2,  name:"Amara Diallo",    agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
-  { id:3,  name:"Mila Tran",       agency:"IMG Models",        motherAgency:"IMG Models",        location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
-  { id:4,  name:"Petra Novak",     agency:"IMG Models",        motherAgency:"Storm Models", boutiqueAgency:"IMG Models", location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
-  { id:5,  name:"Ines Ferreira",   agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
-  { id:6,  name:"Nadia Petrov",    agency:"Next Models",       motherAgency:"Next Models",       location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
-  { id:7,  name:"Caleb Stone",     agency:"Wilhelmina",        motherAgency:"Wilhelmina",        location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
-  { id:8,  name:"Sofia Brandt",    agency:"DNA Models",        motherAgency:"DNA Models",        location:"Miami, FL",       rate:"$1,200/day", stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/22.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"11 yrs", score:5 },
-  { id:9,  name:"James Whitfield", agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"New York, NY",    rate:"$950/day",   stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/14.", height:`6'0"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"6 yrs",  score:5 },
-  { id:10, name:"Lena Vogel",      agency:"IMG Models",        motherAgency:"IMG Models",        location:"Berlin, DE",      rate:"$780/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"3 yrs",  score:3 },
-  { id:11, name:"Amir Hassan",     agency:"Storm Models",      motherAgency:"Storm Models",      location:"London, UK",      rate:"$1,050/day", stage:"rejected",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
-  { id:12, name:"Chiara Russo",    agency:"Next Models",       motherAgency:"Next Models",       location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
-  { id:13, name:"Maya Chen",       agency:"Elite Model Mgmt.", motherAgency:"Elite Model Mgmt.", location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
-  { id:14, name:"Priya Sharma",    agency:"DNA Models",        motherAgency:"DNA Models",        location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+  { id:1,  modelId:"mock-1",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Zara Okafor",     agency:"Halstead Model Mgmt.", submittedByName:"", submittedByEmail:"", motherAgency:"Halstead Model Mgmt.", boutiqueAgencies:["Larkspur Models"], duplicateFlag:false, submittedByAgencies:["Halstead Model Mgmt."], location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
+  { id:2,  modelId:"mock-2",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Amara Diallo",    agency:"Halstead Model Mgmt.", submittedByName:"", submittedByEmail:"", motherAgency:"Halstead Model Mgmt.", boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Halstead Model Mgmt."], location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
+  { id:3,  modelId:"mock-3",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Mila Tran",       agency:"Larkspur Models",        submittedByName:"", submittedByEmail:"", motherAgency:"Larkspur Models",        boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Larkspur Models"], location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
+  { id:4,  modelId:"mock-4",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Petra Novak",     agency:"Larkspur Models",        submittedByName:"", submittedByEmail:"", motherAgency:"Northfield Models", boutiqueAgencies:["Larkspur Models"], duplicateFlag:false, submittedByAgencies:["Larkspur Models"], location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
+  { id:5,  modelId:"mock-5",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Ines Ferreira",   agency:"Northfield Models",      submittedByName:"", submittedByEmail:"", motherAgency:"Northfield Models",      boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Northfield Models"], location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
+  { id:6,  modelId:"mock-6",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Nadia Petrov",    agency:"Aveline Models",       submittedByName:"", submittedByEmail:"", motherAgency:"Aveline Models",       boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Aveline Models"], location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:7,  modelId:"mock-7",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Caleb Stone",     agency:"Ashgrove",        submittedByName:"", submittedByEmail:"", motherAgency:"Ashgrove",        boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Ashgrove"], location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
+  { id:8,  modelId:"mock-8",  photoUrl:"", modelEmail:"", modelPhone:"", name:"Sofia Brandt",    agency:"Cordell Models",        submittedByName:"", submittedByEmail:"", motherAgency:"Cordell Models",        boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Cordell Models"], location:"Miami, FL",       rate:"$1,200/day", stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/22.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"11 yrs", score:5 },
+  { id:9,  modelId:"mock-9",  photoUrl:"", modelEmail:"", modelPhone:"", name:"James Whitfield", agency:"Halstead Model Mgmt.", submittedByName:"", submittedByEmail:"", motherAgency:"Halstead Model Mgmt.", boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Halstead Model Mgmt."], location:"New York, NY",    rate:"$950/day",   stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/14.", height:`6'0"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"6 yrs",  score:5 },
+  { id:10, modelId:"mock-10", photoUrl:"", modelEmail:"", modelPhone:"", name:"Lena Vogel",      agency:"Larkspur Models",        submittedByName:"", submittedByEmail:"", motherAgency:"Larkspur Models",        boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Larkspur Models"], location:"Berlin, DE",      rate:"$780/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"3 yrs",  score:3 },
+  { id:11, modelId:"mock-11", photoUrl:"", modelEmail:"", modelPhone:"", name:"Amir Hassan",     agency:"Northfield Models",      submittedByName:"", submittedByEmail:"", motherAgency:"Northfield Models",      boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Northfield Models"], location:"London, UK",      rate:"$1,050/day", stage:"rejected",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
+  { id:12, modelId:"mock-12", photoUrl:"", modelEmail:"", modelPhone:"", name:"Chiara Russo",    agency:"Aveline Models",       submittedByName:"", submittedByEmail:"", motherAgency:"Aveline Models",       boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Aveline Models"], location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
+  { id:13, modelId:"mock-13", photoUrl:"", modelEmail:"", modelPhone:"", name:"Maya Chen",       agency:"Halstead Model Mgmt.", submittedByName:"", submittedByEmail:"", motherAgency:"Halstead Model Mgmt.", boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Halstead Model Mgmt."], location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:14, modelId:"mock-14", photoUrl:"", modelEmail:"", modelPhone:"", name:"Priya Sharma",    agency:"Cordell Models",        submittedByName:"", submittedByEmail:"", motherAgency:"Cordell Models",        boutiqueAgencies:[], duplicateFlag:false, submittedByAgencies:["Cordell Models"], location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
 ];
 
 // Sticky-note-style comments on individual candidate cards — separate
 // from each talent's single "Notes" field. Threaded, multi-author.
 export const CARD_COMMENTS: CardComment[] = [
-  { id:1, talentId:2, author:"Marcus Webb", org:"Acne Studios", text:"Love the range in her book — strong pick for the hero shot.", ts:"Jun 13, 3:40 PM" },
-  { id:2, talentId:2, author:"Jake Torres", org:"Acne Studios", text:"Agreed. Let's confirm her availability for the 14th before we lock the shortlist.", ts:"Jun 13, 4:02 PM" },
-  { id:3, talentId:1, author:"Lena Chu", org:"Acne Studios", text:"Client specifically asked about her — flagging for priority review.", ts:"Jun 12, 11:15 AM" },
+  { id:1, talentId:2, author:"Marcus Webb", org:"Vellani", text:"Love the range in her book — strong pick for the hero shot.", ts:"Jun 13, 3:40 PM" },
+  { id:2, talentId:2, author:"Jake Torres", org:"Vellani", text:"Agreed. Let's confirm her availability for the 14th before we lock the shortlist.", ts:"Jun 13, 4:02 PM" },
+  { id:3, talentId:1, author:"Lena Chu", org:"Vellani", text:"Client specifically asked about her — flagging for priority review.", ts:"Jun 12, 11:15 AM" },
 ];
 
 export const PIPELINE_STAGES: { id: Talent["stage"]; label: string }[] = [
@@ -97,25 +97,25 @@ export function bookingBreakdown(b: Booking) {
 }
 
 export const BOOKINGS: Booking[] = [
-  { id:"BK-0841", campaign:"AW25 Womenswear Campaign", brand:"Acne Studios", agency:"Elite Model Mgmt.", model:"James Whitfield", dayRate:950,  days:3, shootDate:"07/14/2025", agencyPct:20, platformPct:3, paymentStatus:"paid" },
-  { id:"BK-0842", campaign:"AW25 Womenswear Campaign", brand:"Acne Studios", agency:"Elite Model Mgmt.", model:"Amara Diallo",    dayRate:1150, days:2, shootDate:"07/15/2025", agencyPct:20, platformPct:3, paymentStatus:"processing" },
-  { id:"BK-0791", campaign:"SS25 Fragrance Launch",    brand:"Acne Studios", agency:"IMG Models",        model:"Mila Tran",       dayRate:1100, days:1, shootDate:"07/20/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
-  { id:"BK-0768", campaign:"FW24 Campaign",            brand:"Acne Studios", agency:"DNA Models",        model:"Sofia Brandt",    dayRate:1200, days:3, shootDate:"06/01/2025", agencyPct:20, platformPct:3, paymentStatus:"paid" },
-  { id:"BK-0804", campaign:"Resort Lookbook 2025",     brand:"Acne Studios", agency:"Storm Models",      model:"Ines Ferreira",   dayRate:1340, days:2, shootDate:"07/22/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
-  { id:"BK-0850", campaign:"Resort Lookbook 2025",     brand:"Acne Studios", agency:"Elite Model Mgmt.", model:"James Whitfield", dayRate:950,  days:2, shootDate:"07/23/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
+  { id:"BK-0841", campaign:"AW25 Womenswear Campaign", brand:"Vellani", agency:"Halstead Model Mgmt.", model:"James Whitfield", dayRate:950,  days:3, shootDate:"07/14/2025", agencyPct:20, platformPct:3, paymentStatus:"paid" },
+  { id:"BK-0842", campaign:"AW25 Womenswear Campaign", brand:"Vellani", agency:"Halstead Model Mgmt.", model:"Amara Diallo",    dayRate:1150, days:2, shootDate:"07/15/2025", agencyPct:20, platformPct:3, paymentStatus:"processing" },
+  { id:"BK-0791", campaign:"SS25 Fragrance Launch",    brand:"Vellani", agency:"Larkspur Models",        model:"Mila Tran",       dayRate:1100, days:1, shootDate:"07/20/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
+  { id:"BK-0768", campaign:"FW24 Campaign",            brand:"Vellani", agency:"Cordell Models",        model:"Sofia Brandt",    dayRate:1200, days:3, shootDate:"06/01/2025", agencyPct:20, platformPct:3, paymentStatus:"paid" },
+  { id:"BK-0804", campaign:"Resort Lookbook 2025",     brand:"Vellani", agency:"Northfield Models",      model:"Ines Ferreira",   dayRate:1340, days:2, shootDate:"07/22/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
+  { id:"BK-0850", campaign:"Resort Lookbook 2025",     brand:"Vellani", agency:"Halstead Model Mgmt.", model:"James Whitfield", dayRate:950,  days:2, shootDate:"07/23/2025", agencyPct:20, platformPct:3, paymentStatus:"pending" },
 ];
 
 // ─── ORG / DIRECTORY ────────────────────────────────────────────────────────
 
 export const ORG_USERS = [
-  { id:1, name:"Marcus Webb",   title:"Brand Director",    email:"marcus@acne.com",  phone:"+1 212 555 0100", access:"administrator", group:"Creative Leadership", org:"Acne Studios"      },
-  { id:2, name:"Lena Chu",      title:"Campaign Manager",  email:"lena@acne.com",    phone:"+1 212 555 0101", access:"enhanced",      group:"Campaign Team",       org:"Acne Studios"      },
-  { id:3, name:"Jake Torres",   title:"Art Director",      email:"jake@acne.com",    phone:"+1 212 555 0102", access:"enhanced",      group:"Creative Leadership", org:"Acne Studios"      },
-  { id:4, name:"Priya Shah",    title:"Finance Lead",      email:"priya@acne.com",   phone:"+1 212 555 0103", access:"enhanced",      group:"Finance",             org:"Acne Studios"      },
-  { id:5, name:"Sam Brooks",    title:"Creative Producer", email:"sam@acne.com",     phone:"+1 212 555 0104", access:"basic",         group:"Campaign Team",       org:"Acne Studios"      },
-  { id:6, name:"Sofia Reyes",   title:"Legal Counsel",     email:"sofia@acne.com",   phone:"+1 212 555 0105", access:"administrator", group:"Legal",               org:"Acne Studios"      },
-  { id:7, name:"Sophie Chen",   title:"Senior Agent",      email:"sophie@elite.com", phone:"+1 212 555 0200", access:"enhanced",      group:"Elite Team",          org:"Elite Model Mgmt." },
-  { id:8, name:"James Kirk",    title:"Booking Agent",     email:"james@elite.com",  phone:"+1 212 555 0201", access:"basic",         group:"Elite Team",          org:"Elite Model Mgmt." },
+  { id:1, name:"Marcus Webb",   title:"Brand Director",    email:"marcus@vellani.com",  phone:"+1 212 555 0100", access:"administrator", group:"Creative Leadership", org:"Vellani"      },
+  { id:2, name:"Lena Chu",      title:"Campaign Manager",  email:"lena@vellani.com",    phone:"+1 212 555 0101", access:"enhanced",      group:"Campaign Team",       org:"Vellani"      },
+  { id:3, name:"Jake Torres",   title:"Art Director",      email:"jake@vellani.com",    phone:"+1 212 555 0102", access:"enhanced",      group:"Creative Leadership", org:"Vellani"      },
+  { id:4, name:"Priya Shah",    title:"Finance Lead",      email:"priya@vellani.com",   phone:"+1 212 555 0103", access:"enhanced",      group:"Finance",             org:"Vellani"      },
+  { id:5, name:"Sam Brooks",    title:"Creative Producer", email:"sam@vellani.com",     phone:"+1 212 555 0104", access:"basic",         group:"Campaign Team",       org:"Vellani"      },
+  { id:6, name:"Sofia Reyes",   title:"Legal Counsel",     email:"sofia@vellani.com",   phone:"+1 212 555 0105", access:"administrator", group:"Legal",               org:"Vellani"      },
+  { id:7, name:"Sophie Chen",   title:"Senior Agent",      email:"sophie@halstead.com", phone:"+1 212 555 0200", access:"enhanced",      group:"Elite Team",          org:"Halstead Model Mgmt." },
+  { id:8, name:"James Kirk",    title:"Booking Agent",     email:"james@halstead.com",  phone:"+1 212 555 0201", access:"basic",         group:"Elite Team",          org:"Halstead Model Mgmt." },
 ];
 
 export const ACCESS_BADGE: Record<string,"active"|"info"|"draft"> = { administrator:"active", enhanced:"info", basic:"draft" };
@@ -123,19 +123,19 @@ export const ACCESS_BADGE: Record<string,"active"|"info"|"draft"> = { administra
 // ─── ACTIVITY / NOTIFICATIONS ───────────────────────────────────────────────
 
 export const ACTIVITY_EVENTS = [
-  { id:1, ts:"Jun 15, 2:05 PM",  actor:"Acne Studios",      type:"Talent approved",        detail:"Amara Diallo approved for booking.",           system:false },
-  { id:2, ts:"Jun 15, 11:20 AM", actor:"Elite Model Mgmt.", type:"Submission received",    detail:"4 talent submitted to AW25 Womenswear.",       system:false },
+  { id:1, ts:"Jun 15, 2:05 PM",  actor:"Vellani",      type:"Talent approved",        detail:"Amara Diallo approved for booking.",           system:false },
+  { id:2, ts:"Jun 15, 11:20 AM", actor:"Halstead Model Mgmt.", type:"Submission received",    detail:"4 talent submitted to AW25 Womenswear.",       system:false },
   { id:3, ts:"Jun 14, 4:01 PM",  actor:"System",            type:"Contract generated",     detail:"CF-2025-0841 generated for James Whitfield.",  system:true  },
-  { id:4, ts:"Jun 14, 3:14 PM",  actor:"Acne Studios",      type:"Contract signed",        detail:"CF-2025-0841 countersigned by brand.",         system:false },
-  { id:5, ts:"Jun 14, 11:30 AM", actor:"Elite Model Mgmt.", type:"Contract signed",        detail:"Sophie Chen signed CF-2025-0841 for agency.",  system:false },
-  { id:6, ts:"Jun 13, 1:22 PM",  actor:"Acne Studios",      type:"Talent approved",        detail:"Zara Okafor and Ines Ferreira approved.",      system:false },
-  { id:7, ts:"Jun 12, 9:00 AM",  actor:"System",            type:"Payout released",        detail:"Elite Model Mgmt. commission payout $2,940.",  system:true  },
-  { id:8, ts:"Jun 10, 11:02 AM", actor:"Elite Model Mgmt.", type:"Talent submitted",       detail:"4 talent submitted to campaign.",              system:false },
+  { id:4, ts:"Jun 14, 3:14 PM",  actor:"Vellani",      type:"Contract signed",        detail:"CF-2025-0841 countersigned by brand.",         system:false },
+  { id:5, ts:"Jun 14, 11:30 AM", actor:"Halstead Model Mgmt.", type:"Contract signed",        detail:"Sophie Chen signed CF-2025-0841 for agency.",  system:false },
+  { id:6, ts:"Jun 13, 1:22 PM",  actor:"Vellani",      type:"Talent approved",        detail:"Zara Okafor and Ines Ferreira approved.",      system:false },
+  { id:7, ts:"Jun 12, 9:00 AM",  actor:"System",            type:"Payout released",        detail:"Halstead Model Mgmt. commission payout $2,940.",  system:true  },
+  { id:8, ts:"Jun 10, 11:02 AM", actor:"Halstead Model Mgmt.", type:"Talent submitted",       detail:"4 talent submitted to campaign.",              system:false },
   { id:9, ts:"Jun 10, 9:14 AM",  actor:"System",            type:"Campaign published",     detail:"AW25 Womenswear distributed to 5 agencies.",   system:true  },
 ];
 
 export const NOTIFS = [
-  { id:1, text:"Elite Model Mgmt. submitted 4 talent", sub:"AW25 Womenswear", ts:"2m ago", unread:true  },
+  { id:1, text:"Halstead Model Mgmt. submitted 4 talent", sub:"AW25 Womenswear", ts:"2m ago", unread:true  },
   { id:2, text:"Amara Diallo approved",                 sub:"AW25 Womenswear", ts:"1h ago", unread:true  },
   { id:3, text:"Payout released",                       sub:"Booking #0841",   ts:"3h ago", unread:true  },
   { id:4, text:"Contract awaiting signature",           sub:"CF-2025-0842",    ts:"5h ago", unread:true  },
@@ -208,18 +208,19 @@ export const CAMPAIGNS: Campaign[] = [
   { id:5, name:"AW26 Runway Presentation", type:"Runway",       status:"active",   due:formatCampaignDue("2026-08-25", MOCK_NOW), dueDateISO:"2026-08-25", dueLabel:"5 weeks out",      dueUrgency:"medium", submitted:12, approved:8,  booked:6, talentNeeded:6, budget:42000, committed:26000, remaining:16000, submissionOpen:"Jun 1, 2026",  submissionClose:"Sep 30, 2026", runwayShowId:1 },
 ];
 
-// One organization = one team = one home country, per the "Prada Berlin
-// and Prada Portugal are separate logins" rule — an org never carries
-// multiple flags; a brand/agency that operates in several countries is
-// modeled as separate organizations, not one org with a country list.
+// One organization = one team = one home country, per the "a luxury
+// house's Berlin office and its Portugal office are separate logins"
+// rule — an org never carries multiple flags; a brand/agency that
+// operates in several countries is modeled as separate organizations,
+// not one org with a country list.
 export const ORG_COUNTRY: Record<string, string> = {
-  "Acne Studios": "SE",
-  "Elite Model Mgmt.": "US",
-  "IMG Models": "US",
-  "Storm Models": "UK",
-  "Wilhelmina": "US",
-  "DNA Models": "US",
-  "Next Models": "US",
+  "Vellani": "SE",
+  "Halstead Model Mgmt.": "US",
+  "Larkspur Models": "US",
+  "Northfield Models": "UK",
+  "Ashgrove": "US",
+  "Cordell Models": "US",
+  "Aveline Models": "US",
 };
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
@@ -227,10 +228,10 @@ export const ORG_COUNTRY: Record<string, string> = {
 // actual access gate for who can message the brand about it. Keyed by
 // campaign id.
 export const CAMPAIGN_AGENCIES: Record<number, string[]> = {
-  1: ["Elite Model Mgmt.", "IMG Models", "Storm Models", "Wilhelmina", "DNA Models", "Next Models"],
-  2: ["Elite Model Mgmt.", "IMG Models"],
-  3: ["Elite Model Mgmt.", "DNA Models", "Next Models"],
-  5: ["Elite Model Mgmt.", "IMG Models", "Storm Models"],
+  1: ["Halstead Model Mgmt.", "Larkspur Models", "Northfield Models", "Ashgrove", "Cordell Models", "Aveline Models"],
+  2: ["Halstead Model Mgmt.", "Larkspur Models"],
+  3: ["Halstead Model Mgmt.", "Cordell Models", "Aveline Models"],
+  5: ["Halstead Model Mgmt.", "Larkspur Models", "Northfield Models"],
 };
 
 // campaignId -> agency name -> that agency's private thread with the
@@ -242,23 +243,23 @@ export const CAMPAIGN_AGENCIES: Record<number, string[]> = {
 // style logistics that need to reach everyone.
 export const CAMPAIGN_AGENCY_THREADS: Record<number, Record<string, CampaignThreadMessage[]>> = {
   1: {
-    "Elite Model Mgmt.": [
-      { id:1, from:"Sophie Chen", fromOrg:"Elite Model Mgmt.", text:"Hi team — confirming Amara is available the full shoot window.", ts:"Jun 19, 10:05 AM" },
-      { id:2, from:"Marcus Webb", fromOrg:"Acne Studios", text:"Perfect, thank you. We'll have contracts out today.", ts:"Jun 19, 10:40 AM" },
+    "Halstead Model Mgmt.": [
+      { id:1, from:"Sophie Chen", fromOrg:"Halstead Model Mgmt.", text:"Hi team — confirming Amara is available the full shoot window.", ts:"Jun 19, 10:05 AM" },
+      { id:2, from:"Marcus Webb", fromOrg:"Vellani", text:"Perfect, thank you. We'll have contracts out today.", ts:"Jun 19, 10:40 AM" },
     ],
-    "IMG Models": [
-      { id:1, from:"Diana Park", fromOrg:"IMG Models", text:"Following up on rates for Mila and Petra's bookings.", ts:"Jun 17, 4:05 PM" },
+    "Larkspur Models": [
+      { id:1, from:"Diana Park", fromOrg:"Larkspur Models", text:"Following up on rates for Mila and Petra's bookings.", ts:"Jun 17, 4:05 PM" },
     ],
-    "Storm Models": [],
-    "Wilhelmina": [],
-    "DNA Models": [],
-    "Next Models": [],
+    "Northfield Models": [],
+    "Ashgrove": [],
+    "Cordell Models": [],
+    "Aveline Models": [],
   },
 };
 
 // ─── RUNWAY ─────────────────────────────────────────────────────────────────
 
-// The physical show — not owned by any one brand. Acne Studios' campaign
+// The physical show — not owned by any one brand. Vellani's campaign
 // references it; otherBrands is read-only context proving the same show
 // serves multiple brands independently, without pretending this brand can
 // see into another brand's actual campaign (that'd be a real data-isolation

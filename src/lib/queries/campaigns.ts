@@ -2,18 +2,73 @@ import { supabase } from "../supabaseClient";
 import { formatCampaignDue } from "../formatDue";
 import type { Campaign, CampaignType, CampaignStatus } from "../../app/shared/types";
 
-// Still used by AgencyApp.tsx's submission flow, which has no merged
-// real+mock campaign list/shim of its own (out of scope this pass) — an
-// agency just needs to know whether a campaign name it's submitting to
-// has a real row yet, same anchor pattern as before.
-export async function findCampaignIdByName(name: string): Promise<string | null> {
+export interface AgencyCampaignSummary {
+  id: string;
+  name: string;
+  brand: string;
+  type: string;
+  status: string;
+  due: string;
+  dueDateISO: string;
+  budget: string;
+  submissionOpen: string;
+  submissionOpenISO: string;
+  submissionClose: string;
+  submissionCloseISO: string;
+  talentNeeded: number;
+  archived: boolean;
+}
+
+function formatBudget(n: number | null): string {
+  return n != null ? `$${n.toLocaleString()}` : "Not set";
+}
+
+// AgencyApp's Projects list/calendar/in-project header used to be driven
+// entirely by mock INVITATIONS — real campaigns distributed to this
+// agency never showed up there at all, and mock ones that happened to
+// share a name with a real campaign silently supplied its header data
+// (budget, due date) instead of the real row. This is the agency-side
+// equivalent of fetchBrandCampaigns: campaign_agency_distributions is
+// the actual access gate (RLS-backed) for which campaigns this agency
+// can see.
+//
+// Every date carries both a display string and its raw ISO value —
+// formatCampaignDue's "Jul 22" style output silently misparses back into
+// a `new Date()` (defaults to year 2001), the exact bug already fixed
+// once on the brand side's calendar; the ISO fields are what the
+// calendar view and submissionIsClosed() actually compare against.
+export async function fetchAgencyCampaigns(agencyOrgId: string): Promise<AgencyCampaignSummary[]> {
   const { data, error } = await supabase
-    .from("campaigns")
-    .select("id")
-    .eq("name", name)
-    .limit(1);
-  if (error || !data || data.length === 0) return null;
-  return data[0].id as string;
+    .from("campaign_agency_distributions")
+    .select(`
+      campaigns!inner(
+        id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget,
+        organizations!campaigns_brand_org_id_fkey(name)
+      )
+    `)
+    .eq("agency_org_id", agencyOrgId);
+
+  if (error || !data) return [];
+
+  return (data as any[])
+    .map(r => r.campaigns)
+    .filter(Boolean)
+    .map((c: any): AgencyCampaignSummary => ({
+      id: c.id,
+      name: c.name,
+      brand: c.organizations?.name ?? "",
+      type: c.type,
+      status: c.status,
+      due: formatCampaignDue(c.due_date),
+      dueDateISO: c.due_date ?? "",
+      budget: formatBudget(c.budget),
+      submissionOpen: formatDateLong(c.submission_open),
+      submissionOpenISO: c.submission_open ?? "",
+      submissionClose: formatDateLong(c.submission_close),
+      submissionCloseISO: c.submission_close ?? "",
+      talentNeeded: c.talent_needed ?? 0,
+      archived: c.status === "archived",
+    }));
 }
 
 // Real campaigns get synthetic sequential ids in their own offset range,
@@ -54,7 +109,7 @@ export async function fetchPartneredAgencies(brandOrgId: string): Promise<{ id: 
 export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaigns: Campaign[]; realIdShim: Map<number, string> }> {
   const { data: rows, error } = await supabase
     .from("campaigns")
-    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at")
+    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, territory, created_at")
     .eq("brand_org_id", brandOrgId)
     .order("created_at", { ascending: true }); // stable shim ids across reloads — a real deep link depends on this
 
@@ -97,6 +152,7 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
       budget,
       committed: 0,
       remaining: budget,
+      territory: r.territory ?? undefined,
     };
   });
 
@@ -114,6 +170,7 @@ export async function createCampaign(params: {
   submissionClose?: string;
   talentNeeded?: number;
   budget?: number;
+  territory?: string;
 }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from("campaigns")
@@ -127,6 +184,7 @@ export async function createCampaign(params: {
       submission_close: params.submissionClose || null,
       talent_needed: params.talentNeeded ?? null,
       budget: params.budget ?? null,
+      territory: params.territory || null,
       created_by_profile_id: params.createdByProfileId,
     })
     .select("id")

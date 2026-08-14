@@ -8,6 +8,7 @@ import BrandApp from "./brand/BrandApp";
 import AgencyApp from "./agency/AgencyApp";
 import ModelApp from "./model/ModelApp";
 import AcceptInvitePage from "./AcceptInvitePage";
+import PartnerInvitePage from "./PartnerInvitePage";
 import CrewApp from "./crew/CrewApp";
 import TermsPage from "./TermsPage";
 
@@ -88,6 +89,7 @@ export default function App() {
           </RoleRoute>
         }/>
         <Route path="/accept-invite/:token" element={<AcceptInvitePage/>}/>
+        <Route path="/partner-invite/:token" element={<PartnerInvitePage/>}/>
         <Route path="/crew/link/:accessCode" element={<CrewApp/>}/>
         <Route path="/terms" element={<TermsPage/>}/>
         <Route path="/" element={<Navigate to={canEnterApp ? `/${effectiveRole}` : "/login"} replace/>}/>
