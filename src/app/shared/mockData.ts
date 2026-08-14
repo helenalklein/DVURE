@@ -147,14 +147,6 @@ export const ACTIVITY_EVENTS = [
   { id:9, ts:"Jun 10, 9:14 AM",  actor:"System",            type:"Campaign published",     detail:"AW25 Womenswear distributed to 5 agencies.",   system:true  },
 ];
 
-export const NOTIFS = [
-  { id:1, text:"Vantage Model Mgmt. submitted 4 talent", sub:"AW25 Womenswear", ts:"2m ago", unread:true  },
-  { id:2, text:"Amara Diallo approved",                 sub:"AW25 Womenswear", ts:"1h ago", unread:true  },
-  { id:3, text:"Payout released",                       sub:"Booking #0841",   ts:"3h ago", unread:true  },
-  { id:4, text:"Contract awaiting signature",           sub:"CF-2025-0842",    ts:"5h ago", unread:true  },
-  { id:5, text:"Resort Lookbook — 6 new submissions",  sub:"Resort Lookbook", ts:"1d ago", unread:false },
-];
-
 // ─── CAMPAIGNS ────────────────────────────────────────────────────────────
 // Single shared source — Dashboard, CampaignsList, and CampaignWorkspace all
 // read the same records instead of each keeping their own inline copy, and

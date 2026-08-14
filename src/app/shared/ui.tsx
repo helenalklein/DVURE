@@ -1,8 +1,9 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
 import { Bell, X, ChevronDown, Settings, Lock, Camera, Menu } from "lucide-react";
-import type { OrgInfo } from "./auth";
+import { useAuth, type OrgInfo } from "./auth";
 import { getAccessGate } from "./accessGate";
-import { NOTIFS, ACTIVITY_EVENTS } from "./mockData";
+import { ACTIVITY_EVENTS } from "./mockData";
+import { fetchNotifications, markNotificationRead, markAllNotificationsRead, type AppNotification } from "../../lib/queries/notifications";
 import dvureMarkD from "../../assets/dvure-mark-d.png";
 import dvureMarkWordmark from "../../assets/dvure-mark-wordmark.png";
 import dvureMarkSignature from "../../assets/dvure-mark-signature.png";
@@ -327,10 +328,48 @@ export function ActivityFeedPanel({ onClose }: { onClose?: () => void }) {
   );
 }
 
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// Real notifications (src/lib/queries/notifications.ts), scoped to the
+// signed-in org — starts with exactly one event (a partner brand
+// distributing a new campaign, see 0065_notifications.sql's trigger).
+// In-app only, deliberately: no email/push for this first pass, and
+// since the Capacitor iOS/Android shells run this same React app, this
+// one surface already covers web + native without extra infrastructure.
 function BellButton() {
+  const { org } = useAuth();
   const [open, setOpen] = useState(false);
-  const unread = NOTIFS.filter(n => n.unread).length;
+  const [notifs, setNotifs] = useState<AppNotification[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const unread = notifs.filter(n => n.unread).length;
+
+  useEffect(() => {
+    if (!org) return;
+    let active = true;
+    fetchNotifications(org.id).then(n => { if (active) setNotifs(n); });
+    return () => { active = false; };
+  }, [org?.id]);
+
+  async function handleOpenNotif(n: AppNotification) {
+    if (n.unread) {
+      setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, unread: false } : x));
+      await markNotificationRead(n.id);
+    }
+  }
+
+  async function handleMarkAllRead() {
+    if (!org || unread === 0) return;
+    setNotifs(prev => prev.map(x => ({ ...x, unread: false })));
+    await markAllNotificationsRead(org.id);
+  }
 
   // A fixed-position click-catcher doesn't work here: TopBar uses the
   // .glass utility (backdrop-filter), and backdrop-filter establishes a
@@ -356,14 +395,21 @@ function BellButton() {
         <div className="absolute top-full right-0 mt-1 w-80 glass-strong border rounded-md shadow-xl z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="text-sm font-semibold">Notifications</div>
-            <button onClick={() => setOpen(false)}><X size={14} className="text-muted-foreground"/></button>
+            <div className="flex items-center gap-2">
+              {unread > 0 && <button onClick={handleMarkAllRead} className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer">Mark all read</button>}
+              <button onClick={() => setOpen(false)}><X size={14} className="text-muted-foreground"/></button>
+            </div>
           </div>
           <div className="max-h-72 overflow-auto divide-y divide-border">
-            {NOTIFS.map(n => (
-              <div key={n.id} className={cx("px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-secondary", n.unread&&"bg-muted/30")}>
+            {notifs.length === 0 && (
+              <div className="px-4 py-6 text-center text-xs text-muted-foreground">No notifications yet.</div>
+            )}
+            {notifs.map(n => (
+              <div key={n.id} onClick={() => handleOpenNotif(n)}
+                className={cx("px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-secondary", n.unread&&"bg-muted/30")}>
                 <div className="flex-1 min-w-0">
-                  <div className={cx("text-sm", n.unread&&"font-medium")}>{n.text}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{n.sub} · {n.ts}</div>
+                  <div className={cx("text-sm", n.unread&&"font-medium")}>{n.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{n.body}{n.body ? " · " : ""}{timeAgo(n.createdAt)}</div>
                 </div>
                 {n.unread && <span className="w-1.5 h-1.5 bg-foreground rounded-full shrink-0 mt-1.5"/>}
               </div>
