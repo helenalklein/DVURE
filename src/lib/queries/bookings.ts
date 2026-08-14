@@ -1,66 +1,49 @@
 import { supabase } from "../supabaseClient";
-import { logAuditEvent } from "../audit";
 
-// Fee split isn't a per-booking negotiation in the UI yet — every real
-// booking uses the platform's own standard split. Revisit if/when
-// brands need to negotiate this per deal.
-//
 // The platform fee is added on top of gross, never deducted from what
 // a payee is owed, and varies by how the brand actually pays — ACH is
 // cheaper for DVURE to process than card, so it's priced lower to
 // steer volume there. Card/ACH add the fee directly to the charge
-// (create-invoice-payment, which recomputes it fresh at payment time —
-// bookings.platform_pct below is only ever a stored-for-reference
-// default, never read back for the real charge). A confirmed check/
-// wire/cash payment bills the card rate separately afterward via a
-// real Stripe Invoice (create-noncircumvention-invoice), since no
-// money moves through Stripe on those to collect it from directly.
+// (create-invoice-payment, which recomputes it fresh at payment time).
+// A confirmed check/wire/cash payment bills the card rate separately
+// afterward via a real Stripe Invoice (create-noncircumvention-invoice),
+// since no money moves through Stripe on those to collect it from
+// directly.
 export const DEFAULT_AGENCY_PCT = 20;
 export const PLATFORM_FEE_PCT_ACH = 5.5;
 export const PLATFORM_FEE_PCT_CARD = 6;
 
+// Booking creation goes through create_booking (RPC) rather than a
+// plain client insert — who's actually owed money on a booking is real
+// logic now, not a fixed split: it's the submitting agency's own
+// per-relationship commission_pct (agency_model_relationships), plus
+// any other 'always'-entitled relationship on the same model (the real
+// mother-agency case — paid regardless of who books, deduped against
+// the submitting agency if it's the same org), each landing as its own
+// row in booking_agency_allocations. An independent model (agencyOrgId
+// null) skips agency allocation entirely — no fee invented for nobody.
+// The RPC derives brand_org_id from the caller's own session, and
+// handles its own audit logging server-side.
 export async function createBooking(params: {
   campaignId: string;
-  submissionId: string;
-  brandOrgId: string;
+  submissionId: string | null;
   agencyOrgId: string | null;
   modelId: string;
   dayRate: number;
   days: number;
   shootDate: string; // YYYY-MM-DD
 }): Promise<{ id: string | null; error: string | null }> {
-  // No agency on the booking (an independent model, 0049) means no
-  // agency cut — agency_pct silently defaulting to the standard 20% here
-  // would invent a fee owed to nobody.
-  const { data, error } = await supabase
-    .from("bookings")
-    .insert({
-      campaign_id: params.campaignId,
-      submission_id: params.submissionId,
-      brand_org_id: params.brandOrgId,
-      agency_org_id: params.agencyOrgId,
-      model_id: params.modelId,
-      day_rate: params.dayRate,
-      days: params.days,
-      shoot_date: params.shootDate,
-      agency_pct: params.agencyOrgId ? DEFAULT_AGENCY_PCT / 100 : 0,
-      platform_pct: PLATFORM_FEE_PCT_CARD / 100,
-    })
-    .select("id")
-    .single();
-  if (error || !data) return { id: null, error: error?.message ?? "Couldn't create booking." };
-
-  // Same client-side (skippable) audit tier as submissions — bookings
-  // has no security-definer RPC of its own yet either.
-  logAuditEvent({
-    action: "booking.created",
-    objectType: "booking",
-    objectId: data.id as string,
-    campaignId: params.campaignId,
-    newValue: { modelId: params.modelId, dayRate: params.dayRate, days: params.days, shootDate: params.shootDate },
+  const { data, error } = await supabase.rpc("create_booking", {
+    p_campaign_id: params.campaignId,
+    p_submission_id: params.submissionId,
+    p_model_id: params.modelId,
+    p_day_rate: params.dayRate,
+    p_days: params.days,
+    p_shoot_date: params.shootDate,
+    p_booking_agency_org_id: params.agencyOrgId,
   });
-
-  return { id: data.id as string, error: null };
+  if (error || !data) return { id: null, error: error?.message ?? "Couldn't create booking." };
+  return { id: data as string, error: null };
 }
 
 export interface ModelBooking {

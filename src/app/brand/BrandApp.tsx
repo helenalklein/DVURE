@@ -1756,7 +1756,6 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
         const { error } = await createBooking({
           campaignId: realCampaignId,
           submissionId: entry.submissionId,
-          brandOrgId: org.id,
           agencyOrgId: entry.agencyOrgId,
           modelId: entry.modelId,
           dayRate, days,
