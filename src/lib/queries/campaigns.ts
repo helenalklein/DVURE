@@ -62,7 +62,7 @@ export async function fetchPartneredAgencies(brandOrgId: string): Promise<{ id: 
 export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaigns: Campaign[]; realIdShim: Map<number, string> }> {
   const { data: rows, error } = await supabase
     .from("campaigns")
-    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at, territory")
+    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at, territory, has_in_person_casting")
     .eq("brand_org_id", brandOrgId)
     .order("created_at", { ascending: true }); // stable shim ids across reloads — a real deep link depends on this
 
@@ -141,6 +141,7 @@ export async function createCampaign(params: {
       budget: params.budget ?? null,
       created_by_profile_id: params.createdByProfileId,
       territory: params.territory || null,
+      has_in_person_casting: params.hasInPersonCasting ?? false,
     })
     .select("id")
     .single();
