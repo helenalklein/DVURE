@@ -129,7 +129,10 @@ export default function SubscriptionPanel() {
             <div className="text-sm font-semibold"><DvureWordmark size={11}/> {orgLabel}</div>
             <div className="text-xs text-muted-foreground">{plan.productName}{plan.interval ? ` · Billed ${plan.interval}ly` : ""}</div>
           </div>
-          {statusInfo && <Badge label={statusInfo.label} variant={statusInfo.variant}/>}
+          <div className="flex items-center gap-1.5">
+            {org?.foundingMember && <Badge label="Founding Member" variant="info"/>}
+            {statusInfo && <Badge label={statusInfo.label} variant={statusInfo.variant}/>}
+          </div>
         </div>
         <div className="px-5 py-4 space-y-3 text-sm">
           {[
@@ -141,6 +144,11 @@ export default function SubscriptionPanel() {
               <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
             </div>
           ))}
+          {org?.foundingMember && (
+            <div className="text-[10px] text-muted-foreground bg-secondary rounded-md px-3 py-2">
+              As a founding member, this rate is locked in for your organization even after pricing changes for new agencies.
+            </div>
+          )}
         </div>
       </div>
 

@@ -23,6 +23,11 @@ export interface OrgInfo {
   paymentLocked: boolean;
   // Purely descriptive (spec §20) — never read by any RLS/RPC decision.
   selfDescribedServices: string | null;
+  // Set once at signup (complete_org_signup) for every agency during
+  // the pilot — locks in the current subscription rate even after a
+  // later price increase. Never true for brands (brands don't pay a
+  // subscription at all, see accessGate.ts).
+  foundingMember: boolean;
 }
 
 export interface ModelAgencyInfo {
@@ -155,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoUrl: orgRow.logo_url,
         paymentLocked: !!orgRow.payment_locked,
         selfDescribedServices: orgRow.self_described_services,
+        foundingMember: !!orgRow.founding_member,
       },
     });
   }, []);
