@@ -227,6 +227,65 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
 // Event campaigns get this same tab relabeled "Run of Show" — same
 // table/schedule under the hood (RealCallSheet), just the vocabulary an
 // event actually uses.
+// ─── PROJECT STAGE STRIP ────────────────────────────────────────────────────
+// A read-only "roughly where this project is" guide, not a gate — per
+// direct instruction, this should orient without forcing anyone to take
+// an action before they're ready. Computed entirely from fields already
+// on the Campaign object (no extra queries): submitted/approved/booked
+// counts, status, and the same overdue signal the sidebar's "Ended on"
+// styling already uses (dueLabel.includes("overdue")) — coarse on
+// purpose, an ambient signal rather than a precise workflow-state
+// machine that would need real per-stage data (fittings, run-of-show
+// checkpoints, etc.) to be trustworthy.
+interface ProjectStage { key: string; label: string; }
+const CAMPAIGN_STAGES: ProjectStage[] = [
+  { key:"cast", label:"Cast" }, { key:"book", label:"Book" }, { key:"produce", label:"Produce" },
+  { key:"post", label:"Post" }, { key:"deliver", label:"Deliver" },
+];
+const RUNWAY_STAGES: ProjectStage[] = [
+  { key:"cast", label:"Cast" }, { key:"fit", label:"Fit" }, { key:"assign", label:"Assign Looks" },
+  { key:"lineup", label:"Lineup" }, { key:"rehearse", label:"Rehearse" }, { key:"show", label:"Show" },
+];
+const EVENT_STAGES: ProjectStage[] = [
+  { key:"plan", label:"Plan" }, { key:"staff", label:"Staff/Book" }, { key:"build", label:"Build" },
+  { key:"run", label:"Run of Show" }, { key:"live", label:"Live Event" }, { key:"wrap", label:"Wrap" },
+];
+function stagesForType(type: Campaign["type"]): ProjectStage[] {
+  if (type === "Runway") return RUNWAY_STAGES;
+  if (type === "Event") return EVENT_STAGES;
+  return CAMPAIGN_STAGES;
+}
+function computeStageIndex(campaign: Campaign, stageCount: number): number {
+  if (campaign.status === "drafts") return 0;
+  if (campaign.status === "archived") return stageCount - 1;
+  const hasSubmissions = campaign.submitted > 0 || campaign.approved > 0 || campaign.booked > 0;
+  const hasBooked = campaign.booked > 0;
+  const pastDue = campaign.dueLabel?.includes("overdue") ?? false;
+  if (!hasSubmissions) return 0;
+  if (!hasBooked) return Math.min(1, stageCount - 2);
+  if (!pastDue) return Math.min(Math.floor(stageCount / 2), stageCount - 2);
+  return stageCount - 2;
+}
+function ProjectStageStrip({ campaign }: { campaign: Campaign }) {
+  const stages = stagesForType(campaign.type);
+  const currentIndex = computeStageIndex(campaign, stages.length);
+  return (
+    <div className="glass-subtle border rounded-md px-4 py-3">
+      <div className="flex items-center">
+        {stages.map((s, i) => (
+          <Fragment key={s.key}>
+            <div className="flex flex-col items-center gap-1 shrink-0 w-16">
+              <div className={cx("w-2 h-2 rounded-full", i < currentIndex ? "bg-foreground" : i === currentIndex ? "bg-gold" : "bg-border")}/>
+              <div className={cx("text-[9px] font-mono uppercase tracking-wide text-center leading-tight", i === currentIndex ? "text-foreground font-semibold" : "text-muted-foreground")}>{s.label}</div>
+            </div>
+            {i < stages.length - 1 && <div className={cx("flex-1 h-px -mt-3.5", i < currentIndex ? "bg-foreground" : "bg-border")}/>}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function campaignNavFor(campaign: { type: Campaign["type"]; hasInPersonCasting?: boolean }): { id: CampaignSection; label: string; Icon: IconFn }[] {
   const callSheetLabel = campaign.type === "Event" ? "Run of Show" : "Call Sheet";
   const withCallSheet = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
@@ -2181,6 +2240,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           {section==="overview" && (
             <div className="h-full overflow-auto p-6">
               <div className="max-w-3xl space-y-5">
+                <ProjectStageStrip campaign={campaign}/>
                 <div className="grid grid-cols-3 gap-3">
                   {[["Talent",counts.submitted],["Selections",counts.approved],["Confirmed",counts.booked]].map(([l,v])=>(
                     <div key={String(l)} className={cx("border rounded-md p-3 text-center cursor-pointer hover:border-foreground/40", String(l)==="Confirmed"&&Number(v)>0?"bg-foreground border-foreground":"glass-subtle")} onClick={()=>onSection("moodboard")}>
