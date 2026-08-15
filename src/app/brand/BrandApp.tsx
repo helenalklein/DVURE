@@ -29,7 +29,8 @@ import SubscriptionPanel from "../shared/SubscriptionPanel";
 import { searchIndependentModels, submitIndependentModel, type IndependentModel } from "../../lib/queries/independentModels";
 import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries/outstandingPayments";
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
-import CallSheet, { CrewTab } from "../shared/CallSheet";
+import { CrewTab } from "../shared/CallSheet";
+import RealCallSheet from "../shared/RealCallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
@@ -1932,7 +1933,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="call-sheet" && (
             realCampaignId
-              ? <CallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
+              ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Call Sheet and has no saved project record to attach roles to — create a new campaign to use Call Sheet.</div>
           )}
 
