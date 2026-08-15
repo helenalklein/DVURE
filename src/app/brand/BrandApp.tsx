@@ -224,11 +224,15 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
 // hasInPersonCasting at creation. (A full Casting Board — tracking
 // candidates through an audition process — is part of Relay, deferred
 // to Phase 2; this is just the logistics for a real in-person session.)
+// Event campaigns get this same tab relabeled "Run of Show" — same
+// table/schedule under the hood (RealCallSheet), just the vocabulary an
+// event actually uses.
 function campaignNavFor(campaign: { type: Campaign["type"]; hasInPersonCasting?: boolean }): { id: CampaignSection; label: string; Icon: IconFn }[] {
+  const callSheetLabel = campaign.type === "Event" ? "Run of Show" : "Call Sheet";
   const withCallSheet = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
     item,
     { id:"crew" as CampaignSection, label:"Crew", Icon:Users },
-    { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:FileText },
+    { id:"call-sheet" as CampaignSection, label:callSheetLabel, Icon:FileText },
   ] : [item]);
   const withCasting = campaign.hasInPersonCasting
     ? withCallSheet.flatMap(item => item.id==="call-sheet" ? [item, { id:"casting" as CampaignSection, label:"Casting", Icon:Camera }] : [item])
@@ -2238,7 +2242,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="call-sheet" && (
             realCampaignId
-              ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
+              ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name} campaignType={campaign.type}/>
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Call Sheet and has no saved project record to attach roles to — create a new campaign to use Call Sheet.</div>
           )}
 

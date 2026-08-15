@@ -29,7 +29,11 @@ function formatDayLabel(d: ShootDaySummary): string {
 
 const EMPTY_DETAILS = { locationName: "", address: "", parkingNotes: "", nearestHospital: "", weather: "", crewCallTime: "" };
 
-export default function RealCallSheet({ campaignId, campaignName }: { campaignId: string; campaignName: string }) {
+// Same timed location/schedule document for every project type — for
+// Event this is exactly the "Run of Show" concept (doors, welcome,
+// performance, close), just relabeled, not a different table or screen.
+export default function RealCallSheet({ campaignId, campaignName, campaignType }: { campaignId: string; campaignName: string; campaignType?: string }) {
+  const docLabel = campaignType === "Event" ? "Run of Show" : "Call Sheet";
   const [shootDays, setShootDays] = useState<ShootDaySummary[] | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [details, setDetails] = useState<CallSheetDetails | null>(null);
@@ -95,13 +99,13 @@ export default function RealCallSheet({ campaignId, campaignName }: { campaignId
   const selectedDay = shootDays?.find(d => d.id === selectedDayId);
 
   if (shootDays === null) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
-  if (shootDays.length === 0) return <div className="p-6 text-sm text-muted-foreground">No shoot days on this campaign yet — add one from Deliverables to build a call sheet.</div>;
+  if (shootDays.length === 0) return <div className="p-6 text-sm text-muted-foreground">No shoot days on this campaign yet — add one from Deliverables to build a {docLabel.toLowerCase()}.</div>;
 
   return (
     <div data-print-mode={printing ? "call-sheet" : undefined} className="call-sheet-root h-full overflow-auto p-6 space-y-5">
       <div className="call-sheet-noprint flex items-center justify-between gap-3">
         <div>
-          <div className="text-heading text-lg">{campaignName} — Call Sheet</div>
+          <div className="text-heading text-lg">{campaignName} — {docLabel}</div>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {shootDays.map(d => (
               <button key={d.id} onClick={()=>setSelectedDayId(d.id)}
@@ -121,7 +125,7 @@ export default function RealCallSheet({ campaignId, campaignName }: { campaignId
 
       {/* Print header — visible only when printing */}
       <div className="hidden print:block">
-        <div className="text-lg font-semibold">{campaignName} — Call Sheet</div>
+        <div className="text-lg font-semibold">{campaignName} — {docLabel}</div>
         <div className="text-xs text-muted-foreground">{selectedDay ? formatDayLabel(selectedDay) : ""}</div>
       </div>
 
