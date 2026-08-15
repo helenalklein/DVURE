@@ -182,30 +182,6 @@ export interface RunwayShow {
 
 // ─── RUNWAY CASTING ─────────────────────────────────────────────────────────
 // Casting Board (day-of checklist) was pulled — it's part of Relay,
-// deferred to Phase 2 along with the rest of that module.
-
-// One numbered look for a runway campaign — garments/accessories plus
-// who's assigned to execute it (model, hair, makeup, dresser).
-export interface Look {
-  id: number;
-  campaignId: number;
-  number: number;
-  garments: string;
-  shoes: string;
-  jewelry: string;
-  accessories: string;
-  stylistNotes: string;
-  dressingNotes: string;
-  assignedModelId?: number;
-  assignedHairId?: number;
-  assignedMakeupId?: number;
-  assignedDresserId?: number;
-}
-
-export type CrewRole = "hair" | "makeup" | "dresser" | "photographer" | "production" | "security" | "transportation";
-
-export interface CrewMember {
-  id: number;
-  name: string;
-  role: CrewRole;
-}
+// deferred to Phase 2 along with the rest of that module. Looks (which
+// model wears which garment) is real data now — see CampaignLook in
+// lib/queries/looks.ts, not Relay scope.

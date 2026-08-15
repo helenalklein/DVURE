@@ -10,11 +10,11 @@ import {
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
   User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone
 } from "lucide-react";
-import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, Look, CampaignThreadMessage } from "../shared/types";
+import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, CREW, LOOKS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
+import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
@@ -31,7 +31,8 @@ import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
 import { CrewTab } from "../shared/CallSheet";
 import RealCallSheet from "../shared/RealCallSheet";
-import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib/queries/callSheet";
+import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads, fetchCallSheetSlots, type CallSheetAssignment } from "../../lib/queries/callSheet";
+import { fetchLooks, createLook, updateLook, deleteLook, fetchLookableModels, type CampaignLook, type LookableModel } from "../../lib/queries/looks";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
 import { fetchShootDays, saveShootDays, createShootDay, type ShootDay } from "../../lib/queries/deliverables";
@@ -1485,26 +1486,67 @@ function CampaignPaymentsTab({ realCampaignId, payees, loading, reload }: {
 
 // ─── RUNWAY: LOOKS ───────────────────────────────────────────────────────────
 
-function LooksScreen({ campaignId }: { campaignId: number }) {
-  const [looks, setLooks] = useState<Look[]>(() => LOOKS.filter(l=>l.campaignId===campaignId));
-  const [drawerId, setDrawerId] = useState<number|null>(null);
+// Hair/makeup/dresser pickers pull from this campaign's actual filled
+// crew slots (campaign_crew_slots via fetchCallSheetSlots), bucketed by
+// role_key — not a separate roster, so a look can only ever be assigned
+// to someone really booked on the show. No dedicated "dresser" role_key
+// exists in the fixed 48, so that bucket is the styling department
+// generally (stylist/assistant/wardrobe/costume) — close enough for MVP.
+const HAIR_ROLE_KEYS = new Set(["hair_stylist", "hair_assistant", "groomer"]);
+const MAKEUP_ROLE_KEYS = new Set(["makeup_artist", "makeup_assistant", "nail_artist"]);
+const DRESSER_ROLE_KEYS = new Set(["stylist", "assistant_stylist", "wardrobe_assistant", "costume_supervisor"]);
+
+function LooksScreen({ campaignId }: { campaignId: string }) {
+  const [looks, setLooks] = useState<CampaignLook[]>([]);
+  const [models, setModels] = useState<LookableModel[]>([]);
+  const [crewSlots, setCrewSlots] = useState<CallSheetAssignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [drawerId, setDrawerId] = useState<string|null>(null);
   const drawer = looks.find(l=>l.id===drawerId) ?? null;
 
-  function addLook() {
+  async function reload() {
+    const [realLooks, realModels, slots] = await Promise.all([
+      fetchLooks(campaignId), fetchLookableModels(campaignId), fetchCallSheetSlots(campaignId),
+    ]);
+    setLooks(realLooks); setModels(realModels); setCrewSlots(slots);
+    setLoading(false);
+  }
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [campaignId]);
+
+  async function addLook() {
     const nextNumber = looks.reduce((max,l)=>Math.max(max,l.number),0) + 1;
-    const fresh: Look = { id:Date.now(), campaignId, number:nextNumber, garments:"", shoes:"", jewelry:"", accessories:"", stylistNotes:"", dressingNotes:"" };
-    setLooks(prev=>[...prev, fresh]);
-    setDrawerId(fresh.id);
+    const { id } = await createLook(campaignId, nextNumber);
+    if (!id) return;
+    await reload();
+    setDrawerId(id);
   }
 
-  function updateDrawer(patch: Partial<Look>) {
-    if (drawerId==null) return;
+  async function removeLook(id: string) {
+    await deleteLook(id);
+    if (drawerId === id) setDrawerId(null);
+    await reload();
+  }
+
+  // Every field update is optimistic in local state immediately, then
+  // persisted — text fields persist onBlur (so typing doesn't spam a
+  // write per keystroke), assignment dropdowns persist onChange since
+  // there's no debounce concern for a discrete choice.
+  function updateDrawerLocal(patch: Partial<CampaignLook>) {
+    if (!drawerId) return;
     setLooks(prev => prev.map(l => l.id===drawerId ? { ...l, ...patch } : l));
   }
+  async function persistDrawer(patch: Partial<CampaignLook>) {
+    if (!drawerId) return;
+    await updateLook(drawerId, patch);
+  }
 
-  const modelName = (id?: number) => SAMPLE_TALENT.find(t=>t.id===id)?.name ?? "Unassigned model";
-  const crewName = (id?: number) => CREW.find(c=>c.id===id)?.name ?? "Unassigned";
-  const crewByRole = (role: string) => CREW.filter(c=>c.role===role);
+  const modelName = (id: string|null) => models.find(m=>m.id===id)?.name ?? "Unassigned model";
+  const crewName = (id: string|null, pool: CallSheetAssignment[]) => pool.find(c=>c.crewPayeeId===id)?.fullName ?? "Unassigned";
+  const hairPool = crewSlots.filter(s => HAIR_ROLE_KEYS.has(s.roleKey));
+  const makeupPool = crewSlots.filter(s => MAKEUP_ROLE_KEYS.has(s.roleKey));
+  const dresserPool = crewSlots.filter(s => DRESSER_ROLE_KEYS.has(s.roleKey));
+
+  if (loading) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -1536,23 +1578,32 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
           <div className="glass-strong border rounded-xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
             <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
               <div className="text-heading text-sm">Look {drawer.number}</div>
-              <button onClick={()=>setDrawerId(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+              <div className="flex items-center gap-3">
+                <button onClick={()=>removeLook(drawer.id)} className="text-muted-foreground hover:text-[#C0392B] text-xs">Remove</button>
+                <button onClick={()=>setDrawerId(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <TextInput label="Garments" placeholder="e.g. Ivory wool coat" value={drawer.garments} onChange={e=>updateDrawer({garments:e.target.value})}/>
-                <TextInput label="Shoes" placeholder="e.g. Black leather boot" value={drawer.shoes} onChange={e=>updateDrawer({shoes:e.target.value})}/>
-                <TextInput label="Jewelry" placeholder="e.g. Silver cuff" value={drawer.jewelry} onChange={e=>updateDrawer({jewelry:e.target.value})}/>
-                <TextInput label="Accessories" placeholder="e.g. Leather clutch" value={drawer.accessories} onChange={e=>updateDrawer({accessories:e.target.value})}/>
+                <TextInput label="Garments" placeholder="e.g. Ivory wool coat" value={drawer.garments}
+                  onChange={e=>updateDrawerLocal({garments:e.target.value})} onBlur={e=>persistDrawer({garments:e.target.value})}/>
+                <TextInput label="Shoes" placeholder="e.g. Black leather boot" value={drawer.shoes}
+                  onChange={e=>updateDrawerLocal({shoes:e.target.value})} onBlur={e=>persistDrawer({shoes:e.target.value})}/>
+                <TextInput label="Jewelry" placeholder="e.g. Silver cuff" value={drawer.jewelry}
+                  onChange={e=>updateDrawerLocal({jewelry:e.target.value})} onBlur={e=>persistDrawer({jewelry:e.target.value})}/>
+                <TextInput label="Accessories" placeholder="e.g. Leather clutch" value={drawer.accessories}
+                  onChange={e=>updateDrawerLocal({accessories:e.target.value})} onBlur={e=>persistDrawer({accessories:e.target.value})}/>
               </div>
               <div>
                 <FieldLabel>Stylist Notes</FieldLabel>
-                <textarea value={drawer.stylistNotes} onChange={e=>updateDrawer({stylistNotes:e.target.value})} rows={2} placeholder="Direction for styling this look…"
+                <textarea value={drawer.stylistNotes} rows={2} placeholder="Direction for styling this look…"
+                  onChange={e=>updateDrawerLocal({stylistNotes:e.target.value})} onBlur={e=>persistDrawer({stylistNotes:e.target.value})}
                   className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
               </div>
               <div>
                 <FieldLabel>Dressing Notes</FieldLabel>
-                <textarea value={drawer.dressingNotes} onChange={e=>updateDrawer({dressingNotes:e.target.value})} rows={2} placeholder="Quick-change instructions for the dressing team…"
+                <textarea value={drawer.dressingNotes} rows={2} placeholder="Quick-change instructions for the dressing team…"
+                  onChange={e=>updateDrawerLocal({dressingNotes:e.target.value})} onBlur={e=>persistDrawer({dressingNotes:e.target.value})}
                   className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
               </div>
               <div className="border-t border-border pt-4">
@@ -1560,39 +1611,39 @@ function LooksScreen({ campaignId }: { campaignId: number }) {
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <div>
                     <div className="text-[10px] text-muted-foreground font-mono mb-1">Model</div>
-                    <select value={drawer.assignedModelId ?? ""} onChange={e=>updateDrawer({assignedModelId: e.target.value ? Number(e.target.value) : undefined})}
+                    <select value={drawer.assignedModelId ?? ""} onChange={e=>{ const v=e.target.value||null; updateDrawerLocal({assignedModelId:v}); persistDrawer({assignedModelId:v}); }}
                       className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
                       <option value="">Unassigned</option>
-                      {SAMPLE_TALENT.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                      {models.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground font-mono mb-1">Hair</div>
-                    <select value={drawer.assignedHairId ?? ""} onChange={e=>updateDrawer({assignedHairId: e.target.value ? Number(e.target.value) : undefined})}
+                    <select value={drawer.assignedHairId ?? ""} onChange={e=>{ const v=e.target.value||null; updateDrawerLocal({assignedHairId:v}); persistDrawer({assignedHairId:v}); }}
                       className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
                       <option value="">Unassigned</option>
-                      {crewByRole("hair").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      {hairPool.map(c=><option key={c.crewPayeeId} value={c.crewPayeeId}>{c.fullName}</option>)}
                     </select>
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground font-mono mb-1">Makeup</div>
-                    <select value={drawer.assignedMakeupId ?? ""} onChange={e=>updateDrawer({assignedMakeupId: e.target.value ? Number(e.target.value) : undefined})}
+                    <select value={drawer.assignedMakeupId ?? ""} onChange={e=>{ const v=e.target.value||null; updateDrawerLocal({assignedMakeupId:v}); persistDrawer({assignedMakeupId:v}); }}
                       className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
                       <option value="">Unassigned</option>
-                      {crewByRole("makeup").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      {makeupPool.map(c=><option key={c.crewPayeeId} value={c.crewPayeeId}>{c.fullName}</option>)}
                     </select>
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground font-mono mb-1">Dresser</div>
-                    <select value={drawer.assignedDresserId ?? ""} onChange={e=>updateDrawer({assignedDresserId: e.target.value ? Number(e.target.value) : undefined})}
+                    <select value={drawer.assignedDresserId ?? ""} onChange={e=>{ const v=e.target.value||null; updateDrawerLocal({assignedDresserId:v}); persistDrawer({assignedDresserId:v}); }}
                       className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
                       <option value="">Unassigned</option>
-                      {crewByRole("dresser").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      {dresserPool.map(c=><option key={c.crewPayeeId} value={c.crewPayeeId}>{c.fullName}</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="text-[10px] text-muted-foreground font-mono mt-3">
-                  {modelName(drawer.assignedModelId)} · Hair: {crewName(drawer.assignedHairId)} · Makeup: {crewName(drawer.assignedMakeupId)} · Dresser: {crewName(drawer.assignedDresserId)}
+                  {modelName(drawer.assignedModelId)} · Hair: {crewName(drawer.assignedHairId, hairPool)} · Makeup: {crewName(drawer.assignedMakeupId, makeupPool)} · Dresser: {crewName(drawer.assignedDresserId, dresserPool)}
                 </div>
               </div>
             </div>
@@ -2037,7 +2088,11 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Casting and has no saved project record to attach sessions to — create a new campaign to use Casting.</div>
           )}
 
-          {section==="looks" && <LooksScreen campaignId={campaign.id}/>}
+          {section==="looks" && (
+            realCampaignId
+              ? <LooksScreen campaignId={realCampaignId}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Looks and has no saved project record to attach looks to — create a new campaign to use Looks.</div>
+          )}
 
           {section==="requirements" && (
             <div className="flex-1 overflow-auto p-6">

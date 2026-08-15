@@ -159,13 +159,13 @@ export function DvureMark({ size = 24, className }: { size?: number; className?:
   return <img src={dvureMarkD} alt="DVURE" style={{ height: size, width: "auto" }} className={cx("inline-block", className)}/>;
 }
 
-export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, readOnly }: {
-  label?: string; placeholder: string; type?: string; defaultValue?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; readOnly?: boolean;
+export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, onBlur, readOnly }: {
+  label?: string; placeholder: string; type?: string; defaultValue?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; readOnly?: boolean;
 }) {
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <input type={type} placeholder={placeholder} defaultValue={defaultValue} value={value} onChange={onChange} readOnly={readOnly}
+      <input type={type} placeholder={placeholder} defaultValue={defaultValue} value={value} onChange={onChange} onBlur={onBlur} readOnly={readOnly}
         className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground"/>
     </div>
   );

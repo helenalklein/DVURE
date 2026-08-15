@@ -1,4 +1,4 @@
-import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, Look, CrewMember, CampaignThreadMessage } from "./types";
+import type { Talent, PaymentStatus, CardComment, Campaign, RunwayShow, CampaignThreadMessage } from "./types";
 import { formatCampaignDue } from "../../lib/formatDue";
 import coverCrystalPalaceTransept from "../../assets/cover-crystal-palace-transept.jpg";
 import galleryDP152207 from "../../assets/gallery/DP152207.jpg";
@@ -282,24 +282,3 @@ export const RUNWAY_SHOW_OTHER_BRANDS: Record<number, string[]> = {
   1: ["Nocturne House", "Rivet & Sable"],
 };
 
-export const CREW: CrewMember[] = [
-  { id:1,  name:"Priya Anand",    role:"hair" },
-  { id:2,  name:"Marcus Reyes",   role:"hair" },
-  { id:3,  name:"Dana Kwon",      role:"makeup" },
-  { id:4,  name:"Théo Laurent",   role:"makeup" },
-  { id:5,  name:"Ola Bello",      role:"dresser" },
-  { id:6,  name:"Ren Fischer",    role:"dresser" },
-  { id:7,  name:"Ibrahim Sy",     role:"photographer" },
-  { id:8,  name:"Grace Whitman",  role:"production" },
-  { id:9,  name:"Diego Cruz",     role:"security" },
-  { id:10, name:"Nia Okoro",      role:"transportation" },
-];
-
-export const LOOKS: Look[] = [
-  { id:1, campaignId:5, number:1, garments:"Ivory wool coat, black tailored trouser", shoes:"Black leather knee boot", jewelry:"Silver cuff", accessories:"Structured leather clutch", stylistNotes:"Lead look — check coat drape under stage lights.", dressingNotes:"Quick-change collar clip, no zipper.", assignedModelId:1, assignedHairId:1, assignedMakeupId:3, assignedDresserId:5 },
-  { id:2, campaignId:5, number:2, garments:"Charcoal silk slip dress", shoes:"Nude satin pump", jewelry:"Drop earrings", accessories:"—", stylistNotes:"Steam before line-up, wrinkles easily.", dressingNotes:"Zip back, model needs help — allow 90 sec.", assignedModelId:2, assignedHairId:2, assignedMakeupId:3, assignedDresserId:5 },
-  { id:3, campaignId:5, number:3, garments:"Cream cable knit sweater, wide-leg trouser", shoes:"White leather loafer", jewelry:"—", accessories:"Wool scarf, draped", assignedModelId:5, assignedHairId:1, assignedMakeupId:4, assignedDresserId:6, stylistNotes:"Scarf drape must match lookbook reference photo.", dressingNotes:"Pre-drape scarf backstage, pin in place." },
-  { id:4, campaignId:5, number:4, garments:"Black leather trench", shoes:"Black combat boot", jewelry:"Chain belt", accessories:"Gloves", assignedModelId:6, assignedHairId:2, assignedMakeupId:4, assignedDresserId:6, stylistNotes:"Belt cinch — confirm waist measurement day-of.", dressingNotes:"Gloves on last, right before line-up." },
-  { id:5, campaignId:5, number:5, garments:"Emerald green satin gown", shoes:"Metallic stiletto", jewelry:"Statement necklace", accessories:"—", assignedModelId:12, assignedHairId:1, assignedMakeupId:3, assignedDresserId:5, stylistNotes:"Train needs a handler at the top of the runway.", dressingNotes:"Necklace clasp is delicate — two-person dress." },
-  { id:6, campaignId:5, number:6, garments:"Tailored pinstripe suit", shoes:"Black oxford", jewelry:"Cufflinks", accessories:"Pocket square", assignedModelId:9, assignedHairId:2, assignedMakeupId:4, assignedDresserId:6, stylistNotes:"Closing look — full lights, hold center stage 3 extra counts.", dressingNotes:"Pocket square folded on-site, not pre-set." },
-];
