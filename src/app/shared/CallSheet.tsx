@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Printer, Plus, X, Search, ChevronDown, Lock, Star } from "lucide-react";
+import { Printer, Plus, X, Search, ChevronDown, Lock, Star, Shield } from "lucide-react";
 import { cx, Btn, Modal, TextInput } from "./ui";
-import { CALL_SHEET_CATEGORIES } from "./callSheetRoles";
+import { CALL_SHEET_CATEGORIES, type CallSheetCategory } from "./callSheetRoles";
 import { useAuth } from "./auth";
 import {
   fetchCallSheetSlots, fetchCrewDirectory, fetchMyCallSheetRole, assignCallSheetRole, clearCallSheetRole,
-  inviteCrewToCallSheet, setDepartmentLead, updateCrewSlotRate,
-  type CallSheetAssignment, type CrewDirectoryEntry, type CallSheetPermission,
+  inviteCrewToCallSheet, setDepartmentLead, updateCrewSlotRate, setProjectAdmin,
+  fetchCustomCrewRoles, addCustomCrewRole, removeCustomCrewRole,
+  type CallSheetAssignment, type CrewDirectoryEntry, type CallSheetPermission, type CustomCrewRole,
 } from "../../lib/queries/callSheet";
 
 // Shared by both tabs below — Crew (assign/manage) and Call Sheet
@@ -18,28 +19,52 @@ function useCallSheetData(campaignId: string) {
   const [assignments, setAssignments] = useState<Map<string, CallSheetAssignment>>(new Map());
   const [directory, setDirectory] = useState<CrewDirectoryEntry[]>([]);
   const [myRole, setMyRole] = useState<CallSheetPermission>(null);
+  const [customRoles, setCustomRoles] = useState<CustomCrewRole[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function reload() {
-    const [slots, dir, role] = await Promise.all([fetchCallSheetSlots(campaignId), fetchCrewDirectory(), fetchMyCallSheetRole(campaignId)]);
+    const [slots, dir, role, custom] = await Promise.all([
+      fetchCallSheetSlots(campaignId), fetchCrewDirectory(), fetchMyCallSheetRole(campaignId), fetchCustomCrewRoles(campaignId),
+    ]);
     setAssignments(new Map(slots.map((s) => [s.roleKey, s])));
     setDirectory(dir);
     setMyRole(role);
+    setCustomRoles(custom);
     setLoading(false);
   }
 
   useEffect(() => { reload(); }, [campaignId]);
 
+  // Fixed 11 categories, each with any custom/repeated roles appended,
+  // plus wholly custom departments tacked on at the end — one list the
+  // rest of the UI can just iterate, same shape (key/label/roles)
+  // whether a category is fixed or user-added.
+  const displayCategories: CallSheetCategory[] = useMemo(() => {
+    const byCategory = new Map<string, CallSheetCategory>();
+    for (const cat of CALL_SHEET_CATEGORIES) byCategory.set(cat.key, { ...cat, roles: [...cat.roles] });
+    for (const r of customRoles) {
+      const existing = byCategory.get(r.categoryKey);
+      if (existing) {
+        existing.roles.push({ key: r.roleKey, label: r.roleLabel });
+      } else {
+        byCategory.set(r.categoryKey, { key: r.categoryKey, label: r.categoryLabel ?? r.categoryKey, roles: [{ key: r.roleKey, label: r.roleLabel }] });
+      }
+    }
+    return [...byCategory.values()];
+  }, [customRoles]);
+
   const roleKeyToCategory = useMemo(() => {
     const m = new Map<string, string>();
-    for (const cat of CALL_SHEET_CATEGORIES) for (const r of cat.roles) m.set(r.key, cat.key);
+    for (const cat of displayCategories) for (const r of cat.roles) m.set(r.key, cat.key);
     return m;
-  }, []);
+  }, [displayCategories]);
+
+  const customRoleKeys = useMemo(() => new Set(customRoles.map(r => r.roleKey)), [customRoles]);
 
   const filledCount = assignments.size;
-  const totalRoles = useMemo(() => CALL_SHEET_CATEGORIES.reduce((n, c) => n + c.roles.length, 0), []);
+  const totalRoles = useMemo(() => displayCategories.reduce((n, c) => n + c.roles.length, 0), [displayCategories]);
 
-  return { assignments, directory, myRole, loading, reload, roleKeyToCategory, filledCount, totalRoles };
+  return { assignments, directory, myRole, loading, reload, roleKeyToCategory, filledCount, totalRoles, displayCategories, customRoleKeys };
 }
 
 // The working tool — pick or invite someone into each named role slot,
@@ -50,8 +75,10 @@ function useCallSheetData(campaignId: string) {
 // workspaces now default to under "Call Sheet".
 export function CrewTab({ campaignId, campaignName }: { campaignId: string; campaignName: string }) {
   const { crewProfile } = useAuth();
-  const { assignments, directory, myRole, loading, reload, roleKeyToCategory, filledCount, totalRoles } = useCallSheetData(campaignId);
+  const { assignments, directory, myRole, loading, reload, roleKeyToCategory, filledCount, totalRoles, displayCategories, customRoleKeys } = useCallSheetData(campaignId);
   const [pickerRole, setPickerRole] = useState<{ key: string; label: string } | null>(null);
+  const [addRoleCategory, setAddRoleCategory] = useState<{ key: string; label: string } | null>(null);
+  const [addingDepartment, setAddingDepartment] = useState(false);
   const [printMode, setPrintMode] = useState<"boxes" | "standard" | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
 
@@ -74,6 +101,9 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
     return cats;
   }, [assignments, myRole, crewProfile, roleKeyToCategory]);
 
+  // A lead only ever edits/adds within their OWN department — per
+  // direct instruction, seeing who's working elsewhere is fine, but
+  // managing another department's roster is not.
   function canEditRole(roleKey: string): boolean {
     if (myRole === "admin" || myRole === "producer") return true;
     if (myRole === "lead") {
@@ -82,8 +112,15 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
     }
     return false;
   }
+  function canAddToCategory(categoryKey: string): boolean {
+    if (myRole === "admin" || myRole === "producer") return true;
+    if (myRole === "lead") return myLeadCategories.has(categoryKey);
+    return false;
+  }
 
   const canManageLeads = myRole === "admin" || myRole === "producer";
+  const canGrantProjectAdmin = myRole === "admin";
+  const canAddDepartment = myRole === "admin" || myRole === "producer";
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading crew...</div>;
 
@@ -99,6 +136,7 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
             Crew
             {myRole === "viewer" && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5 flex items-center gap-1"><Lock size={9}/> Read only</span>}
             {myRole === "lead" && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5">Department lead</span>}
+            {myRole === "admin" && crewProfile && <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground border border-border rounded-full px-2 py-0.5 flex items-center gap-1"><Shield size={9}/> Project admin</span>}
           </div>
           <div className="text-xs text-muted-foreground">{filledCount} of {totalRoles} roles filled</div>
         </div>
@@ -130,7 +168,7 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
       </div>
 
       <div className={cx("px-6 py-5 space-y-7", printMode==="standard" && "print:hidden")}>
-        {CALL_SHEET_CATEGORIES.map((cat) => (
+        {displayCategories.map((cat) => (
           <div key={cat.key}>
             <div className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-2">{cat.label}</div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 print:grid-cols-4 gap-2">
@@ -138,40 +176,74 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
                 const a = assignments.get(r.key);
                 const editable = canEditRole(r.key);
                 const isLead = !!a?.isDepartmentLead;
+                const isCustom = customRoleKeys.has(r.key);
                 return (
-                  <button key={r.key} onClick={()=>editable && setPickerRole(r)} disabled={!editable || !!printMode}
-                    className={cx(
-                      "text-left rounded-md p-3 aspect-square flex flex-col justify-between transition-colors",
-                      editable ? "cursor-pointer" : "cursor-default",
-                      isLead ? "border-2 border-foreground bg-secondary"
-                        : a ? "border border-foreground/30 bg-secondary"
-                        : "border border-dashed border-border bg-secondary/30",
-                      editable && !a && "hover:border-foreground/40"
-                    )}>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                      {r.label} {isLead && <Star size={9} className="fill-current shrink-0"/>}
-                    </div>
-                    {a ? (
-                      <div>
-                        <div className="text-sm font-medium leading-snug line-clamp-2">{a.fullName}</div>
-                        {a.rate != null && <div className="text-[10px] font-mono text-muted-foreground mt-0.5">${a.rate.toLocaleString()}</div>}
+                  <div key={r.key} className="relative group/slot">
+                    <button onClick={()=>editable && setPickerRole(r)} disabled={!editable || !!printMode}
+                      className={cx(
+                        "w-full text-left rounded-md p-3 aspect-square flex flex-col justify-between transition-colors",
+                        editable ? "cursor-pointer" : "cursor-default",
+                        a?.isProjectAdmin ? "border-2 border-foreground bg-secondary"
+                          : isLead ? "border-2 border-foreground bg-secondary"
+                          : a ? "border border-foreground/30 bg-secondary"
+                          : "border border-dashed border-border bg-secondary/30",
+                        editable && !a && "hover:border-foreground/40"
+                      )}>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        {r.label} {a?.isProjectAdmin ? <Shield size={9} className="fill-current shrink-0"/> : isLead && <Star size={9} className="fill-current shrink-0"/>}
                       </div>
-                    ) : editable && !printMode ? (
-                      <div className="text-xs text-muted-foreground flex items-center gap-1"><Plus size={11}/> Assign</div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground/50">—</div>
+                      {a ? (
+                        <div>
+                          <div className="text-sm font-medium leading-snug line-clamp-2">{a.fullName}</div>
+                          {a.rate != null && <div className="text-[10px] font-mono text-muted-foreground mt-0.5">${a.rate.toLocaleString()}</div>}
+                        </div>
+                      ) : editable && !printMode ? (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1"><Plus size={11}/> Assign</div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground/50">—</div>
+                      )}
+                    </button>
+                    {isCustom && editable && !printMode && (
+                      <button onClick={async (e)=>{ e.stopPropagation(); await removeCustomCrewRole(campaignId, r.key); await reload(); }}
+                        title="Remove this role"
+                        className="call-sheet-noprint absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-card border border-border flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity hover:bg-secondary">
+                        <X size={9}/>
+                      </button>
                     )}
-                  </button>
+                  </div>
                 );
               })}
+              {canAddToCategory(cat.key) && !printMode && (
+                <button onClick={()=>setAddRoleCategory({ key: cat.key, label: cat.label })}
+                  className="call-sheet-noprint text-left rounded-md p-3 aspect-square flex flex-col justify-center items-center gap-1 border border-dashed border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground cursor-pointer transition-colors">
+                  <Plus size={14}/>
+                  <span className="text-[10px] font-mono uppercase tracking-wide">Other</span>
+                </button>
+              )}
             </div>
           </div>
         ))}
+
+        {/* "+" bar — a flat divider broken by a centered add-department
+            button, per direct instruction. Admin/producer only: a new
+            department is a project-structure decision, not something
+            any one department lead should add unilaterally. */}
+        {canAddDepartment && !printMode && (
+          <div className="call-sheet-noprint relative flex items-center py-2">
+            <div className="flex-1 h-px bg-border"/>
+            <button onClick={()=>setAddingDepartment(true)}
+              className="mx-3 w-8 h-8 rounded-full border border-border bg-card flex items-center justify-center text-muted-foreground hover:border-foreground hover:text-foreground cursor-pointer transition-colors shrink-0"
+              title="Add a department">
+              <Plus size={15}/>
+            </button>
+            <div className="flex-1 h-px bg-border"/>
+          </div>
+        )}
       </div>
 
       {/* Standard layout — plain list, print-only alternate to the boxes above */}
       <div className={cx("hidden px-6 py-5", printMode==="standard" && "print:block")}>
-        {CALL_SHEET_CATEGORIES.map((cat) => (
+        {displayCategories.map((cat) => (
           <div key={cat.key} className="mb-4 break-inside-avoid">
             <div className="text-xs font-semibold uppercase tracking-wide border-b border-border pb-1 mb-1">{cat.label}</div>
             {cat.roles.map((r) => {
@@ -194,17 +266,109 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
           directory={directory}
           current={assignments.get(pickerRole.key) ?? null}
           canManageLeads={canManageLeads}
+          canGrantProjectAdmin={canGrantProjectAdmin}
           onClose={()=>setPickerRole(null)}
           onAssigned={async ()=>{ setPickerRole(null); await reload(); }}
+        />
+      )}
+
+      {addRoleCategory && (
+        <AddCustomRoleModal
+          campaignId={campaignId}
+          categoryKey={addRoleCategory.key}
+          categoryLabel={addRoleCategory.label}
+          onClose={()=>setAddRoleCategory(null)}
+          onAdded={async ()=>{ setAddRoleCategory(null); await reload(); }}
+        />
+      )}
+
+      {addingDepartment && (
+        <AddCustomDepartmentModal
+          campaignId={campaignId}
+          onClose={()=>setAddingDepartment(false)}
+          onAdded={async ()=>{ setAddingDepartment(false); await reload(); }}
         />
       )}
     </div>
   );
 }
 
-function RolePickerModal({ role, campaignId, directory, current, canManageLeads, onClose, onAssigned }: {
+// "Say a photographer wants two photography assistants, they can add
+// that" — also doubles as "add a genuinely custom role" (any label),
+// since a repeated fixed role and a brand-new one under an existing
+// department are the same operation server-side.
+function AddCustomRoleModal({ campaignId, categoryKey, categoryLabel, onClose, onAdded }: {
+  campaignId: string; categoryKey: string; categoryLabel: string; onClose: () => void; onAdded: () => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!label.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await addCustomCrewRole({ campaignId, roleLabel: label.trim(), categoryKey });
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onAdded();
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-sm">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-heading text-sm">Add a role — {categoryLabel}</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-3">
+        <TextInput label="Role name" placeholder="e.g. Photo Assistant, Prosthetics Artist" value={label} onChange={e=>setLabel(e.target.value)}/>
+        {error && <div className="text-xs text-[#C0392B]">{error}</div>}
+        <Btn variant="primary" fullWidth disabled={saving || !label.trim()} onClick={submit}>{saving ? "Adding…" : "Add role"}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// The "+" bar's own modal — a brand-new department, named on the spot,
+// with its first role. Nothing stops adding more roles to it afterward
+// via that department's own "Other" button once it exists.
+function AddCustomDepartmentModal({ campaignId, onClose, onAdded }: {
+  campaignId: string; onClose: () => void; onAdded: () => void;
+}) {
+  const [deptLabel, setDeptLabel] = useState("");
+  const [roleLabel, setRoleLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!deptLabel.trim() || !roleLabel.trim()) return;
+    setSaving(true);
+    setError(null);
+    const { error: err } = await addCustomCrewRole({ campaignId, roleLabel: roleLabel.trim(), newCategoryLabel: deptLabel.trim() });
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onAdded();
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-sm">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-heading text-sm">Add a department</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-3">
+        <TextInput label="Department name" placeholder="e.g. Special Effects, Florals" value={deptLabel} onChange={e=>setDeptLabel(e.target.value)}/>
+        <TextInput label="First role in this department" placeholder="e.g. Special Effects Supervisor" value={roleLabel} onChange={e=>setRoleLabel(e.target.value)}/>
+        {error && <div className="text-xs text-[#C0392B]">{error}</div>}
+        <Btn variant="primary" fullWidth disabled={saving || !deptLabel.trim() || !roleLabel.trim()} onClick={submit}>{saving ? "Adding…" : "Add department"}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function RolePickerModal({ role, campaignId, directory, current, canManageLeads, canGrantProjectAdmin, onClose, onAssigned }: {
   role: { key: string; label: string }; campaignId: string; directory: CrewDirectoryEntry[];
-  current: CallSheetAssignment | null; canManageLeads: boolean; onClose: () => void; onAssigned: () => void;
+  current: CallSheetAssignment | null; canManageLeads: boolean; canGrantProjectAdmin: boolean; onClose: () => void; onAssigned: () => void;
 }) {
   const [mode, setMode] = useState<"pick" | "invite">("pick");
   const [query, setQuery] = useState("");
@@ -264,6 +428,15 @@ function RolePickerModal({ role, campaignId, directory, current, canManageLeads,
     onAssigned();
   }
 
+  async function toggleProjectAdmin() {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await setProjectAdmin(campaignId, role.key, !current?.isProjectAdmin);
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onAssigned();
+  }
+
   return (
     <Modal onClose={onClose} maxWidth="max-w-sm">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -273,6 +446,17 @@ function RolePickerModal({ role, campaignId, directory, current, canManageLeads,
         </div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
       </div>
+
+      {current && canGrantProjectAdmin && (
+        <button onClick={toggleProjectAdmin} disabled={saving}
+          className="w-full flex items-start gap-2 px-5 py-2.5 border-b border-border text-xs hover:bg-secondary cursor-pointer transition-colors text-left">
+          <Shield size={12} className={cx("mt-0.5 shrink-0", current.isProjectAdmin ? "fill-current" : "")}/>
+          <div>
+            <div>{current.isProjectAdmin ? "Project admin — click to remove" : "Grant project admin"}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Full admin-tier access to this project only — not the brand's account.</div>
+          </div>
+        </button>
+      )}
 
       {current && canManageLeads && (
         <button onClick={toggleLead} disabled={saving}

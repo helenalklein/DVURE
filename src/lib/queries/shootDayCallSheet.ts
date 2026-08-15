@@ -120,21 +120,29 @@ export async function fetchCallSheetContacts(campaignId: string): Promise<CallSh
       .select(`role_key, is_department_lead, crew_payees(full_name, email, profiles(phone))`)
       .eq("campaign_id", campaignId)
       .not("crew_payee_id", "is", null),
-    supabase.from("call_sheet_role_categories").select("role_key, category_key"),
+    // category_label only ever set on a custom category's own
+    // self-referencing row (role_key === category_key) — fixed roles
+    // fall through to their category_key as the display group below,
+    // same as before this had custom-department support.
+    supabase.from("call_sheet_role_categories").select("role_key, category_key, category_label"),
   ]);
   if (error || !slots) return [];
 
-  const categoryByRole = new Map((categories ?? []).map((c: any) => [c.role_key, c.category_key]));
+  const categoryKeyByRole = new Map((categories ?? []).map((c: any) => [c.role_key, c.category_key]));
+  const labelByCategoryKey = new Map((categories ?? []).filter((c: any) => c.category_label).map((c: any) => [c.role_key, c.category_label]));
 
   return (slots as any[])
     .filter(r => r.crew_payees)
-    .map(r => ({
-      category: categoryByRole.get(r.role_key) ?? "other",
-      roleKey: r.role_key,
-      name: r.crew_payees.full_name,
-      phone: r.crew_payees.profiles?.phone ?? "",
-      email: r.crew_payees.email ?? "",
-      isDepartmentLead: r.is_department_lead,
-    }))
+    .map(r => {
+      const categoryKey = categoryKeyByRole.get(r.role_key) ?? "other";
+      return {
+        category: labelByCategoryKey.get(categoryKey) ?? categoryKey,
+        roleKey: r.role_key,
+        name: r.crew_payees.full_name,
+        phone: r.crew_payees.profiles?.phone ?? "",
+        email: r.crew_payees.email ?? "",
+        isDepartmentLead: r.is_department_lead,
+      };
+    })
     .sort((a, b) => a.category.localeCompare(b.category) || (b.isDepartmentLead ? 1 : 0) - (a.isDepartmentLead ? 1 : 0));
 }

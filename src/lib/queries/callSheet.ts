@@ -6,6 +6,7 @@ export interface CallSheetAssignment {
   fullName: string;
   discipline: string | null;
   isDepartmentLead: boolean;
+  isProjectAdmin: boolean;
   rate: number | null;
 }
 
@@ -21,7 +22,7 @@ export interface CrewDirectoryEntry {
 export async function fetchCallSheetSlots(campaignId: string): Promise<CallSheetAssignment[]> {
   const { data, error } = await supabase
     .from("campaign_crew_slots")
-    .select("role_key, crew_payee_id, is_department_lead, rate, crew_payees(full_name, discipline)")
+    .select("role_key, crew_payee_id, is_department_lead, is_project_admin, rate, crew_payees(full_name, discipline)")
     .eq("campaign_id", campaignId)
     .not("crew_payee_id", "is", null);
   if (error || !data) return [];
@@ -33,6 +34,7 @@ export async function fetchCallSheetSlots(campaignId: string): Promise<CallSheet
       fullName: r.crew_payees.full_name,
       discipline: r.crew_payees.discipline,
       isDepartmentLead: r.is_department_lead,
+      isProjectAdmin: !!r.is_project_admin,
       rate: r.rate != null ? Number(r.rate) : null,
     }));
 }
@@ -135,5 +137,85 @@ export async function inviteCrewToCallSheet(
   const { error } = await supabase.rpc("invite_crew_to_call_sheet", {
     p_campaign_id: campaignId, p_role_key: roleKey, p_full_name: fullName, p_email: email, p_discipline: discipline,
   });
+  return { error: error?.message ?? null };
+}
+
+export async function setProjectAdmin(campaignId: string, roleKey: string, isAdmin: boolean): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("set_project_admin", { p_campaign_id: campaignId, p_role_key: roleKey, p_is_admin: isAdmin });
+  return { error: error?.message ?? null };
+}
+
+export interface CustomCrewRole {
+  roleKey: string;
+  roleLabel: string;
+  categoryKey: string;
+  categoryLabel: string | null;
+}
+
+// Custom departments/roles a project has added beyond the fixed 48 —
+// discovered from what's actually on THIS campaign's crew slots (custom
+// role_keys are globally unique, generated per-add, so this naturally
+// scopes to just this project's own custom entries even though
+// call_sheet_role_categories itself is a shared table). Two-step: find
+// this campaign's custom role_keys, then separately resolve each
+// role's category label from the category's own self-referencing row
+// (role_key === category_key) — the label lives there, not repeated on
+// every role row.
+export async function fetchCustomCrewRoles(campaignId: string): Promise<CustomCrewRole[]> {
+  const { data: slots, error } = await supabase
+    .from("campaign_crew_slots")
+    .select("role_key")
+    .eq("campaign_id", campaignId);
+  if (error || !slots || slots.length === 0) return [];
+  const roleKeys = slots.map((s: any) => s.role_key);
+
+  const { data: roles } = await supabase
+    .from("call_sheet_role_categories")
+    .select("role_key, category_key, role_label")
+    .in("role_key", roleKeys)
+    .eq("is_custom", true);
+  if (!roles || roles.length === 0) return [];
+
+  const categoryKeys = [...new Set(roles.map((r: any) => r.category_key))];
+  const { data: catRows } = await supabase
+    .from("call_sheet_role_categories")
+    .select("role_key, category_label")
+    .in("role_key", categoryKeys);
+  const labelByCategoryKey = new Map((catRows ?? []).map((r: any) => [r.role_key, r.category_label]));
+
+  return (roles as any[]).map(r => ({
+    roleKey: r.role_key,
+    roleLabel: r.role_label ?? r.role_key,
+    categoryKey: r.category_key,
+    categoryLabel: labelByCategoryKey.get(r.category_key) ?? null,
+  }));
+}
+
+// Just the custom departments themselves (deduped), for rendering
+// category headers/the "+" bar without needing the individual roles.
+export async function fetchCustomCrewCategories(campaignId: string): Promise<{ categoryKey: string; categoryLabel: string }[]> {
+  const roles = await fetchCustomCrewRoles(campaignId);
+  const seen = new Map<string, string>();
+  for (const r of roles) {
+    if (r.categoryLabel && !seen.has(r.categoryKey)) seen.set(r.categoryKey, r.categoryLabel);
+  }
+  return [...seen.entries()].map(([categoryKey, categoryLabel]) => ({ categoryKey, categoryLabel }));
+}
+
+export async function addCustomCrewRole(params: {
+  campaignId: string; roleLabel: string; categoryKey?: string; newCategoryLabel?: string;
+}): Promise<{ roleKey: string | null; error: string | null }> {
+  const { data, error } = await supabase.rpc("add_custom_crew_role", {
+    p_campaign_id: params.campaignId,
+    p_role_label: params.roleLabel,
+    p_category_key: params.categoryKey ?? null,
+    p_new_category_label: params.newCategoryLabel ?? null,
+  });
+  if (error) return { roleKey: null, error: error.message };
+  return { roleKey: data as string, error: null };
+}
+
+export async function removeCustomCrewRole(campaignId: string, roleKey: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("remove_custom_crew_role", { p_campaign_id: campaignId, p_role_key: roleKey });
   return { error: error?.message ?? null };
 }
