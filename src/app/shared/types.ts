@@ -160,6 +160,10 @@ export interface Campaign {
   // this stands in for. Agencies/models see the brand's own logo
   // instead of this photo; see BrandLogoBadge in BrandApp.tsx.
   coverPhoto?: string;
+  // Set at creation, defaults off (most casting is digital now). Gates
+  // whether the campaign workspace shows a Casting tab at all — most
+  // campaigns never need one.
+  hasInPersonCasting?: boolean;
 }
 
 // A physical runway show — the shared event. Not owned by any one

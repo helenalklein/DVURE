@@ -35,7 +35,7 @@ import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads } from "../../lib
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
 import { fetchShootDays, saveShootDays, createShootDay, type ShootDay } from "../../lib/queries/deliverables";
-import { createCasting } from "../../lib/queries/castings";
+import { createCasting, fetchCastings, updateCasting, deleteCasting, type Casting } from "../../lib/queries/castings";
 import { fetchScheduleEvents } from "../../lib/queries/schedule";
 import { fetchCalendarFeedToken, regenerateCalendarFeedToken } from "../../lib/queries/calendarFeed";
 import { fetchOrgMembers, updateOrgMember, type OrgMember, type AccessLevel } from "../../lib/queries/orgMembers";
@@ -216,16 +216,22 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
 // assignments all week shouldn't share a tab with the document you
 // print and send out once the roster's locked. Runway additionally
 // gets a Looks tab, since that's specifically a fashion-show concern
-// the others don't share. (Casting Board was pulled — it's part of
-// Relay, deferred to Phase 2 along with the rest of that module.)
-function campaignNavFor(type: Campaign["type"]): { id: CampaignSection; label: string; Icon: IconFn }[] {
+// the others don't share. Casting is opt-in per campaign (most casting
+// is digital now) rather than universal like Crew/Call Sheet — see
+// hasInPersonCasting at creation. (A full Casting Board — tracking
+// candidates through an audition process — is part of Relay, deferred
+// to Phase 2; this is just the logistics for a real in-person session.)
+function campaignNavFor(campaign: { type: Campaign["type"]; hasInPersonCasting?: boolean }): { id: CampaignSection; label: string; Icon: IconFn }[] {
   const withCallSheet = CAMPAIGN_NAV_BASE.flatMap(item => item.id==="moodboard" ? [
     item,
     { id:"crew" as CampaignSection, label:"Crew", Icon:Users },
     { id:"call-sheet" as CampaignSection, label:"Call Sheet", Icon:FileText },
   ] : [item]);
-  if (type !== "Runway") return withCallSheet;
-  return withCallSheet.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
+  const withCasting = campaign.hasInPersonCasting
+    ? withCallSheet.flatMap(item => item.id==="call-sheet" ? [item, { id:"casting" as CampaignSection, label:"Casting", Icon:Camera }] : [item])
+    : withCallSheet;
+  if (campaign.type !== "Runway") return withCasting;
+  return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
 }
 
 function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, canArchive, onArchive }: {
@@ -247,7 +253,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
     onSection(s);
     setMobileNavOpen(false);
   }
-  const nav = campaignNavFor(campaign.type);
+  const nav = campaignNavFor(campaign);
   const effectiveClose = fullExtensionUntil && new Date(fullExtensionUntil) > new Date(campaign.submissionClose) ? fullExtensionUntil : campaign.submissionClose;
   return (
     <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
@@ -888,6 +894,92 @@ function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) 
           <Btn variant="primary" icon={<Check size={13}/>} onClick={handleSave} disabled={saving || !realCampaignId}>{saving ? "Saving…" : "Save Schedule"}</Btn>
         </div>
         {!realCampaignId && <div className="text-xs text-muted-foreground text-right">This is a demo campaign — changes here aren't saved.</div>}
+      </div>
+    </div>
+  );
+}
+
+// Real in-person casting sessions (castings table, widened by 0071) —
+// only shown at all when the campaign opted into it at creation
+// (hasInPersonCasting). Each row is a real, independently-saved
+// castings row rather than a bulk whole-list replace like Deliverables'
+// shoot days: castings is also written to by the Schedule calendar's
+// own quick-add, so a destructive delete-and-reinsert here would
+// silently drop rows added from that other screen.
+function CastingTab({ campaignId }: { campaignId: string }) {
+  const { profile } = useAuth();
+  const [sessions, setSessions] = useState<Casting[] | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  async function reload() {
+    const real = await fetchCastings(campaignId);
+    setSessions(real);
+  }
+  useEffect(() => { reload(); }, [campaignId]);
+
+  function patchLocal(id: string, patch: Partial<Casting>) {
+    setSessions(prev => (prev ?? []).map(s => s.id === id ? { ...s, ...patch } : s));
+  }
+
+  async function handleAdd() {
+    setAdding(true);
+    const { error } = await createCasting({
+      campaignId, eventDate: new Date().toISOString().slice(0, 10), createdByProfileId: profile?.id,
+    });
+    setAdding(false);
+    if (!error) await reload();
+  }
+
+  async function handleSaveRow(s: Casting) {
+    setSavingId(s.id);
+    await updateCasting(s.id, {
+      eventDate: s.eventDate, title: s.title, note: s.note,
+      locationName: s.locationName, address: s.address, castingTime: s.castingTime,
+    });
+    setSavingId(null);
+  }
+
+  async function handleRemove(id: string) {
+    setSessions(prev => (prev ?? []).filter(s => s.id !== id));
+    await deleteCasting(id);
+  }
+
+  if (sessions === null) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-2xl space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-heading text-sm">Casting</h2>
+          <Badge label="Editable" variant="info"/>
+        </div>
+        <p className="text-sm text-muted-foreground">In-person casting sessions for this campaign — each one also shows up on the Schedule calendar.</p>
+        <div className="space-y-3">
+          {sessions.map(s => (
+            <div key={s.id} className="glass-subtle border rounded-md p-4 space-y-2 relative">
+              <button onClick={()=>handleRemove(s.id)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground cursor-pointer" title="Remove"><X size={12}/></button>
+              <div className="grid grid-cols-2 gap-2 pr-5">
+                <TextInput label="Session title" placeholder="e.g. First round castings" value={s.title} onChange={e=>patchLocal(s.id,{title:e.target.value})}/>
+                <TextInput label="Date" type="date" value={s.eventDate} onChange={e=>patchLocal(s.id,{eventDate:e.target.value})}/>
+                <TextInput label="Time" placeholder="e.g. 10:00 AM – 4:00 PM" value={s.castingTime} onChange={e=>patchLocal(s.id,{castingTime:e.target.value})}/>
+                <TextInput label="Location name" placeholder="e.g. Studio 9" value={s.locationName} onChange={e=>patchLocal(s.id,{locationName:e.target.value})}/>
+              </div>
+              <TextInput label="Address" placeholder="123 Broadway, New York, NY" value={s.address} onChange={e=>patchLocal(s.id,{address:e.target.value})}/>
+              <TextInput label="Notes" placeholder="Optional — what agencies/models should know" value={s.note} onChange={e=>patchLocal(s.id,{note:e.target.value})}/>
+              <div className="flex justify-end pt-1">
+                <Btn variant="outline" size="sm" disabled={savingId===s.id} onClick={()=>handleSaveRow(s)}>{savingId===s.id ? "Saving…" : "Save"}</Btn>
+              </div>
+            </div>
+          ))}
+          {sessions.length === 0 && (
+            <div className="border border-dashed border-border rounded-md p-8 text-center text-sm text-muted-foreground">No casting sessions yet.</div>
+          )}
+        </div>
+        <button onClick={handleAdd} disabled={adding}
+          className="text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md px-4 py-2 w-full flex items-center justify-center gap-1 hover:border-foreground cursor-pointer">
+          <Plus size={12}/> {adding ? "Adding…" : "Add casting session"}
+        </button>
       </div>
     </div>
   );
@@ -1845,7 +1937,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     rejected:  talent.filter(t=>t.stage==="rejected").length,
   };
 
-  const sectionLabel = campaignNavFor(campaign.type).find(n=>n.id===section)?.label ?? "";
+  const sectionLabel = campaignNavFor(campaign).find(n=>n.id===section)?.label ?? "";
   // Mark Complete & Archive only becomes available once the shoot date
   // has passed AND every payee on this campaign is fully paid — it's a
   // live derived value (not a one-time check), so it appears the moment
@@ -1935,6 +2027,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             realCampaignId
               ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name}/>
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Call Sheet and has no saved project record to attach roles to — create a new campaign to use Call Sheet.</div>
+          )}
+
+          {section==="casting" && (
+            realCampaignId
+              ? <CastingTab campaignId={realCampaignId}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Casting and has no saved project record to attach sessions to — create a new campaign to use Casting.</div>
           )}
 
           {section==="looks" && <LooksScreen campaignId={campaign.id}/>}
@@ -2535,6 +2633,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
   const [submissionClose, setSubmissionClose] = useState("");
   const [talentNeeded, setTalentNeeded] = useState("3");
   const [budget, setBudget] = useState("");
+  const [hasInPersonCasting, setHasInPersonCasting] = useState(false);
   const [partneredAgencies, setPartneredAgencies] = useState<{ id: string; name: string }[]>([]);
   const [selectedAgencies, setSelectedAgencies] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -2567,6 +2666,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       submissionClose: submissionClose || undefined,
       talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
       budget: budget ? Number(budget) : undefined,
+      hasInPersonCasting,
     });
     setSaving(false);
     if (error || !id) { setSaveError(error ?? "Couldn't save draft."); return; }
@@ -2588,6 +2688,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       submissionClose: submissionClose || undefined,
       talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
       budget: budget ? Number(budget) : undefined,
+      hasInPersonCasting,
     });
     if (error || !id) { setSaving(false); setSaveError(error ?? "Couldn't publish campaign."); return; }
     const { error: distError } = await distributeCampaignToAgencies(id, selectedAgencies, profile.id);
@@ -2638,6 +2739,13 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               <TextInput label="Shoot Date" placeholder="MM/DD/YYYY" type="date" value={shootStart} onChange={e=>setShootStart(e.target.value)}/>
             </div>
             <TextInput label="Location" placeholder="City, state, or studio address"/>
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={hasInPersonCasting} onChange={e=>setHasInPersonCasting(e.target.checked)} className="mt-0.5 cursor-pointer"/>
+              <div>
+                <div className="text-sm">Will there be an in-person casting?</div>
+                <div className="text-xs text-muted-foreground">Adds a Casting tab for scheduling sessions. Leave unchecked for digital-only casting — most campaigns are.</div>
+              </div>
+            </label>
             <div>
               <FieldLabel>Talent Submission Window</FieldLabel>
               <p className="text-xs text-muted-foreground mb-2">Agencies can only submit talent between these dates.</p>

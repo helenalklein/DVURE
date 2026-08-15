@@ -106,6 +106,7 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
       committed: 0,
       remaining: budget,
       territory: r.territory ?? undefined,
+      hasInPersonCasting: !!r.has_in_person_casting,
     };
   });
 
@@ -124,6 +125,7 @@ export async function createCampaign(params: {
   talentNeeded?: number;
   budget?: number;
   territory?: string;
+  hasInPersonCasting?: boolean;
 }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from("campaigns")
