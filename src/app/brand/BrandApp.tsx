@@ -277,7 +277,9 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
       <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 mb-1"><Badge label={campaign.status==="archived"?"Archived":"Active"} variant={campaign.status==="archived"?"draft":"active"}/></div>
         <div className="text-xs font-semibold leading-snug">{campaign.name}</div>
-        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{campaign.type} · Due {campaign.due}</div>
+        <div className={cx("text-[10px] font-mono mt-0.5", campaign.dueLabel?.includes("overdue") ? "font-bold text-[#C0392B]/80" : "text-muted-foreground")}>
+          {campaign.type} · {campaign.dueLabel?.includes("overdue") ? `Ended on ${campaign.due}` : `Ends on ${campaign.due}`}
+        </div>
         <div className="text-[10px] text-muted-foreground font-mono mt-1.5 flex items-center gap-1.5">
           <span>Submissions {campaign.submissionOpen} – {effectiveClose}</span>
           {MOCK_NOW > new Date(effectiveClose)
@@ -2601,7 +2603,7 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { 
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
                     <div className={cx("text-[10px] font-mono", c.dueLabel?.includes("overdue") ? "font-bold text-[#C0392B]/80" : "text-muted-foreground")}>
-                      {c.due ? `Due ${c.due}` : "Due —"}
+                      {c.due ? (c.dueLabel?.includes("overdue") ? `Ended on ${c.due}` : `Ends on ${c.due}`) : "Ends on —"}
                     </div>
                     <ChevronRight size={13} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"/>
                   </div>
