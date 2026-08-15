@@ -32,7 +32,7 @@ import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalen
 import { CrewTab } from "../shared/CallSheet";
 import RealCallSheet from "../shared/RealCallSheet";
 import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads, fetchCallSheetSlots, type CallSheetAssignment, fetchMyCallSheetRole } from "../../lib/queries/callSheet";
-import { fetchLooks, createLook, updateLook, deleteLook, fetchLookableModels, type CampaignLook, type LookableModel } from "../../lib/queries/looks";
+import { fetchLooks, createLook, updateLook, deleteLook, fetchLookableModels, swapLookOrder, FITTING_STATUSES, type CampaignLook, type LookableModel } from "../../lib/queries/looks";
 import { fetchDeliverables, createDeliverable, updateDeliverable, setDeliverableStatus, deleteDeliverable, DELIVERABLE_STATUSES, type DeliverableItem, type DeliverableStatus } from "../../lib/queries/deliverableTracker";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
@@ -48,7 +48,7 @@ import { fetchBrandCrew, type BrandCrewMember } from "../../lib/queries/crew";
 
 type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "crew" | "call-sheet" | "looks" | "requirements" | "deliverables" | "deliverable-tracker" | "contracts" | "payments" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "crew" | "call-sheet" | "looks" | "lineup" | "requirements" | "deliverables" | "deliverable-tracker" | "contracts" | "payments" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Vantage Model Management","Meridian Models","Solenne","Vector Models"];
 
@@ -297,7 +297,9 @@ function campaignNavFor(campaign: { type: Campaign["type"]; hasInPersonCasting?:
     ? withCallSheet.flatMap(item => item.id==="call-sheet" ? [item, { id:"casting" as CampaignSection, label:"Casting", Icon:Camera }] : [item])
     : withCallSheet;
   if (campaign.type !== "Runway") return withCasting;
-  return withCasting.flatMap(item => item.id==="requirements" ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, item] : [item]);
+  return withCasting.flatMap(item => item.id==="requirements"
+    ? [{ id:"looks" as CampaignSection, label:"Looks", Icon:Shirt }, { id:"lineup" as CampaignSection, label:"Lineup", Icon:List }, item]
+    : [item]);
 }
 
 function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, canArchive, onArchive }: {
@@ -1634,7 +1636,13 @@ function LooksScreen({ campaignId }: { campaignId: string }) {
               className="text-left glass-subtle border rounded-md overflow-hidden hover:border-foreground/40 hover:shadow-md transition-all cursor-pointer">
               <XBox className="w-full h-32"/>
               <div className="p-3 space-y-1">
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">Look {l.number}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wide">Look {l.number}</div>
+                  {l.fittingStatus!=="not_scheduled" && (
+                    <Badge label={FITTING_STATUSES.find(s=>s.value===l.fittingStatus)?.label ?? l.fittingStatus}
+                      variant={l.fittingStatus==="complete"?"success":"info"}/>
+                  )}
+                </div>
                 <div className="text-sm font-semibold truncate">{l.garments || "Untitled look"}</div>
                 <div className="text-xs text-muted-foreground truncate">{modelName(l.assignedModelId)}</div>
               </div>
@@ -1719,6 +1727,18 @@ function LooksScreen({ campaignId }: { campaignId: string }) {
                   {modelName(drawer.assignedModelId)} · Hair: {crewName(drawer.assignedHairId, hairPool)} · Makeup: {crewName(drawer.assignedMakeupId, makeupPool)} · Dresser: {crewName(drawer.assignedDresserId, dresserPool)}
                 </div>
               </div>
+              <div className="border-t border-border pt-4">
+                <FieldLabel>Fitting Status</FieldLabel>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {FITTING_STATUSES.map(s=>(
+                    <button key={s.value} onClick={()=>{ updateDrawerLocal({fittingStatus:s.value}); persistDrawer({fittingStatus:s.value}); }}
+                      className={cx("px-2.5 py-1 rounded-sm text-xs font-mono border cursor-pointer transition-colors",
+                        drawer.fittingStatus===s.value ? "bg-foreground text-primary-foreground border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40")}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="px-5 py-4 border-t border-border shrink-0">
               <Btn variant="primary" fullWidth onClick={()=>setDrawerId(null)}>Done</Btn>
@@ -1726,6 +1746,83 @@ function LooksScreen({ campaignId }: { campaignId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── RUNWAY: LINEUP ─────────────────────────────────────────────────────────
+// Same looks as the Looks tab, different lens: walk sequence and
+// choreography instead of garment/styling assignment. Reordering swaps
+// look_number between two rows rather than a separate order column —
+// that field already IS the walk order everywhere else it's read.
+// Planning data, not live tracking, so not Relay scope.
+function LineupScreen({ campaignId }: { campaignId: string }) {
+  const [looks, setLooks] = useState<CampaignLook[] | null>(null);
+
+  async function reload() {
+    setLooks(await fetchLooks(campaignId));
+  }
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [campaignId]);
+
+  function patchLocal(id: string, patch: Partial<CampaignLook>) {
+    setLooks(prev => (prev ?? []).map(l => l.id===id ? { ...l, ...patch } : l));
+  }
+
+  async function move(index: number, dir: -1 | 1) {
+    if (!looks) return;
+    const sorted = [...looks].sort((a,b)=>a.number-b.number);
+    const other = sorted[index+dir];
+    const cur = sorted[index];
+    if (!other) return;
+    setLooks(prev => (prev ?? []).map(l => {
+      if (l.id===cur.id) return { ...l, number: other.number };
+      if (l.id===other.id) return { ...l, number: cur.number };
+      return l;
+    }));
+    await swapLookOrder({ id: cur.id, number: cur.number }, { id: other.id, number: other.number });
+  }
+
+  if (looks === null) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
+  const sorted = [...looks].sort((a,b)=>a.number-b.number);
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-3xl space-y-4">
+        <p className="text-sm text-muted-foreground">Walk order for the show — reorder looks, note quick changes and cues. Garments and styling assignment live on the Looks tab.</p>
+        {sorted.length===0 && (
+          <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No looks yet — add them from the Looks tab first.</div>
+        )}
+        <div className="space-y-2">
+          {sorted.map((l,i)=>(
+            <div key={l.id} className="glass-subtle border rounded-md p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
+                  <button onClick={()=>move(i,-1)} disabled={i===0} className="text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:pointer-events-none cursor-pointer"><ChevronUp size={14}/></button>
+                  <div className="text-sm font-mono font-semibold w-6 text-center">{l.number}</div>
+                  <button onClick={()=>move(i,1)} disabled={i===sorted.length-1} className="text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:pointer-events-none cursor-pointer"><ChevronDown size={14}/></button>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold truncate">{l.garments || "Untitled look"}</div>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <TextInput label="Quick Change" placeholder="e.g. 45 sec, collar clip" value={l.quickChangeNote}
+                      onChange={e=>patchLocal(l.id,{quickChangeNote:e.target.value})} onBlur={e=>updateLook(l.id,{quickChangeNote:e.target.value})}/>
+                    <TextInput label="Music Cue" placeholder="e.g. Track 3, :42" value={l.musicCue}
+                      onChange={e=>patchLocal(l.id,{musicCue:e.target.value})} onBlur={e=>updateLook(l.id,{musicCue:e.target.value})}/>
+                    <TextInput label="Lighting Cue" placeholder="e.g. Spot, warm" value={l.lightingCue}
+                      onChange={e=>patchLocal(l.id,{lightingCue:e.target.value})} onBlur={e=>updateLook(l.id,{lightingCue:e.target.value})}/>
+                  </div>
+                  <div className="mt-2">
+                    <FieldLabel>Backstage Note</FieldLabel>
+                    <input value={l.backstageNote} placeholder="Handler needed, staging notes, anything the backstage team needs to know…"
+                      onChange={e=>patchLocal(l.id,{backstageNote:e.target.value})} onBlur={e=>updateLook(l.id,{backstageNote:e.target.value})}
+                      className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground"/>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2337,6 +2434,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
             realCampaignId
               ? <LooksScreen campaignId={realCampaignId}/>
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Looks and has no saved project record to attach looks to — create a new campaign to use Looks.</div>
+          )}
+
+          {section==="lineup" && (
+            realCampaignId
+              ? <LineupScreen campaignId={realCampaignId}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Lineup and has no saved project record to attach it to — create a new campaign to use Lineup.</div>
           )}
 
           {section==="requirements" && (
