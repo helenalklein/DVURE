@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Lock, Camera, Clock, LogOut, DollarSign, User, Check, AlertCircle } from "lucide-react";
+import { Lock, Camera, Clock, LogOut, DollarSign, User, Check, AlertCircle, ChevronLeft, Image, Users2, FileText } from "lucide-react";
 import { DvureSignature, Btn, TextInput, FSelect, FieldLabel, Badge, cx } from "../shared/ui";
 import { useAuth } from "../shared/auth";
 import {
@@ -9,6 +9,9 @@ import {
 } from "../../lib/queries/crewAccess";
 import { fetchPendingConfirmationsForCrew, fetchInvoicesForCrewPayee, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
+import CrewMoodboardView from "../shared/CrewMoodboardView";
+import { CrewTab } from "../shared/CallSheet";
+import RealCallSheet from "../shared/RealCallSheet";
 
 const CREW_DISCIPLINES: { key: string; label: string }[] = [
   { key: "photographer", label: "Photographer" },
@@ -36,9 +39,9 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
+function CampaignCard({ g, live, onOpen }: { g: CrewAccessDetails; live: boolean; onOpen?: () => void }) {
   return (
-    <div className="glass-subtle border rounded-lg p-5 mb-3">
+    <div onClick={onOpen} className={cx("glass-subtle border rounded-lg p-5 mb-3", onOpen && "cursor-pointer hover:border-foreground/40 transition-colors")}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
           <Camera size={14} className="text-muted-foreground shrink-0"/>
@@ -52,6 +55,56 @@ function CampaignCard({ g, live }: { g: CrewAccessDetails; live: boolean }) {
         <div>{g.brandName}</div>
         {fmtDate(g.dueDate) && <div>Due {fmtDate(g.dueDate)}</div>}
         <div className="capitalize">Status: {g.campaignStatus}</div>
+      </div>
+    </div>
+  );
+}
+
+// Real access to the same three surfaces a brand producer works from —
+// Model Board (read-only, see CrewMoodboardView), Crew, and Call Sheet
+// — reusing the exact same components BrandApp mounts rather than
+// building parallel ones. Both already gate their own data via
+// my_call_sheet_role() internally, so nothing here needs to duplicate
+// that check; a viewer-tier crew member just sees less (Crew renders
+// read-only, editing is disabled) the same way they already do inside
+// BrandApp's campaign workspace.
+type CampaignDetailTab = "moodboard" | "crew" | "call-sheet";
+const CAMPAIGN_DETAIL_TABS: { id: CampaignDetailTab; label: string; Icon: typeof Image }[] = [
+  { id: "moodboard", label: "Model Board", Icon: Image },
+  { id: "crew", label: "Crew", Icon: Users2 },
+  { id: "call-sheet", label: "Call Sheet", Icon: FileText },
+];
+
+function CampaignDetailView({ g, onBack }: { g: CrewAccessDetails; onBack: () => void }) {
+  const [tab, setTab] = useState<CampaignDetailTab>("moodboard");
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="border-b border-border px-6 py-4" style={{ paddingTop: "calc(1rem + env(safe-area-inset-top))" }}>
+        <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer mb-1">
+          <ChevronLeft size={12}/> Back
+        </button>
+        <div className="text-sm font-semibold">{g.campaignName}</div>
+        <div className="text-xs text-muted-foreground">{g.brandName}</div>
+      </div>
+      <div className="border-b border-border px-6">
+        <div className="flex items-center gap-1">
+          {CAMPAIGN_DETAIL_TABS.map(t => {
+            const TIcon = t.Icon;
+            return (
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                className={cx("px-3 py-2.5 text-sm border-b-2 -mb-px transition-colors cursor-pointer flex items-center gap-1.5",
+                  tab===t.id ? "border-foreground text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
+                )}>
+                <TIcon size={13}/> {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="max-w-3xl mx-auto">
+        {tab === "moodboard" && <CrewMoodboardView campaignId={g.campaignId}/>}
+        {tab === "crew" && <CrewTab campaignId={g.campaignId} campaignName={g.campaignName}/>}
+        {tab === "call-sheet" && <RealCallSheet campaignId={g.campaignId} campaignName={g.campaignName}/>}
       </div>
     </div>
   );
@@ -168,8 +221,8 @@ function ProfileTab() {
   );
 }
 
-type CrewTab = "current" | "history" | "payments" | "profile";
-const CREW_TABS: { id: CrewTab; label: string }[] = [
+type DashboardTab = "current" | "history" | "payments" | "profile";
+const CREW_TABS: { id: DashboardTab; label: string }[] = [
   { id: "current", label: "Current" },
   { id: "history", label: "History" },
   { id: "payments", label: "Payments" },
@@ -183,7 +236,8 @@ const CREW_TABS: { id: CrewTab; label: string }[] = [
 function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
   const { crewProfile } = useAuth();
   const [grants, setGrants] = useState<CrewAccessDetails[] | null>(null);
-  const [tab, setTab] = useState<CrewTab>("current");
+  const [tab, setTab] = useState<DashboardTab>("current");
+  const [openCampaign, setOpenCampaign] = useState<CrewAccessDetails | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -194,6 +248,10 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
   const now = Date.now();
   const current = (grants ?? []).filter((g) => new Date(g.expiresAt).getTime() > now);
   const past = (grants ?? []).filter((g) => new Date(g.expiresAt).getTime() <= now);
+
+  if (openCampaign) {
+    return <CampaignDetailView g={openCampaign} onBack={()=>setOpenCampaign(null)}/>;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -235,7 +293,7 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
             {grants !== null && current.length === 0 && (
               <div className="text-sm text-muted-foreground">No live campaigns right now. You'll see them here as soon as a production sends you access.</div>
             )}
-            {current.map((g) => <CampaignCard key={g.grantId} g={g} live/>)}
+            {current.map((g) => <CampaignCard key={g.grantId} g={g} live onOpen={()=>setOpenCampaign(g)}/>)}
           </>
         )}
 
@@ -245,7 +303,7 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
             {grants !== null && past.length === 0 && (
               <div className="text-sm text-muted-foreground">No completed jobs yet — they'll move here once their access window ends.</div>
             )}
-            {past.map((g) => <CampaignCard key={g.grantId} g={g} live={false}/>)}
+            {past.map((g) => <CampaignCard key={g.grantId} g={g} live={false} onOpen={()=>setOpenCampaign(g)}/>)}
           </>
         )}
 
