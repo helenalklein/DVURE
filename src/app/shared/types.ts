@@ -1,6 +1,10 @@
 export type Role = "brand" | "agency" | "model" | "crew";
 
-export type SubmissionStage = "submitted" | "approved" | "rejected" | "booked";
+// "approved"/"rejected" still exist as dormant values in the DB enum
+// (0077/0078 — kept rather than dropped, in case an unseen RPC still
+// writes them) but no app code should ever produce them going forward,
+// so they're deliberately left out of this type.
+export type SubmissionStage = "candidate" | "submitted" | "shortlisted" | "selected" | "booked" | "declined" | "released";
 
 export type Availability = "available" | "pending" | "unavailable";
 

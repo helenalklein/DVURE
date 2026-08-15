@@ -392,10 +392,10 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
   );
 }
 
-// ─── SUBMISSIONS (KANBAN: Submitted -> Approved -> Booked) ─────────────────
+// ─── SUBMISSIONS (KANBAN: Submitted -> Shortlisted -> Selected -> Booked) ──
 
 function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded, duplicates }: {
-  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[]) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
+  talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[], opts?: { declineReason?: string }) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
   realCampaignId?: string | null; onIndependentAdded?: () => void; duplicates?: DuplicatesShim;
 }) {
   const duplicatesShim: DuplicatesShim = duplicates ?? new Map();
@@ -419,6 +419,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   }
 
   const byStage = (s: SubmissionStage) => talent.filter(t => t.stage === s);
+  const notSelected = talent.filter(t => t.stage === "declined" || t.stage === "released");
   const totalNeeded = 4;
   const booked = byStage("booked").length;
   const daysRemaining = 8;
@@ -433,7 +434,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   }
 
   function moveWithUndo(id: number, newStage: SubmissionStage, label: string) {
-    if (newStage === "rejected") {
+    if (newStage === "declined") {
       const t = talent.find(x => x.id === id);
       if (t) setDeclineModal(t);
       return;
@@ -446,7 +447,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     if (!prev) return;
     const prevStage = prev.stage;
     moveTo(id, newStage);
-    if (newStage === "approved") onContractPrompt({ ...prev, stage: newStage });
+    if (newStage === "selected") onContractPrompt({ ...prev, stage: newStage });
     showToast(`${prev.name} moved to ${label}`, () => moveTo(id, prevStage));
   }
 
@@ -467,9 +468,10 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   }
 
   const STAGE_ACTIONS: Partial<Record<SubmissionStage, { stage: SubmissionStage; label: string }[]>> = {
-    submitted: [{ stage:"approved", label:"Approve" }, { stage:"rejected", label:"Reject" }],
-    approved:  [{ stage:"booked", label:"Book" }, { stage:"submitted", label:"Return" }],
-    booked:    [],
+    submitted:   [{ stage:"shortlisted", label:"Shortlist" }, { stage:"declined", label:"Decline" }],
+    shortlisted: [{ stage:"selected", label:"Select" }, { stage:"released", label:"Release" }, { stage:"submitted", label:"Return" }],
+    selected:    [{ stage:"booked", label:"Book" }, { stage:"released", label:"Release" }, { stage:"shortlisted", label:"Return" }],
+    booked:      [],
   };
 
   return (
@@ -480,7 +482,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           <input placeholder="Search…" className="text-xs bg-transparent focus:outline-none w-24 placeholder:text-muted-foreground"/>
         </div>
         <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground border-l border-border pl-3">
-          <span><span className="font-semibold text-foreground">{talent.filter(t=>t.stage!=="rejected").length}</span> in pipeline</span>
+          <span><span className="font-semibold text-foreground">{talent.filter(t=>t.stage!=="declined"&&t.stage!=="released").length}</span> in pipeline</span>
           <span>·</span>
           <span><span className="font-semibold text-foreground">{booked}/{totalNeeded}</span> booked</span>
           <span>·</span>
@@ -495,7 +497,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           )}
           <button onClick={() => setShowRejected(p=>!p)}
             className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
-            {showRejected ? <ChevronUp size={10}/> : <ChevronDown size={10}/>} Rejected ({byStage("rejected").length})
+            {showRejected ? <ChevronUp size={10}/> : <ChevronDown size={10}/>} Not Selected ({notSelected.length})
           </button>
         </div>
       </div>
@@ -601,8 +603,8 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                               {actions.map(a=>(
                                 <button key={a.label} onClick={()=>moveWithUndo(t.id,a.stage,a.label)}
                                   className={cx("flex-1 py-1.5 text-[10px] font-medium transition-colors",
-                                    a.label==="Reject"?"text-muted-foreground hover:bg-muted"
-                                      :a.label==="Book"||a.label==="Approve"?"bg-foreground text-primary-foreground hover:bg-foreground/90"
+                                    a.label==="Decline"?"text-muted-foreground hover:bg-muted"
+                                      :a.label==="Book"||a.label==="Select"?"bg-foreground text-primary-foreground hover:bg-foreground/90"
                                       :"text-muted-foreground hover:bg-secondary hover:text-foreground"
                                   )}>{a.label}</button>
                               ))}
@@ -726,27 +728,32 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
               </div>
             </div>
             <div className="border-t border-border p-3 space-y-2 shrink-0">
-              <button onClick={()=>{moveWithUndo(drawer.id,"approved","Approved");setDrawer(null);}}
-                className="w-full py-2 text-xs font-medium bg-foreground text-primary-foreground rounded-md hover:bg-foreground/90 transition-colors">
-                Approve
-              </button>
-              <button onClick={()=>{setDeclineModal(drawer);setDrawer(null);}}
-                className="w-full py-1.5 text-xs text-muted-foreground border border-border rounded-md hover:bg-muted transition-colors">Reject</button>
+              {(STAGE_ACTIONS[drawer.stage] ?? []).map(a=>(
+                <button key={a.label} onClick={()=>{moveWithUndo(drawer.id,a.stage,a.label);setDrawer(null);}}
+                  className={cx("w-full rounded-md transition-colors",
+                    a.label==="Book"||a.label==="Select"||a.label==="Shortlist"
+                      ?"py-2 text-xs font-medium bg-foreground text-primary-foreground hover:bg-foreground/90"
+                      :"py-1.5 text-xs text-muted-foreground border border-border hover:bg-muted"
+                  )}>{a.label}</button>
+              ))}
             </div>
           </div>
         )}
       </div>
 
-      {showRejected && byStage("rejected").length > 0 && (
+      {showRejected && notSelected.length > 0 && (
         <div className="border-t border-border glass shrink-0 max-h-36 overflow-auto">
           <div className="px-4 py-2 border-b border-border flex items-center justify-between">
-            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Rejected ({byStage("rejected").length})</span>
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Not Selected ({notSelected.length})</span>
             <button onClick={()=>setShowRejected(false)} className="text-muted-foreground hover:text-foreground"><X size={13}/></button>
           </div>
           <div className="flex gap-3 p-3 overflow-x-auto">
-            {byStage("rejected").map(t=>(
+            {notSelected.map(t=>(
               <div key={t.id} className="flex-shrink-0 flex items-center gap-2 bg-muted/40 border border-border rounded-md px-3 py-2 opacity-60">
-                <div><div className="text-xs font-medium">{t.name}</div><div className="text-[10px] text-muted-foreground">{t.agency}</div></div>
+                <div>
+                  <div className="text-xs font-medium">{t.name}</div>
+                  <div className="text-[10px] text-muted-foreground capitalize">{t.agency} · {t.stage}</div>
+                </div>
                 <button onClick={()=>moveWithUndo(t.id,"submitted","Submitted")} className="text-[10px] text-muted-foreground hover:text-foreground border border-border rounded px-2 py-0.5 hover:bg-secondary ml-2">Restore</button>
               </div>
             ))}
@@ -758,11 +765,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-primary-foreground rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-30">
           <span className="text-sm font-semibold whitespace-nowrap">{selected.length} selected</span>
           <div className="flex items-center gap-2">
-            {["Approve","Book"].map(label=>{
-              const m: Record<string,SubmissionStage>={Approve:"approved",Book:"booked"};
+            {["Select","Book"].map(label=>{
+              const m: Record<string,SubmissionStage>={Select:"selected",Book:"booked"};
               return <button key={label} onClick={()=>bulkMove(selected,m[label],label)} className="text-xs font-medium bg-primary-foreground/15 hover:bg-primary-foreground/25 px-3 py-1.5 rounded-md">{label}</button>;
             })}
-            <button onClick={()=>bulkMove(selected,"rejected","Rejected")} className="text-xs text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10 px-2 py-1.5 rounded-md">Reject</button>
+            <button onClick={()=>bulkMove(selected,"declined","Declined")} className="text-xs text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10 px-2 py-1.5 rounded-md">Decline</button>
             <button onClick={()=>setSelected([])} className="ml-1 text-primary-foreground/60 hover:text-primary-foreground"><X size={15}/></button>
           </div>
         </div>
@@ -780,7 +787,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="glass-strong border rounded-md w-80 overflow-hidden shadow-xl">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-heading text-sm">Reject — {declineModal.name}</div>
+              <div className="text-heading text-sm">Decline — {declineModal.name}</div>
               <button onClick={()=>{setDeclineModal(null);setDeclineReason("");}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
             <div className="p-5 space-y-3">
@@ -798,10 +805,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
               <Btn variant="primary" disabled={!declineReason} onClick={()=>{
                 const t=declineModal;
                 const prevStage=t.stage;
-                moveTo(t.id,"rejected");
+                const reason=declineReason;
+                setTalent(prev => prev.map(x => x.id===t.id ? { ...x, stage:"declined" } : x), { declineReason: reason });
                 setDeclineModal(null);setDeclineReason("");
-                showToast(`${t.name} rejected`,()=>moveTo(t.id,prevStage));
-              }}>Confirm Reject</Btn>
+                showToast(`${t.name} declined`,()=>moveTo(t.id,prevStage));
+              }}>Confirm Decline</Btn>
               <Btn variant="outline" onClick={()=>{setDeclineModal(null);setDeclineReason("");}}>Cancel</Btn>
             </div>
           </div>
@@ -2098,7 +2106,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     onArchived?.();
   }
 
-  function persistingSetTalent(fn: (prev: Talent[]) => Talent[]) {
+  function persistingSetTalent(fn: (prev: Talent[]) => Talent[], opts?: { declineReason?: string }) {
     setTalent(prev => {
       const next = fn(prev);
       if (realCampaignId) {
@@ -2106,7 +2114,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           const prevT = prev.find(p => p.id === t.id);
           if (prevT && prevT.stage !== t.stage) {
             const entry = shim.get(t.id);
-            if (entry) updateSubmissionStage(entry.submissionId, t.stage, { reviewedByProfileId: profile?.id });
+            if (entry) updateSubmissionStage(entry.submissionId, t.stage, {
+              reviewedByProfileId: profile?.id,
+              declineReason: t.stage === "declined" ? opts?.declineReason : undefined,
+            });
           }
         }
       }
@@ -2206,11 +2217,15 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     .filter(e=>e.agencies.length===PARTNERED_AGENCIES.length)
     .reduce((latest,e)=> !latest || new Date(e.until)>new Date(latest) ? e.until : latest, "" as string);
 
+  // approved/rejected stay as the tile keys (already labeled "Selections"
+  // in the UI below — that copy anticipated this rename) but now roll up
+  // shortlisted+selected and declined+released respectively, matching
+  // the same coarse-tile/granular-board split used in campaigns.ts.
   const counts: Record<string,number> = {
-    submitted: talent.filter(t=>t.stage==="submitted").length,
-    approved:  talent.filter(t=>t.stage==="approved").length,
+    submitted: talent.filter(t=>t.stage==="submitted"||t.stage==="candidate").length,
+    approved:  talent.filter(t=>t.stage==="shortlisted"||t.stage==="selected").length,
     booked:    talent.filter(t=>t.stage==="booked").length,
-    rejected:  talent.filter(t=>t.stage==="rejected").length,
+    rejected:  talent.filter(t=>t.stage==="declined"||t.stage==="released").length,
   };
 
   const sectionLabel = campaignNavFor(campaign).find(n=>n.id===section)?.label ?? "";
@@ -2252,8 +2267,14 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                 <div className="grid grid-cols-2 gap-4">
                   <div className="glass-subtle border rounded-md p-4">
                     <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Details</div>
-                    {[["Type","Editorial"],["Budget","$800–$1,200/day"],["Dates","07/14–07/16/2025"],["Location","Studio 9, New York"],["Talent needed","3"],["Status","Active"]].map(([k,v])=>(
-                      <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
+                    {[
+                      ["Type", campaign.type],
+                      ["Talent needed", String(campaign.talentNeeded)],
+                      ["Status", campaign.status === "drafts" ? "Draft" : campaign.status === "archived" ? "Archived" : "Active"],
+                      [campaign.dueLabel?.includes("overdue") ? "Ended on" : "Ends on", campaign.due || "—"],
+                      ...(campaign.territory ? [["Territory", campaign.territory]] : []),
+                    ].map(([k,v])=>(
+                      <div key={k} className={cx("flex justify-between py-1.5 border-b border-border last:border-0 text-xs", k==="Ended on" && "text-[#C0392B]")}>
                         <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
                       </div>
                     ))}

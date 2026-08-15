@@ -80,14 +80,14 @@ export interface LookableModel {
 }
 
 // Only models actually cast for this show, not the whole platform —
-// approved or booked submissions, same bar the rest of the app uses for
+// selected or booked submissions, same bar the rest of the app uses for
 // "this model is really on the project."
 export async function fetchLookableModels(campaignId: string): Promise<LookableModel[]> {
   const { data, error } = await supabase
     .from("submissions")
     .select("stage, model_profiles(id, full_name)")
     .eq("campaign_id", campaignId)
-    .in("stage", ["approved", "booked"]);
+    .in("stage", ["selected", "booked"]);
   if (error || !data) return [];
   return (data as any[])
     .filter(r => r.model_profiles)

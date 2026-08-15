@@ -41,11 +41,15 @@ function formatRate(n: number | null): string {
   return n != null ? `$${n}/day` : "";
 }
 
-// booked > approved > submitted > rejected — when the same model has
-// been submitted by more than one agency, the grouped card shows
-// whichever agency's progress is furthest along, so the board never
-// regresses visibility as agencies act independently.
-const STAGE_RANK: Record<SubmissionStage, number> = { booked: 3, approved: 2, submitted: 1, rejected: 0 };
+// booked > selected > shortlisted > submitted > candidate, with
+// declined/released ranked below everything real (a decline from one
+// agency must never outrank a live submission from another) — when the
+// same model has been submitted by more than one agency, the grouped
+// card shows whichever agency's progress is furthest along, so the
+// board never regresses visibility as agencies act independently.
+const STAGE_RANK: Record<SubmissionStage, number> = {
+  booked: 6, selected: 5, shortlisted: 4, submitted: 3, candidate: 2, released: 1, declined: 0,
+};
 
 export async function fetchCampaignSubmissions(campaignId: string): Promise<{ talent: Talent[]; shim: SubmissionShim; duplicates: DuplicatesShim }> {
   const { data: subs, error } = await supabase

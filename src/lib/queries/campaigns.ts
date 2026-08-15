@@ -71,11 +71,18 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
   const realIds = rows.map((r: any) => r.id);
   const { data: subs } = await supabase.from("submissions").select("campaign_id, stage").in("campaign_id", realIds);
 
+  // These 3 buckets stay coarse on purpose — the full 7-stage pipeline
+  // (candidate/submitted/shortlisted/selected/booked/declined/released,
+  // see 0077/0078) lives in the Model Board's own view; this is just the
+  // campaign-card/tile summary, so shortlisted+selected both roll into
+  // "approved" and candidate rolls into "submitted". declined/released
+  // deliberately don't count toward any bucket, same as rejected didn't
+  // before.
   const counts = new Map<string, { submitted: number; approved: number; booked: number }>();
   for (const s of (subs ?? []) as any[]) {
     const c = counts.get(s.campaign_id) ?? { submitted: 0, approved: 0, booked: 0 };
-    if (s.stage === "submitted") c.submitted++;
-    else if (s.stage === "approved") c.approved++;
+    if (s.stage === "submitted" || s.stage === "candidate") c.submitted++;
+    else if (s.stage === "shortlisted" || s.stage === "selected") c.approved++;
     else if (s.stage === "booked") c.booked++;
     counts.set(s.campaign_id, c);
   }

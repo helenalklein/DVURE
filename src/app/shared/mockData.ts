@@ -43,22 +43,26 @@ import photoPriyaSharma from "../../assets/talent/priya-sharma.jpg";
 export const MOCK_NOW = new Date("2026-07-21");
 
 // ─── TALENT / SUBMISSIONS ──────────────────────────────────────────────────
-// Simplified pipeline vs. the original prototype: Submitted -> Approved/Rejected -> Booked.
+// Submitted -> Shortlisted -> Selected -> Booked, with Declined/Released
+// as terminal not-moving-forward outcomes (shown in a tray, not a
+// column — see showRejected in BrandApp.tsx). Candidate exists in the
+// enum for a future pre-submission drafting flow but nothing creates
+// rows in that stage yet, so it isn't a pipeline column either.
 // (Negotiation/counter-offer states are a deliberate Phase-1 cut, not an oversight.)
 
 export const SAMPLE_TALENT: Talent[] = [
-  { id:1,  name:"Zara Okafor",     photo:photoZaraOkafor,     agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:["Kindred Talent"], location:"New York, NY",    rate:"$980/day",   stage:"approved",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
-  { id:2,  name:"Amara Diallo",    photo:photoAmaraDiallo,    agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:["Bloom Agency"], location:"Paris, FR",       rate:"$1,150/day", stage:"approved",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
+  { id:1,  name:"Zara Okafor",     photo:photoZaraOkafor,     agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:["Kindred Talent"], location:"New York, NY",    rate:"$980/day",   stage:"selected",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
+  { id:2,  name:"Amara Diallo",    photo:photoAmaraDiallo,    agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:["Bloom Agency"], location:"Paris, FR",       rate:"$1,150/day", stage:"selected",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },
   { id:3,  name:"Mila Tran",       photo:photoMilaTran,       agency:"Meridian Models",        motherAgency:"Meridian Models",        boutiqueAgencies:[], location:"Los Angeles, CA", rate:"$1,100/day", stage:"submitted", avail:"pending",   note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 2",  exp:"6 yrs",  score:4 },
   { id:4,  name:"Petra Novak",     photo:photoPetraNovak,     agency:"Nomad Models",      motherAgency:"Halcyon Models", boutiqueAgencies:["Nomad Models"], location:"Milan, IT",       rate:"$920/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 4",  exp:"5 yrs",  score:4 },
-  { id:5,  name:"Ines Ferreira",   photo:photoInesFerreira,   agency:"Halcyon Models",      motherAgency:"Halcyon Models",      boutiqueAgencies:[], location:"London, UK",      rate:"$1,340/day", stage:"approved",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
-  { id:6,  name:"Nadia Petrov",    photo:photoNadiaPetrov,    agency:"Anthem Models",       motherAgency:"Anthem Models",       boutiqueAgencies:[], location:"New York, NY",    rate:"$1,070/day", stage:"approved",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
+  { id:5,  name:"Ines Ferreira",   photo:photoInesFerreira,   agency:"Halcyon Models",      motherAgency:"Halcyon Models",      boutiqueAgencies:[], location:"London, UK",      rate:"$1,340/day", stage:"selected",  avail:"available", note:"Versatile.", height:`6'0"`,  bust:`35"`, waist:`25"`, dress:"US 6",  exp:"9 yrs",  score:5 },
+  { id:6,  name:"Nadia Petrov",    photo:photoNadiaPetrov,    agency:"Anthem Models",       motherAgency:"Anthem Models",       boutiqueAgencies:[], location:"New York, NY",    rate:"$1,070/day", stage:"selected",  avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
   { id:7,  name:"Caleb Stone",     photo:photoCalebStone,     agency:"Solenne",        motherAgency:"Solenne",        boutiqueAgencies:[], location:"Chicago, IL",     rate:"$890/day",   stage:"submitted", avail:"available", note:"", height:`6'1"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"4 yrs",  score:4 },
   { id:8,  name:"Sofia Brandt",    photo:photoSofiaBrandt,    agency:"Vector Models",        motherAgency:"Vector Models",        boutiqueAgencies:[], location:"Miami, FL",       rate:"$1,200/day", stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/22.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"11 yrs", score:5 },
   { id:9,  name:"James Whitfield", photo:photoJamesWhitfield, agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:[], location:"New York, NY",    rate:"$950/day",   stage:"booked",    avail:"available", note:"Contract executed. Shoot 07/14.", height:`6'0"`,  bust:`38"`, waist:`30"`, dress:"US M",  exp:"6 yrs",  score:5 },
   { id:10, name:"Lena Vogel",      photo:photoLenaVogel,      agency:"Meridian Models",        motherAgency:"Meridian Models",        boutiqueAgencies:[], location:"Berlin, DE",      rate:"$780/day",   stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"3 yrs",  score:3 },
-  { id:11, name:"Amir Hassan",     photo:photoAmirHassan,     agency:"Halcyon Models",      motherAgency:"Halcyon Models",      boutiqueAgencies:[], location:"London, UK",      rate:"$1,050/day", stage:"rejected",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
-  { id:12, name:"Chiara Russo",    photo:photoChiaraRusso,    agency:"Anthem Models",       motherAgency:"Anthem Models",       boutiqueAgencies:[], location:"Rome, IT",        rate:"$860/day",   stage:"approved",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
+  { id:11, name:"Amir Hassan",     photo:photoAmirHassan,     agency:"Halcyon Models",      motherAgency:"Halcyon Models",      boutiqueAgencies:[], location:"London, UK",      rate:"$1,050/day", stage:"declined",  avail:"unavailable", note:"Does not meet brief requirements.", height:`6'0"`,  bust:`37"`, waist:`29"`, dress:"US L",  exp:"5 yrs",  score:3 },
+  { id:12, name:"Chiara Russo",    photo:photoChiaraRusso,    agency:"Anthem Models",       motherAgency:"Anthem Models",       boutiqueAgencies:[], location:"Rome, IT",        rate:"$860/day",   stage:"selected",  avail:"available", note:"Hold as backup.", height:`5'8"`,  bust:`33"`, waist:`23"`, dress:"US 2",  exp:"4 yrs",  score:4 },
   { id:13, name:"Maya Chen",       photo:photoMayaChen,       agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:[], location:"Los Angeles, CA", rate:"$1,080/day", stage:"submitted", avail:"available", note:"", height:`5'9"`,  bust:`33"`, waist:`24"`, dress:"US 4",  exp:"7 yrs",  score:4 },
   { id:14, name:"Priya Sharma",    photo:photoPriyaSharma,    agency:"Vector Models",        motherAgency:"Vector Models",        boutiqueAgencies:[], location:"New York, NY",    rate:"$920/day",   stage:"submitted", avail:"pending",   note:"", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"5 yrs",  score:4 },
 ];
@@ -72,9 +76,10 @@ export const CARD_COMMENTS: CardComment[] = [
 ];
 
 export const PIPELINE_STAGES: { id: Talent["stage"]; label: string }[] = [
-  { id:"submitted", label:"Submitted" },
-  { id:"approved",  label:"Approved"  },
-  { id:"booked",    label:"Booked"    },
+  { id:"submitted",   label:"Submitted"   },
+  { id:"shortlisted", label:"Shortlisted" },
+  { id:"selected",    label:"Selected"    },
+  { id:"booked",      label:"Booked"      },
 ];
 
 export const DECLINE_REASONS = ["Rate too high","Doesn't meet brief","Look not right","Dates conflict","Client preference","Agency preference","Other"];

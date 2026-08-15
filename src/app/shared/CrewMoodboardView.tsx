@@ -6,7 +6,8 @@ import type { SubmissionStage } from "./types";
 
 const PIPELINE_STAGES: { id: SubmissionStage; label: string }[] = [
   { id: "submitted", label: "Submitted" },
-  { id: "approved", label: "Approved" },
+  { id: "shortlisted", label: "Shortlisted" },
+  { id: "selected", label: "Selected" },
   { id: "booked", label: "Booked" },
 ];
 
@@ -14,8 +15,8 @@ const PIPELINE_STAGES: { id: SubmissionStage; label: string }[] = [
 // submissions data brand staff work from (via fetch_campaign_submissions_for_crew,
 // a security-definer RPC scoped to my_call_sheet_role()), no drag/drop,
 // stage actions, contracts, or booking — crew needs to see who's in the
-// running and who's confirmed, not manage the pipeline. Rejected talent
-// stays hidden, same as the brand's own default view.
+// running and who's confirmed, not manage the pipeline. Declined/
+// released talent stays hidden, same as the brand's own default view.
 export default function CrewMoodboardView({ campaignId }: { campaignId: string }) {
   const [cards, setCards] = useState<CrewSubmissionCard[] | null>(null);
 
@@ -31,7 +32,7 @@ export default function CrewMoodboardView({ campaignId }: { campaignId: string }
 
   return (
     <div className="h-full overflow-auto p-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {PIPELINE_STAGES.map(stage => {
           const stageCards = byStage(stage.id);
           return (
