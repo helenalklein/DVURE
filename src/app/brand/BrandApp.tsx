@@ -8,7 +8,7 @@ import {
   Settings, Building2, Shield,
   Calendar, FileText, Activity, List, BookOpen,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone
+  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone, Package
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav } from "../shared/ui";
@@ -31,8 +31,9 @@ import { fetchOutstandingPayees, type OutstandingPayee } from "../../lib/queries
 import CampaignCalendar, { type CalEvent, type EventKind } from "./CampaignCalendar";
 import { CrewTab } from "../shared/CallSheet";
 import RealCallSheet from "../shared/RealCallSheet";
-import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads, fetchCallSheetSlots, type CallSheetAssignment } from "../../lib/queries/callSheet";
+import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads, fetchCallSheetSlots, type CallSheetAssignment, fetchMyCallSheetRole } from "../../lib/queries/callSheet";
 import { fetchLooks, createLook, updateLook, deleteLook, fetchLookableModels, type CampaignLook, type LookableModel } from "../../lib/queries/looks";
+import { fetchDeliverables, createDeliverable, updateDeliverable, setDeliverableStatus, deleteDeliverable, DELIVERABLE_STATUSES, type DeliverableItem, type DeliverableStatus } from "../../lib/queries/deliverableTracker";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
 import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
 import { fetchShootDays, saveShootDays, createShootDay, type ShootDay } from "../../lib/queries/deliverables";
@@ -47,7 +48,7 @@ import { fetchBrandCrew, type BrandCrewMember } from "../../lib/queries/crew";
 
 type GlobalView = "campaigns" | "schedule" | "contracts-global" | "payments-global" | "messaging" | "reports" | "network" | "directory" | "settings";
 type AppView = GlobalView | "campaign" | "create-campaign";
-type CampaignSection = "overview" | "moodboard" | "crew" | "call-sheet" | "looks" | "requirements" | "deliverables" | "contracts" | "payments" | "activity" | "collaboration" | "users";
+type CampaignSection = "overview" | "moodboard" | "crew" | "call-sheet" | "looks" | "requirements" | "deliverables" | "deliverable-tracker" | "contracts" | "payments" | "activity" | "collaboration" | "users";
 
 const PARTNERED_AGENCIES = ["Vantage Model Management","Meridian Models","Solenne","Vector Models"];
 
@@ -202,6 +203,7 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"moodboard",     label:"Model Board",   Icon:PolaroidIcon    },
   { id:"requirements",  label:"Requirements",  Icon:BookOpen        },
   { id:"deliverables",  label:"Schedule",      Icon:Calendar        },
+  { id:"deliverable-tracker", label:"Deliverables", Icon:Package    },
   { id:"contracts",     label:"Contracts",     Icon:FileCheck       },
   { id:"payments",      label:"Payments",      Icon:CreditCard      },
   { id:"activity",      label:"Activity",      Icon:Activity        },
@@ -1657,6 +1659,164 @@ function LooksScreen({ campaignId }: { campaignId: string }) {
   );
 }
 
+// ─── DELIVERABLE TRACKER ────────────────────────────────────────────────────
+// Distinct from the tab labeled "Schedule" above (still internally
+// DeliverablesTab from an earlier naming era — that's shoot-day hours,
+// not this). Tracks what the project actually owes: final selects,
+// approvals, a printed lineup, whatever "deliverable" means for this
+// project type — each with a status lifecycle and an optional crew owner.
+function DeliverableTrackerTab({ campaignId }: { campaignId: string }) {
+  const { org } = useAuth();
+  const [items, setItems] = useState<DeliverableItem[] | null>(null);
+  const [crewSlots, setCrewSlots] = useState<CallSheetAssignment[]>([]);
+  const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const drawer = items?.find(d => d.id === drawerId) ?? null;
+
+  // Mirrors deliverables_write RLS exactly: brand admin/enhanced OR
+  // call-sheet admin/producer — not just my_call_sheet_role alone, since
+  // an "enhanced"-access brand staffer (not literally an org
+  // administrator) still has full write access via the org-level branch
+  // of that policy.
+  const [callSheetRole, setCallSheetRole] = useState<string | null>(null);
+  const canManage = callSheetRole === "admin" || callSheetRole === "producer" || org?.accessLevel === "administrator" || org?.accessLevel === "enhanced";
+
+  async function reload() {
+    const [real, slots, role] = await Promise.all([
+      fetchDeliverables(campaignId), fetchCallSheetSlots(campaignId), fetchMyCallSheetRole(campaignId),
+    ]);
+    setItems(real); setCrewSlots(slots); setCallSheetRole(role);
+  }
+  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [campaignId]);
+
+  async function handleAdd() {
+    setAdding(true);
+    const { id } = await createDeliverable({ campaignId, title: "Untitled deliverable" });
+    setAdding(false);
+    if (id) { await reload(); setDrawerId(id); }
+  }
+
+  function patchLocal(id: string, patch: Partial<DeliverableItem>) {
+    setItems(prev => (prev ?? []).map(d => d.id === id ? { ...d, ...patch } : d));
+  }
+
+  async function handleStatus(id: string, status: DeliverableStatus) {
+    patchLocal(id, { status });
+    await setDeliverableStatus(id, status);
+  }
+
+  async function handleRemove(id: string) {
+    if (drawerId === id) setDrawerId(null);
+    setItems(prev => (prev ?? []).filter(d => d.id !== id));
+    await deleteDeliverable(id);
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isOverdue = (d: DeliverableItem) => !!d.dueDate && d.status !== "delivered" && new Date(d.dueDate + "T00:00:00") < today;
+  const formatDue = (dueDate: string) => new Date(dueDate + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+
+  const STATUS_VARIANT: Record<DeliverableStatus, "default"|"active"|"pending"|"draft"|"success"|"warning"|"info"> = {
+    not_started: "draft", in_progress: "pending", submitted: "info", approved: "warning", delivered: "success",
+  };
+  const statusLabel = (s: DeliverableStatus) => DELIVERABLE_STATUSES.find(x=>x.value===s)?.label ?? s;
+
+  if (items === null) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-2xl space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-heading text-sm">Deliverables</h2>
+          {canManage && <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={handleAdd} disabled={adding}>{adding ? "Adding…" : "Add Deliverable"}</Btn>}
+        </div>
+        <p className="text-sm text-muted-foreground">What's owed on this project — selects, final assets, approvals — and who owns getting each one done.</p>
+        <div className="space-y-2">
+          {items.map(d => (
+            <button key={d.id} onClick={()=>setDrawerId(d.id)}
+              className="w-full text-left glass-subtle border rounded-md px-4 py-3 hover:border-foreground/40 transition-colors cursor-pointer flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{d.title}</div>
+                <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                  {d.category && <span>{d.category}</span>}
+                  {d.dueDate && <span className={isOverdue(d) ? "text-[#C0392B] font-semibold" : ""}>{isOverdue(d) ? "Overdue " : "Due "}{formatDue(d.dueDate)}</span>}
+                  {d.assignedName && <span>{d.assignedName}</span>}
+                </div>
+              </div>
+              <Badge label={statusLabel(d.status)} variant={STATUS_VARIANT[d.status]}/>
+            </button>
+          ))}
+          {items.length===0 && (
+            <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">No deliverables yet{canManage ? " — add the first one." : "."}</div>
+          )}
+        </div>
+      </div>
+
+      {drawer && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="glass-strong border rounded-xl w-full max-w-md shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+              <div className="text-heading text-sm">Deliverable</div>
+              <div className="flex items-center gap-3">
+                {canManage && <button onClick={()=>handleRemove(drawer.id)} className="text-muted-foreground hover:text-[#C0392B] text-xs cursor-pointer">Remove</button>}
+                <button onClick={()=>setDrawerId(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-5 space-y-4">
+              <TextInput label="Title" placeholder="e.g. Final retouched selects" value={drawer.title} readOnly={!canManage}
+                onChange={e=>patchLocal(drawer.id,{title:e.target.value})}
+                onBlur={e=>{ if (canManage) updateDeliverable(drawer.id,{title:e.target.value}); }}/>
+              <div className="grid grid-cols-2 gap-3">
+                <TextInput label="Category" placeholder="e.g. Post-production" value={drawer.category} readOnly={!canManage}
+                  onChange={e=>patchLocal(drawer.id,{category:e.target.value})}
+                  onBlur={e=>{ if (canManage) updateDeliverable(drawer.id,{category:e.target.value}); }}/>
+                <TextInput label="Due Date" type="date" placeholder="" value={drawer.dueDate ?? ""} readOnly={!canManage}
+                  onChange={e=>{ const v=e.target.value||null; patchLocal(drawer.id,{dueDate:v}); if (canManage) updateDeliverable(drawer.id,{dueDate:v}); }}/>
+              </div>
+              <div>
+                <FieldLabel>Notes</FieldLabel>
+                <textarea value={drawer.description} rows={3} placeholder="What does &ldquo;done&rdquo; look like for this one?" readOnly={!canManage}
+                  onChange={e=>patchLocal(drawer.id,{description:e.target.value})}
+                  onBlur={e=>{ if (canManage) updateDeliverable(drawer.id,{description:e.target.value}); }}
+                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+              </div>
+              {canManage && (
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-mono mb-1">Assigned To</div>
+                  <select value={drawer.assignedCrewPayeeId ?? ""}
+                    onChange={e=>{ const v=e.target.value||null; patchLocal(drawer.id,{assignedCrewPayeeId:v}); updateDeliverable(drawer.id,{assignedCrewPayeeId:v}); }}
+                    className="w-full appearance-none bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground">
+                    <option value="">Unassigned (brand-owned)</option>
+                    {crewSlots.map(c=><option key={c.crewPayeeId} value={c.crewPayeeId}>{c.fullName}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="border-t border-border pt-4">
+                <FieldLabel>Status</FieldLabel>
+                {canManage ? (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {DELIVERABLE_STATUSES.map(s => (
+                      <button key={s.value} onClick={()=>handleStatus(drawer.id, s.value)}
+                        className={cx("px-2.5 py-1 rounded-sm text-xs font-mono border cursor-pointer transition-colors",
+                          drawer.status===s.value ? "bg-foreground text-primary-foreground border-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40")}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-1"><Badge label={statusLabel(drawer.status)} variant={STATUS_VARIANT[drawer.status]}/></div>
+                )}
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-border shrink-0">
+              <Btn variant="primary" fullWidth onClick={()=>setDrawerId(null)}>Done</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CAMPAIGN WORKSPACE ─────────────────────────────────────────────────────
 
 type SubmissionExtension = { agencies: string[]; until: string };
@@ -2122,6 +2282,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           )}
 
           {section==="deliverables" && <DeliverablesTab realCampaignId={realCampaignId}/>}
+
+          {section==="deliverable-tracker" && (
+            realCampaignId
+              ? <DeliverableTrackerTab campaignId={realCampaignId}/>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Deliverables and has no saved project record to attach items to — create a new campaign to use Deliverables.</div>
+          )}
 
           {section==="contracts" && <ContractsTab realCampaignId={realCampaignId} talent={talent} shim={shim} profileId={profile?.id}/>}
 
