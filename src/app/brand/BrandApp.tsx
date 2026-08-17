@@ -414,6 +414,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   const [dragOver, setDragOver] = useState<SubmissionStage|null>(null);
   const [toast, setToast] = useState<{ msg: string; undo: () => void }|null>(null);
   const [showRejected, setShowRejected] = useState(false);
+  // "Board" is the dense, all-at-once wall view — every card in the
+  // pipeline at once, no column grouping, closest to a real physical
+  // casting/mood board. "Pipeline" is the existing drag-between-stages
+  // kanban. Same underlying talent list either way, just a different lens.
+  const [view, setView] = useState<"pipeline" | "board">("pipeline");
   const [drawer, setDrawer] = useState<Talent|null>(null);
   const [declineModal, setDeclineModal] = useState<Talent|null>(null);
   const [declineReason, setDeclineReason] = useState("");
@@ -429,6 +434,15 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
 
   const byStage = (s: SubmissionStage) => talent.filter(t => t.stage === s);
   const notSelected = talent.filter(t => t.stage === "declined" || t.stage === "released");
+  // Board view — every card at once, no columns, closest to a real
+  // physical casting wall. Booked/further-along first (most
+  // consequential to see at a glance), then alphabetical within a stage.
+  const boardTalent = [...talent]
+    .filter(t => t.stage !== "declined" && t.stage !== "released")
+    .sort((a, b) => {
+      const rankDiff = PIPELINE_STAGES.findIndex(s=>s.id===b.stage) - PIPELINE_STAGES.findIndex(s=>s.id===a.stage);
+      return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
+    });
   const totalNeeded = 4;
   const booked = byStage("booked").length;
   const daysRemaining = 8;
@@ -498,6 +512,14 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           <span className={cx("font-semibold", daysRemaining<=3?"text-foreground":"text-muted-foreground")}>{daysRemaining} days left</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center border border-border rounded-md p-0.5 gap-0.5">
+            {(["pipeline","board"] as const).map(v=>(
+              <button key={v} onClick={()=>setView(v)}
+                className={cx("text-[10px] font-mono uppercase tracking-wide px-2.5 py-1 rounded-sm transition-colors cursor-pointer",
+                  view===v ? "bg-foreground text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                )}>{v}</button>
+            ))}
+          </div>
           {realCampaignId && INDEPENDENT_MODELS_ENABLED && (
             <button onClick={()=>setShowIndependentModal(true)}
               className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
@@ -513,6 +535,36 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
 
       <div className="flex-1 overflow-hidden flex min-h-0">
         <div className="flex-1 overflow-auto">
+          {view === "board" && (
+            <div className="p-4">
+              <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(112px, 1fr))" }}>
+                {boardTalent.map(t => {
+                  const isSel = selected.includes(t.id);
+                  return (
+                    <div key={t.id}>
+                      <CompCard talent={t}
+                        onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
+                        onViewAgency={onViewAgency}
+                        selected={isSel}
+                        duplicateBadge={t.duplicateFlag ? "Multiple agencies" : undefined}
+                        commentCount={commentsFor(t.id).length}
+                        boutiqueAgencies={t.boutiqueAgencies}
+                        rate={t.rate}
+                        score={t.score}
+                      />
+                      <div className="mt-1 text-[9px] font-mono uppercase tracking-widest text-center text-muted-foreground truncate">
+                        {PIPELINE_STAGES.find(s=>s.id===t.stage)?.label ?? t.stage}
+                      </div>
+                    </div>
+                  );
+                })}
+                {boardTalent.length===0 && (
+                  <div className="col-span-full glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">Nobody in the pipeline yet.</div>
+                )}
+              </div>
+            </div>
+          )}
+          {view === "pipeline" && (
           <div className="flex gap-0 h-full min-w-max">
             {PIPELINE_STAGES.map(stage => {
               const cards = byStage(stage.id);
@@ -569,6 +621,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
               );
             })}
           </div>
+          )}
         </div>
 
         {drawer && (
