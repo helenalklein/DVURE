@@ -3,6 +3,11 @@
 -- location, address, and crew call time; weather/parking/hospital stay
 -- optional. One round trip instead of a second RPC per day, and reuses
 -- the same my_call_sheet_role gate this function already has.
+--
+-- Postgres won't let CREATE OR REPLACE change a function's return row
+-- shape (new is_complete column) -- has to be dropped first.
+drop function if exists fetch_call_sheet_shoot_days(uuid);
+
 create or replace function fetch_call_sheet_shoot_days(p_campaign_id uuid)
 returns table (id uuid, campaign_id uuid, date_label text, event_date date, is_complete boolean)
 language plpgsql security definer set search_path = public as $$
