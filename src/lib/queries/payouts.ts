@@ -31,7 +31,7 @@ export async function fetchAgencyPayouts(agencyOrgId: string): Promise<AgencyPay
   return (data as any[]).map((r) => ({
     id: r.id,
     invoiceId: r.invoice_id,
-    campaignName: r.invoices?.campaigns?.name ?? "Unknown campaign",
+    campaignName: r.invoices?.campaigns?.name ?? "Unknown project",
     brandName: r.invoices?.organizations?.name ?? "Unknown brand",
     grossAmount: Number(r.gross_amount),
     payoutAmount: Number(r.payout_amount),

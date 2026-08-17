@@ -152,7 +152,7 @@ function mapRow(r: any): Invoice {
   return {
     id: r.id,
     campaignId: r.campaign_id,
-    campaignName: r.campaigns?.name ?? "Unknown campaign",
+    campaignName: r.campaigns?.name ?? "Unknown project",
     payeeKind: kind,
     payeeId,
     payeeName: payeeName ?? "Unknown",
@@ -259,7 +259,7 @@ function mapPendingConfirmations(rows: any[]): PendingConfirmation[] {
   return rows.flatMap(r => (r.invoice_payments ?? []).map((p: any) => ({
     paymentId: p.id,
     invoiceId: r.id,
-    campaignName: r.campaigns?.name ?? "Unknown campaign",
+    campaignName: r.campaigns?.name ?? "Unknown project",
     amount: Number(p.amount),
     method: p.payment_method,
     referenceNote: p.reference_note,

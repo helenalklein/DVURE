@@ -16,7 +16,7 @@ const NAV: { id: View; label: string; Icon: typeof Briefcase }[] = [
   { id:"availability", label:"Availability",  Icon:Calendar   },
   { id:"contracts",    label:"Contracts",     Icon:FileCheck  },
   { id:"earnings",     label:"Earnings",      Icon:CreditCard },
-  { id:"messages",     label:"Campaign Updates", Icon:MessageSquare },
+  { id:"messages",     label:"Project Updates", Icon:MessageSquare  },
   { id:"profile",      label:"My Profile",    Icon:User       },
 ];
 
@@ -37,7 +37,7 @@ function MessagesView() {
   if (campaignsWithThreads.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
-        <div className="text-sm text-muted-foreground">No campaign updates yet.</div>
+        <div className="text-sm text-muted-foreground">No project updates yet.</div>
       </div>
     );
   }
@@ -45,7 +45,7 @@ function MessagesView() {
   return (
     <div className="max-w-2xl space-y-5">
       <p className="text-sm text-muted-foreground">
-        View-only — messages between your agency and the brand for each campaign. You can't reply here; talk to your agency directly.
+        View-only — messages between your agency and the brand for each project. You can't reply here; talk to your agency directly.
       </p>
       {campaignsWithThreads.map(({ campaign, agencies }) => agencies.map(agency => (
         <div key={`${campaign.id}-${agency}`} className="glass-subtle border rounded-md overflow-hidden">

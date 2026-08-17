@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Check, Loader2 } from "lucide-react";
-import { Btn } from "../shared/ui";
+import { Btn, TaxesAndFeesLabel } from "../shared/ui";
 import { getStripe } from "../../lib/stripeClient";
 
 function money(n: number) {
@@ -61,7 +61,7 @@ function ConfirmStep({ grossAmount, platformFeePct, platformFeeAmount, totalAmou
     <div className="space-y-4">
       <div className="rounded-md border border-[#E3DFD5] bg-[#FBFAF7] p-3 text-xs space-y-1">
         <div className="flex justify-between text-[#6E675D]"><span>Subtotal</span><span className="font-mono">{money(grossAmount)}</span></div>
-        <div className="flex justify-between text-[#6E675D]"><span>DVURE platform fee ({platformFeePct}%)</span><span className="font-mono">{money(platformFeeAmount)}</span></div>
+        <div className="flex justify-between text-[#6E675D]"><span><TaxesAndFeesLabel/> ({platformFeePct}%)</span><span className="font-mono">{money(platformFeeAmount)}</span></div>
         <div className="flex justify-between font-semibold pt-1 border-t border-[#E3DFD5] text-[#1E1C1A]"><span>Total charge</span><span className="font-mono">{money(totalAmount)}</span></div>
       </div>
       <PaymentElement options={{ wallets: { link: "never" } }} />

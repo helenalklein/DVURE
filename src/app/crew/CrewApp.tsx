@@ -291,7 +291,7 @@ function CrewDashboard({ onLogout }: { onLogout?: () => void }) {
           <>
             {grants === null && <div className="text-sm text-muted-foreground">Loading...</div>}
             {grants !== null && current.length === 0 && (
-              <div className="text-sm text-muted-foreground">No live campaigns right now. You'll see them here as soon as a production sends you access.</div>
+              <div className="text-sm text-muted-foreground">No live projects right now. You'll see them here as soon as a production sends you access.</div>
             )}
             {current.map((g) => <CampaignCard key={g.grantId} g={g} live onOpen={()=>setOpenCampaign(g)}/>)}
           </>

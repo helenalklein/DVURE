@@ -27,7 +27,7 @@ type Invitation = { brand: string; campaign: string; type: string; due: string; 
 type View = "invitations" | "submit" | "roster" | "network" | "payments" | "messaging" | "settings";
 
 const NAV: { id: View; label: string; Icon: typeof Inbox; count?: number }[] = [
-  { id:"invitations", label:"Campaign Invitations", Icon:Inbox                 },
+  { id:"invitations", label:"Project Invitations", Icon:Inbox                  },
   { id:"submit",       label:"Talent Submissions",   Icon:Send                  },
   { id:"roster",       label:"Talent Roster",        Icon:Users2                },
   { id:"network",      label:"Network",              Icon:Share2                },
@@ -181,9 +181,9 @@ function BrandLogoBadge({ brand }: { brand: string }) {
 function InvitationsView({ invitations, onSubmitTalent }: { invitations: Invitation[]; onSubmitTalent: (campaign: string) => void }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Brand campaign invitations requiring talent submissions.</p>
+      <p className="text-sm text-muted-foreground">Brand project invitations requiring talent submissions.</p>
       {invitations.length === 0 && (
-        <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No campaign invitations yet.</div>
+        <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No project invitations yet.</div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {invitations.map(inv=>{
@@ -296,7 +296,7 @@ function RosterPickerModal({ roster, campaign, statusFor, onPick, onClose }: {
                       <div className="text-[10px] font-mono font-medium mt-1">{m.rate}</div>
                       {status && (
                         <div className="text-[9px] text-muted-foreground pt-0.5">
-                          {status.status==="declined" ? "Already declined for this campaign" : "Already submitted, awaiting review"}
+                          {status.status==="declined" ? "Already declined for this project" : "Already submitted, awaiting review"}
                         </div>
                       )}
                     </div>
@@ -369,7 +369,7 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
     const realCampaignId = pickedInvitation?.realCampaignId ?? await findCampaignIdByName(pickedCampaign);
     if (!realCampaignId) {
       setSubmitting(false);
-      setSubmitError("This campaign isn't connected yet — check back once it's set up.");
+      setSubmitError("This project isn't connected yet — check back once it's set up.");
       return;
     }
     const { overlapWarning: warning, error } = await insertSubmission({
@@ -381,7 +381,7 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
     if (error) {
       setSubmitError(
         error.code === "23505"
-          ? `${pickedModel.name} has already been submitted to this campaign.`
+          ? `${pickedModel.name} has already been submitted to this project.`
           : "Couldn't submit this model — try again."
       );
       return;
@@ -401,7 +401,7 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Submit models from your roster to open campaigns.</p>
+        <p className="text-sm text-muted-foreground">Submit models from your roster to open projects.</p>
         <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={()=>setShowPicker(true)} disabled={roster.length===0}>Submit Talent</Btn>
       </div>
 
@@ -415,7 +415,7 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
 
       {roster.length===0 && (
         <div className="border border-dashed border-border rounded-md p-8 text-center space-y-3">
-          <div className="text-sm text-muted-foreground">Your roster is empty — add a model before you can submit talent to a campaign.</div>
+          <div className="text-sm text-muted-foreground">Your roster is empty — add a model before you can submit talent to a project.</div>
           <Btn variant="primary" size="sm" icon={<UserPlus size={12}/>} onClick={onGoToRoster}>Add Model</Btn>
         </div>
       )}
@@ -470,7 +470,7 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
               </button>
               <div className="text-[10px] text-muted-foreground font-mono mt-1">Pulled from their <DvureSignature size={9}/> profile.</div>
             </div>
-            <FSelect label="Campaign" options={invitations.map(i=>i.campaign)} value={pickedCampaign} onChange={setPickedCampaign}/>
+            <FSelect label="Project" options={invitations.map(i=>i.campaign)} value={pickedCampaign} onChange={setPickedCampaign}/>
             {pickedInvitation && (
               <div className={cx("text-[10px] font-mono flex items-center gap-1.5", submissionClosed ? "text-urgent" : "text-muted-foreground")}>
                 <span>Submissions {pickedInvitation.submissionOpen} – {pickedInvitation.submissionClose}</span>
@@ -481,14 +481,14 @@ function SubmitTalentView({ roster, invitations, onGoToRoster, initialCampaign }
             )}
             {submissionClosed && (
               <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">
-                This campaign's submission window closed {pickedInvitation!.submissionClose}. Talent can no longer be submitted.
+                This project's submission window closed {pickedInvitation!.submissionClose}. Talent can no longer be submitted.
               </div>
             )}
             {pickedStatus && (
               <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">
                 {pickedStatus.status==="declined"
-                  ? `${pickedModel.name} was already declined for this campaign and can't be resubmitted.`
-                  : `${pickedModel.name} is already submitted to this campaign, awaiting brand review.`}
+                  ? `${pickedModel.name} was already declined for this project and can't be resubmitted.`
+                  : `${pickedModel.name} is already submitted to this project, awaiting brand review.`}
               </div>
             )}
             {submitError && (
@@ -946,13 +946,13 @@ function AgencyMessagingView() {
   }
 
   if (campaignsWithThreads.length===0) {
-    return <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md text-sm text-muted-foreground">No campaign threads yet.</div>;
+    return <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md text-sm text-muted-foreground">No project threads yet.</div>;
   }
 
   return (
     <div className="flex-1 flex min-h-0 -m-6">
       <div className="w-56 shrink-0 border-r border-border overflow-y-auto">
-        <div className="px-4 py-2 text-[9px] font-mono text-muted-foreground uppercase tracking-wider border-b border-border">Your Campaign Threads</div>
+        <div className="px-4 py-2 text-[9px] font-mono text-muted-foreground uppercase tracking-wider border-b border-border">Your Project Threads</div>
         {campaignsWithThreads.map(({ inv, campaign }) => (
           <button key={campaign!.id} onClick={()=>setSelected(campaign!.id)}
             className={cx("w-full text-left px-4 py-3 text-xs border-b border-border transition-colors",

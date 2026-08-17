@@ -34,7 +34,7 @@ export async function fetchMyCrewGrants(): Promise<CrewAccessDetails[]> {
     payeeName: g.crew_payees?.full_name ?? "",
     payeeDiscipline: g.crew_payees?.discipline ?? null,
     campaignId: g.campaigns?.id ?? "",
-    campaignName: g.campaigns?.name ?? "Unknown campaign",
+    campaignName: g.campaigns?.name ?? "Unknown project",
     campaignStatus: g.campaigns?.status ?? "",
     brandName: g.campaigns?.organizations?.name ?? "",
     dueDate: g.campaigns?.due_date ?? null,

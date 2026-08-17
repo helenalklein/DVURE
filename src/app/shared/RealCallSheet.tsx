@@ -29,6 +29,21 @@ function formatDayLabel(d: ShootDaySummary): string {
 
 const EMPTY_DETAILS = { locationName: "", address: "", parkingNotes: "", nearestHospital: "", weather: "", crewCallTime: "" };
 
+// The soonest day that hasn't happened yet, not just the earliest day
+// overall — a campaign with an Aug 18 day already in the past and an
+// Aug 20 day still ahead should open on the 20th, not the 18th. Falls
+// back to the most recent past day only if every day has already
+// happened (nothing "upcoming" to default to).
+function pickDefaultDay(days: ShootDaySummary[]): string | null {
+  if (days.length === 0) return null;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcoming = days.filter(d => d.eventDate && d.eventDate.slice(0, 10) >= todayStr);
+  if (upcoming.length > 0) {
+    return [...upcoming].sort((a, b) => (a.eventDate ?? "").localeCompare(b.eventDate ?? ""))[0].id;
+  }
+  return [...days].sort((a, b) => (b.eventDate ?? "").localeCompare(a.eventDate ?? ""))[0].id;
+}
+
 // Same timed location/schedule document for every project type — for
 // Event this is exactly the "Run of Show" concept (doors, welcome,
 // performance, close), just relabeled, not a different table or screen.
@@ -52,7 +67,7 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
     fetchShootDays(campaignId).then(days => {
       if (!active) return;
       setShootDays(days);
-      setSelectedDayId(prev => prev ?? days[0]?.id ?? null);
+      setSelectedDayId(prev => prev ?? pickDefaultDay(days));
     });
     fetchMyCallSheetRole(campaignId).then(r => { if (active) setMyRole(r); });
     fetchCallSheetContacts(campaignId).then(c => { if (active) setContacts(c); });
@@ -75,9 +90,15 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
 
   useEffect(() => {
     if (!printing) return;
-    const t = setTimeout(() => { window.print(); setPrinting(false); }, 60);
+    const previousTitle = document.title;
+    const t = setTimeout(() => {
+      document.title = campaignName;
+      window.print();
+      document.title = previousTitle;
+      setPrinting(false);
+    }, 60);
     return () => clearTimeout(t);
-  }, [printing]);
+  }, [printing, campaignName]);
 
   async function handleSave() {
     if (!selectedDayId) return;
@@ -99,7 +120,7 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
   const selectedDay = shootDays?.find(d => d.id === selectedDayId);
 
   if (shootDays === null) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
-  if (shootDays.length === 0) return <div className="p-6 text-sm text-muted-foreground">No shoot days on this campaign yet — add one from Deliverables to build a {docLabel.toLowerCase()}.</div>;
+  if (shootDays.length === 0) return <div className="p-6 text-sm text-muted-foreground">No shoot days on this project yet — add one from Deliverables to build a {docLabel.toLowerCase()}.</div>;
 
   return (
     <div data-print-mode={printing ? "call-sheet" : undefined} className="call-sheet-root h-full overflow-auto p-6 space-y-5">

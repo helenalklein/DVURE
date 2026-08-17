@@ -1,5 +1,5 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings, Lock, Camera, Menu } from "lucide-react";
+import { Bell, X, ChevronDown, Settings, Lock, Camera, Menu, Info } from "lucide-react";
 import { useAuth, type OrgInfo } from "./auth";
 import { getAccessGate } from "./accessGate";
 import { ACTIVITY_EVENTS } from "./mockData";
@@ -80,6 +80,28 @@ export function PolaroidIcon({ size = 15, className = "" }: { size?: number; cla
       <rect x="6" y="5" width="12" height="11" rx="1"/>
       <line x1="9" y1="19" x2="15" y2="19"/>
     </svg>
+  );
+}
+
+// Not "DVURE platform fee" — the charge itemization line is called
+// "Taxes and Fees" everywhere it appears, with this info button
+// explaining what's actually bundled into it, so nobody has to guess
+// or ask support what the line item means.
+export function TaxesAndFeesLabel() {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex items-center gap-1">
+      Taxes and Fees
+      <button type="button" onClick={()=>setOpen(o=>!o)} onBlur={()=>setTimeout(()=>setOpen(false),150)}
+        className="text-muted-foreground hover:text-foreground cursor-pointer">
+        <Info size={11}/>
+      </button>
+      {open && (
+        <div className="absolute z-50 bottom-full left-0 mb-1.5 w-56 bg-card border border-border rounded-md shadow-lg p-2.5 text-[11px] leading-snug text-foreground normal-case font-sans">
+          Covers our platform fee, any applicable taxes, and payment processor fees.
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -543,7 +565,7 @@ export function GateBanner({ org }: { org: OrgInfo | undefined }) {
   const gate = getAccessGate(org);
   if (!gate.gated) return null;
   const copy = gate.reason === "payment_locked"
-    ? "This account is locked — an overdue DVURE platform fee invoice needs to be paid before you can make more payments."
+    ? "This account is locked — an overdue taxes and fees invoice needs to be paid before you can make more payments."
     : gate.reason === "unverified"
     ? "This account isn't verified yet — payments, invites, and adding teammates are locked until verification completes."
     : "Your trial has ended — payments, invites, and adding teammates are locked until you add a payment method.";

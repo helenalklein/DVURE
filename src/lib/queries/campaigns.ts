@@ -152,7 +152,7 @@ export async function createCampaign(params: {
     })
     .select("id")
     .single();
-  if (error || !data) return { id: null, error: error?.message ?? "Couldn't create campaign." };
+  if (error || !data) return { id: null, error: error?.message ?? "Couldn't create project." };
   return { id: data.id as string, error: null };
 }
 

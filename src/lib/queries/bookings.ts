@@ -72,7 +72,7 @@ export async function fetchBookingsForModel(modelId: string): Promise<ModelBooki
   if (error || !data) return [];
   return (data as any[]).map((r) => ({
     id: r.id,
-    campaignName: r.campaigns?.name ?? "Unknown campaign",
+    campaignName: r.campaigns?.name ?? "Unknown project",
     brandName: r.campaigns?.organizations?.name ?? "Unknown brand",
     agencyName: r.agency?.name ?? null,
     dayRate: Number(r.day_rate),

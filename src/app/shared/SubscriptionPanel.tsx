@@ -59,7 +59,7 @@ export default function SubscriptionPanel() {
   if (isBrand) {
     return (
       <div className="glass-subtle border rounded-md p-5 text-sm text-muted-foreground">
-        DVURE doesn't charge brands a platform subscription. Your only cost is the platform fee already included when you pay a model or agency through a campaign.
+        DVURE doesn't charge brands a platform subscription. Your only cost is taxes and fees, already included when you pay a model or agency through a project.
       </div>
     );
   }

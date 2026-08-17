@@ -125,7 +125,7 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading crew...</div>;
 
   if (myRole === null) {
-    return <div className="p-6 text-sm text-muted-foreground">You don't have access to this campaign's crew.</div>;
+    return <div className="p-6 text-sm text-muted-foreground">You don't have access to this project's crew.</div>;
   }
 
   return (

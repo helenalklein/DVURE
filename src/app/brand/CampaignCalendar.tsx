@@ -177,7 +177,7 @@ export default function CampaignCalendar({ campaigns, addableCampaigns, openCamp
             </div>
           </div>
           <div className="px-5 pb-5 space-y-2">
-            <Btn variant="primary" fullWidth onClick={()=>{ openCampaign(selected.campaignId); setSelected(null); }}>Open Campaign</Btn>
+            <Btn variant="primary" fullWidth onClick={()=>{ openCampaign(selected.campaignId); setSelected(null); }}>Open Project</Btn>
             <div className="flex gap-2">
               <Btn variant="outline" fullWidth onClick={()=>window.open(googleCalendarUrl({ title: selected.label, date: toISODate(selected.date) }), "_blank")}>Add to Google</Btn>
               <Btn variant="outline" fullWidth onClick={()=>downloadEventIcs({ title: selected.label, date: toISODate(selected.date) })}>Download .ics</Btn>
@@ -224,7 +224,7 @@ function SubscribeModal({ token, onClose, onRegenerate }: {
       </div>
       <div className="p-5 space-y-4">
         <div className="text-xs text-muted-foreground">
-          Add this link as a calendar connection and every shoot day and casting across your campaigns stays in sync automatically — new events show up without re-adding anything.
+          Add this link as a calendar connection and every shoot day and casting across your projects stays in sync automatically — new events show up without re-adding anything.
         </div>
         {urls ? (
           <>
@@ -288,7 +288,7 @@ function AddEventModal({ campaigns, onClose, onAdd }: {
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
       </div>
       <div className="p-5 space-y-3">
-        <FSelect label="Campaign" options={campaignOptions}
+        <FSelect label="Project" options={campaignOptions}
           value={campaigns.find(c=>c.id===campaignId)?.name}
           onChange={(v)=>{ const c = campaigns.find(c=>c.name===v); if (c) setCampaignId(c.id); }}/>
         <FSelect label="Type" options={["Shoot day","Casting"]} value={kind==="shoot"?"Shoot day":"Casting"}

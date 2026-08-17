@@ -6,12 +6,12 @@ import {
   AlertCircle, Camera, XCircle,
   MessageSquare, Download, CreditCard,
   Settings, Building2, Shield,
-  Calendar, FileText, Activity, List, BookOpen,
+  Calendar, FileText, List, BookOpen, History,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
   User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone, Package
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav, TaxesAndFeesLabel } from "../shared/ui";
 import { getAccessGate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
@@ -206,9 +206,8 @@ const CAMPAIGN_NAV_BASE: { id: CampaignSection; label: string; Icon: IconFn }[] 
   { id:"deliverable-tracker", label:"Deliverables", Icon:Package    },
   { id:"contracts",     label:"Contracts",     Icon:FileCheck       },
   { id:"payments",      label:"Payments",      Icon:CreditCard      },
-  { id:"activity",      label:"Activity",      Icon:Activity        },
   { id:"collaboration", label:"Messaging",     Icon:MessageSquare   },
-  { id:"users",         label:"Users",         Icon:User            },
+  { id:"users",         label:"Team",          Icon:User            },
 ];
 
 // Crew and Call Sheet are universal companion tools — every type gets
@@ -355,7 +354,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
             : <span className="text-offwhite-foreground bg-offwhite px-1 rounded-sm font-semibold">Open</span>}
         </div>
         {campaign.status!=="archived" && onArchive && (!isReal || canArchive) && (
-          <button onClick={onArchive} disabled={!isReal} title={isReal?undefined:"Demo campaigns can't be archived"}
+          <button onClick={onArchive} disabled={!isReal} title={isReal?undefined:"Demo projects can't be archived"}
             className="w-full mt-2.5 flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-muted-foreground border border-dashed border-border rounded-md hover:border-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-muted-foreground">
             <Check size={11}/> Mark Complete & Archive
           </button>
@@ -386,7 +385,7 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
       <div className="px-3 pb-3 border-t border-border pt-3">
         <button onClick={onNewCampaign}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors">
-          <Plus size={13}/> New Campaign
+          <Plus size={13}/> New Project
         </button>
       </div>
     </aside>
@@ -971,7 +970,7 @@ function DeliverablesTab({ realCampaignId }: { realCampaignId: string | null }) 
           {saved && <span className="text-xs text-[#27AE60] flex items-center gap-1"><Check size={12}/> Saved</span>}
           <Btn variant="primary" icon={<Check size={13}/>} onClick={handleSave} disabled={saving || !realCampaignId}>{saving ? "Saving…" : "Save Schedule"}</Btn>
         </div>
-        {!realCampaignId && <div className="text-xs text-muted-foreground text-right">This is a demo campaign — changes here aren't saved.</div>}
+        {!realCampaignId && <div className="text-xs text-muted-foreground text-right">This is a demo project — changes here aren't saved.</div>}
       </div>
     </div>
   );
@@ -1032,7 +1031,7 @@ function CastingTab({ campaignId }: { campaignId: string }) {
           <h2 className="text-heading text-sm">Casting</h2>
           <Badge label="Editable" variant="info"/>
         </div>
-        <p className="text-sm text-muted-foreground">In-person casting sessions for this campaign — each one also shows up on the Schedule calendar.</p>
+        <p className="text-sm text-muted-foreground">In-person casting sessions for this project — each one also shows up on the Schedule calendar.</p>
         <div className="space-y-3">
           {sessions.map(s => (
             <div key={s.id} className="glass-subtle border rounded-md p-4 space-y-2 relative">
@@ -1317,7 +1316,7 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
       <div className="bg-card border border-border rounded-md w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div>
-            <div className="text-heading text-sm">{intent ? "Confirm payment" : "Record Payment"}</div>
+            <div className="text-heading text-sm">{intent ? "Confirm payment" : "Authorize Payment"}</div>
             <div className="text-xs text-muted-foreground mt-0.5">{payees.length} {payees.length===1?"person":"people"} · ${total.toLocaleString()} total</div>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={16}/></button>
@@ -1406,14 +1405,14 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
           {electronic && feePct != null && (
             <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
               <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-mono">${total.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">DVURE platform fee ({feePct}%)</span><span className="font-mono">${feePreview.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground"><TaxesAndFeesLabel/> ({feePct}%)</span><span className="font-mono">${feePreview.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
               <div className="flex justify-between font-semibold pt-1 border-t border-border"><span>Total charge</span><span className="font-mono">${(total+feePreview).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
             </div>
           )}
           {gate.gated && (
             <div className="text-xs text-[#C0392B]">
               {gate.reason === "payment_locked"
-                ? "This account is locked — pay the outstanding platform fee invoice to resume making payments."
+                ? "This account is locked — pay the outstanding taxes and fees invoice to resume making payments."
                 : "Payments are locked for this account right now."}
             </div>
           )}
@@ -1424,7 +1423,7 @@ function RecordPaymentModal({ campaignId, payees, onClose, onDone }: {
             </Btn>
           ) : (
             <Btn variant="primary" fullWidth disabled={submitting || !canSubmit || gate.gated} onClick={handleSubmit}>
-              {submitting ? "Recording…" : `Record Payment${payees.length>1?"s":""}`}
+              {submitting ? "Authorizing…" : `Authorize Payment${payees.length>1?"s":""}`}
             </Btn>
           )}
         </div>
@@ -1457,7 +1456,7 @@ function CampaignPaymentsTab({ realCampaignId, payees, loading, reload }: {
   }
 
   if (!realCampaignId) {
-    return <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates real bookings and crew slots and has no saved project record to pay against — create a new campaign to use Payments.</div>;
+    return <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates real bookings and crew slots and has no saved project record to pay against — create a new project to use Payments.</div>;
   }
   if (loading) return <div className="flex-1 overflow-auto p-6 text-sm text-muted-foreground">Loading…</div>;
 
@@ -1479,7 +1478,7 @@ function CampaignPaymentsTab({ realCampaignId, payees, loading, reload }: {
       <div className="max-w-4xl">
         <div className="mb-4">
           <h2 className="text-heading text-sm">Outstanding Payments</h2>
-          <div className="text-xs text-muted-foreground mt-0.5">Every model and crew member owed money on this campaign — select who to pay by check, wire, or cash.</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Every model and crew member owed money on this project — select who to pay by check, wire, or cash.</div>
         </div>
         {payees.length === 0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-8 text-center text-sm text-muted-foreground">
@@ -1518,7 +1517,7 @@ function CampaignPaymentsTab({ realCampaignId, payees, loading, reload }: {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {p.remaining>0 && (
-                          <button onClick={()=>setPayModal([p])} className="text-xs text-foreground hover:underline cursor-pointer">Record Payment</button>
+                          <button onClick={()=>setPayModal([p])} className="text-xs text-foreground hover:underline cursor-pointer">Authorize Payment</button>
                         )}
                         {p.invoiceId && (
                           <button onClick={()=>openDetail(p.invoiceId!)} className="text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer">View</button>
@@ -1536,7 +1535,7 @@ function CampaignPaymentsTab({ realCampaignId, payees, loading, reload }: {
       {payableSelected.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-primary-foreground rounded-full shadow-xl px-5 py-3 flex items-center gap-4 z-40">
           <span className="text-sm">{payableSelected.length} selected · ${selectedTotal.toLocaleString()}</span>
-          <Btn variant="secondary" size="sm" onClick={()=>setPayModal(payableSelected)}>Record Payment</Btn>
+          <Btn variant="primary" size="sm" onClick={()=>setPayModal(payableSelected)}>Authorize Payment</Btn>
         </div>
       )}
 
@@ -2173,8 +2172,8 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   if (!campaign) {
     return (
       <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground gap-2">
-        Campaign not found.
-        <button onClick={onHome} className="underline cursor-pointer">Back to campaigns</button>
+        Project not found.
+        <button onClick={onHome} className="underline cursor-pointer">Back to projects</button>
       </div>
     );
   }
@@ -2363,7 +2362,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="glass-subtle border rounded-md p-4">
-                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Details</div>
+                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Project Details</div>
                     {[
                       ["Type", campaign.type],
                       ["Talent needed", String(campaign.talentNeeded)],
@@ -2377,7 +2376,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                     ))}
                   </div>
                   <div className="glass-subtle border rounded-md p-4">
-                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Budget</div>
+                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Project Budget</div>
                     {[["Total budget","$18,000"],["Committed","$5,150"],["Remaining","$12,850"]].map(([k,v])=>(
                       <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
                         <span className="text-muted-foreground">{k}</span><span className="font-mono font-medium">{v}</span>
@@ -2415,31 +2414,31 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           {section==="crew" && (
             realCampaignId
               ? <CrewTab campaignId={realCampaignId} campaignName={campaign.name}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Crew and has no saved project record to attach roles to — create a new campaign to use Crew.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates Crew and has no saved project record to attach roles to — create a new project to use Crew.</div>
           )}
 
           {section==="call-sheet" && (
             realCampaignId
               ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name} campaignType={campaign.type}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Call Sheet and has no saved project record to attach roles to — create a new campaign to use Call Sheet.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates Call Sheet and has no saved project record to attach roles to — create a new project to use Call Sheet.</div>
           )}
 
           {section==="casting" && (
             realCampaignId
               ? <CastingTab campaignId={realCampaignId}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Casting and has no saved project record to attach sessions to — create a new campaign to use Casting.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates Casting and has no saved project record to attach sessions to — create a new project to use Casting.</div>
           )}
 
           {section==="looks" && (
             realCampaignId
               ? <LooksScreen campaignId={realCampaignId}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Looks and has no saved project record to attach looks to — create a new campaign to use Looks.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates Looks and has no saved project record to attach looks to — create a new project to use Looks.</div>
           )}
 
           {section==="lineup" && (
             realCampaignId
               ? <LineupScreen campaignId={realCampaignId}/>
-              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Lineup and has no saved project record to attach it to — create a new campaign to use Lineup.</div>
+              : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates Lineup and has no saved project record to attach it to — create a new project to use Lineup.</div>
           )}
 
           {section==="requirements" && (
@@ -2461,8 +2460,8 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                   </div>
                 </div>
                 <div className="glass-subtle border rounded-md p-5">
-                  <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Campaign Brief</div>
-                  <Textarea placeholder="Campaign brief…" defaultValue="AW25 editorial campaign focusing on architectural minimalism." rows={5}/>
+                  <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Project Brief</div>
+                  <Textarea placeholder="Project brief…" defaultValue="AW25 editorial project focusing on architectural minimalism." rows={5}/>
                 </div>
                 <div className="flex justify-end"><Btn variant="primary" icon={<Check size={13}/>}>Save Requirements</Btn></div>
               </div>
@@ -2480,26 +2479,6 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           {section==="contracts" && <ContractsTab realCampaignId={realCampaignId} talent={talent} shim={shim} profileId={profile?.id}/>}
 
           {section==="payments" && <CampaignPaymentsTab realCampaignId={realCampaignId} payees={payees} loading={payeesLoading} reload={()=>reloadPayees(realCampaignId)}/>}
-
-          {section==="activity" && (
-            <div className="flex-1 overflow-auto p-6">
-              <div className="max-w-2xl space-y-1">
-                {ACTIVITY_EVENTS.map(e=>(
-                  <div key={e.id} className="flex gap-3 pb-3 border-b border-border last:border-0">
-                    <div className={cx("w-1.5 h-1.5 rounded-full mt-2 shrink-0", e.system?"bg-muted-foreground":"bg-foreground")}/>
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-xs font-semibold">{e.type}</span>
-                        <span className="text-xs text-muted-foreground font-mono">{e.ts}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">{e.detail}</div>
-                      <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{e.actor}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {section==="collaboration" && <CollaborationTab campaign={campaign} focusAgency={focusAgency} onFocusAgencyHandled={()=>setFocusAgency(null)}/>}
 
@@ -2525,9 +2504,9 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                   const hasIndependent = selectedTalent.some(t => t.agency === "Independent");
                   const hasRepped = selectedTalent.some(t => t.agency !== "Independent");
                   const feeRange = `${PLATFORM_FEE_PCT_ACH}–${PLATFORM_FEE_PCT_CARD}% depending on how they pay`;
-                  if (hasIndependent && !hasRepped) return `No agency in the middle — just DVURE's platform fee (${feeRange}).`;
-                  if (hasIndependent && hasRepped) return `Repped models use DVURE's standard agency split (${DEFAULT_AGENCY_PCT}%) plus the platform fee (${feeRange}); independent models pay only the platform fee.`;
-                  return `Agency split is DVURE's standard ${DEFAULT_AGENCY_PCT}%, plus the platform fee (${feeRange}).`;
+                  if (hasIndependent && !hasRepped) return `No agency in the middle — just DVURE's taxes and fees (${feeRange}).`;
+                  if (hasIndependent && hasRepped) return `Repped models use DVURE's standard agency split (${DEFAULT_AGENCY_PCT}%) plus taxes and fees (${feeRange}); independent models pay only taxes and fees.`;
+                  return `Agency split is DVURE's standard ${DEFAULT_AGENCY_PCT}%, plus taxes and fees (${feeRange}).`;
                 })()}
               </div>
             </div>
@@ -2576,7 +2555,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           <div className="bg-card border border-border rounded-md w-96 p-6 shadow-xl">
             <div className="text-sm font-semibold mb-1">Mark "{campaign.name}" complete & archive?</div>
             <div className="text-xs text-muted-foreground mb-4">
-              This moves the campaign to Archived. It stays visible there — this isn't permanent deletion.
+              This moves the project to Archived. It stays visible there — this isn't permanent deletion.
             </div>
             {pendingManualCount > 0 && (
               <div className="flex items-start gap-2 text-xs text-[#D4A017] bg-[#D4A017]/10 border border-[#D4A017]/30 rounded-md px-3 py-2.5 mb-4">
@@ -2807,7 +2786,7 @@ function UsersTab({ orgId }: { orgId: string | undefined }) {
     <div className="flex-1 overflow-auto p-6">
       <div className="max-w-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-heading text-sm">Campaign Users</h2>
+          <h2 className="text-heading text-sm">Team</h2>
           <div className="flex items-center gap-2">
             <Btn variant="outline" size="sm" icon={<Edit3 size={12}/>} onClick={()=>setEditMode(e=>!e)}>{editMode ? "Done" : "Edit"}</Btn>
             <Btn variant="primary" size="sm" icon={<Plus size={12}/>} onClick={()=>setShowInvite(true)}>Add</Btn>
@@ -2970,13 +2949,13 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { 
         </div>
         <button onClick={onNewCampaign}
           className="mb-2 flex items-center gap-2 px-4 py-2 bg-foreground text-primary-foreground text-sm font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
-          <Plus size={14}/> New Campaign
+          <Plus size={14}/> New Project
         </button>
       </div>
       <div className="flex-1 overflow-auto p-4 md:p-6 space-y-5">
         {filtered.length===0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-10 text-center">
-            <div className="text-sm text-muted-foreground mb-3">No {tab} campaigns</div>
+            <div className="text-sm text-muted-foreground mb-3">No {tab} projects</div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -3110,7 +3089,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <TopBar title="New Campaign" sub={`Step ${step} of 4`} onMenuClick={()=>setMobileNavOpen(true)} actions={<Btn variant="ghost" size="sm" onClick={onBack}><X size={13}/> Discard</Btn>}/>
+      <TopBar title="New Project" sub={`Step ${step} of 4`} onMenuClick={()=>setMobileNavOpen(true)} actions={<Btn variant="ghost" size="sm" onClick={onBack}><X size={13}/> Discard</Btn>}/>
       <div className="glass border-b px-6 py-4 shrink-0">
         <div className="max-w-xl mx-auto flex items-start">
           {STEPS.map((s,i)=>(
@@ -3126,9 +3105,9 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       </div>
       <div className="flex-1 overflow-auto">
         <div className="max-w-xl mx-auto px-6 py-8 space-y-5">
-          {step===1&&(<><div><h2 className="text-heading text-base mb-0.5">Campaign Basics</h2><p className="text-sm text-muted-foreground">Define the campaign and its timeline.</p></div>
+          {step===1&&(<><div><h2 className="text-heading text-base mb-0.5">Project Basics</h2><p className="text-sm text-muted-foreground">Define the project and its timeline.</p></div>
             <div className="border-t border-border"/>
-            <TextInput label="Campaign Name" placeholder="e.g. AW25 Womenswear Campaign" value={name} onChange={e=>setName(e.target.value)}/>
+            <TextInput label="Project Name" placeholder="e.g. AW25 Womenswear Campaign" value={name} onChange={e=>setName(e.target.value)}/>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <FieldLabel>Type</FieldLabel>
@@ -3141,7 +3120,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
                 </div>
                 {campaignType==="Other" && (
                   <div className="mt-2">
-                    <TextInput placeholder="Describe the campaign type…" value={customType} onChange={e=>setCustomType(e.target.value)}/>
+                    <TextInput placeholder="Describe the project type…" value={customType} onChange={e=>setCustomType(e.target.value)}/>
                   </div>
                 )}
               </div>
@@ -3154,7 +3133,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               <input type="checkbox" checked={hasInPersonCasting} onChange={e=>setHasInPersonCasting(e.target.checked)} className="mt-0.5 cursor-pointer"/>
               <div>
                 <div className="text-sm">Will there be an in-person casting?</div>
-                <div className="text-xs text-muted-foreground">Adds a Casting tab for scheduling sessions. Leave unchecked for digital-only casting — most campaigns are.</div>
+                <div className="text-xs text-muted-foreground">Adds a Casting tab for scheduling sessions. Leave unchecked for digital-only casting — most projects are.</div>
               </div>
             </label>
             <div>
@@ -3190,7 +3169,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
           </>)}
           {step===3&&(<><div><h2 className="text-heading text-base mb-0.5">Creative Brief</h2><p className="text-sm text-muted-foreground">Shared with agencies and their talent.</p></div>
             <div className="border-t border-border"/>
-            <Textarea label="Campaign Brief" placeholder="Describe the creative concept, mood, and aesthetic direction…" rows={5}/>
+            <Textarea label="Project Brief" placeholder="Describe the creative concept, mood, and aesthetic direction…" rows={5}/>
             <div className="grid grid-cols-2 gap-4">
               <FSelect label="Usage Territory" options={["United States","North America","Worldwide"]}/>
               <FSelect label="Duration" options={["6 months","1 year","2 years","Unlimited"]}/>
@@ -3226,7 +3205,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               <Btn variant="ghost" size="sm" disabled={!name.trim() || saving} onClick={handleSaveDraft}>Save draft</Btn>
             </div>
             {step<4?<Btn variant="primary" disabled={!name.trim()} onClick={()=>setStep(step+1)}>Continue <ChevronRight size={13}/></Btn>
-              :<Btn variant="primary" icon={<Check size={13}/>} disabled={!name.trim() || selectedAgencies.length===0 || saving} onClick={handlePublish}>{saving?"Publishing…":"Publish Campaign"}</Btn>}
+              :<Btn variant="primary" icon={<Check size={13}/>} disabled={!name.trim() || selectedAgencies.length===0 || saving} onClick={handlePublish}>{saving?"Publishing…":"Publish Project"}</Btn>}
           </div>
         </div>
       </div>
@@ -3257,7 +3236,7 @@ function GlobalContracts() {
             </div>
           </div>
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-border bg-muted/30">{["Reference","Talent","Agency","Campaign","Value","Status","Actions"].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}</tr></thead>
+            <thead><tr className="border-b border-border bg-muted/30">{["Reference","Talent","Agency","Project","Value","Status","Actions"].map(h=><th key={h} className="px-4 py-2.5 text-left text-xs font-mono text-muted-foreground">{h}</th>)}</tr></thead>
             <tbody>
               {[["CF-2025-0841","James Whitfield","Vantage Model Mgmt.","AW25 Womenswear","$2,850","Fully Executed"],
                 ["CF-2025-0842","Amara Diallo","Vantage Model Mgmt.","AW25 Womenswear","$2,300","Awaiting Signature"],
@@ -3481,7 +3460,7 @@ function InvoiceDetailModal({ invoice, onClose, onChanged }: {
             <input value={addNote} onChange={e=>setAddNote(e.target.value)} placeholder="Reference note (optional)"
               className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
             {addError && <div className="text-xs text-red-500">{addError}</div>}
-            <Btn variant="primary" size="sm" disabled={addSubmitting} onClick={handleAddPayment}>{addSubmitting ? "Recording…" : "Record Payment"}</Btn>
+            <Btn variant="primary" size="sm" disabled={addSubmitting} onClick={handleAddPayment}>{addSubmitting ? "Authorizing…" : "Authorize Payment"}</Btn>
           </div>
         )}
 
@@ -3890,7 +3869,7 @@ function GlobalPayments() {
             <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
               <div>
                 <div className="text-heading text-sm">Authorize Payment</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Pick who you're paying — any campaign.</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Pick who you're paying — any project.</div>
               </div>
               <button onClick={closeAuthorize} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
             </div>
@@ -4239,7 +4218,7 @@ function ComposePane({ replyTo }: { replyTo: typeof INBOX_MSGS[number]|null }) {
           <FSelect label="To" options={ORG_USERS.map(u=>`${u.name} (${u.org})`)}
             value={replyTo ? `${replyTo.sender} (${replyTo.org})` : undefined}/>
           <div className="text-[10px] text-muted-foreground font-mono mt-1">
-            Brand team and agency contacts only — models can't be messaged directly here; use the campaign group chat instead.
+            Brand team and agency contacts only — models can't be messaged directly here; use the project group chat instead.
           </div>
         </div>
         <TextInput label="Subject" placeholder="Subject" defaultValue={replyTo ? `Re: ${replyTo.subject}` : undefined}/>
@@ -4293,7 +4272,7 @@ function MessageDetailPane({ msg, allMessages, onReply, onToggleRead, onOpenRela
           <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">From</span><span className="px-3 py-1.5">{msg.sender} — {msg.title}, {msg.org}</span></div>
           <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">To</span><span className="px-3 py-1.5">{currentUser?.name ?? ""} — {currentUser?.org ?? ""}</span></div>
           <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Date</span><span className="px-3 py-1.5">{msg.date}</span></div>
-          <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Campaign</span><span className="px-3 py-1.5">{msg.campaign}</span></div>
+          <div className="flex"><span className="w-20 shrink-0 px-3 py-1.5 text-muted-foreground uppercase tracking-wider bg-muted/30 border-r border-border">Project</span><span className="px-3 py-1.5">{msg.campaign}</span></div>
         </div>
       </div>
       <div className="flex-1 overflow-auto">
@@ -4360,7 +4339,7 @@ function CrewDirectorySection() {
       </div>
       {filtered.length === 0 ? (
         <div className="glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">
-          {crew.length === 0 ? "No crew have worked your campaigns yet." : `No crew match "${search}"`}
+          {crew.length === 0 ? "No crew have worked your projects yet." : `No crew match "${search}"`}
         </div>
       ) : (
         <div className="space-y-2">
@@ -4412,7 +4391,7 @@ function DirectoryScreen() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      <TopBar title="Directory" sub="Organization members, agency contacts, and crew who've worked your campaigns" onMenuClick={()=>setMobileNavOpen(true)}
+      <TopBar title="Directory" sub="Organization members, agency contacts, and crew who've worked your projects" onMenuClick={()=>setMobileNavOpen(true)}
         actions={section==="team" ? <button onClick={()=>setShowAddUser(true)} className="px-4 py-2 text-sm font-medium bg-foreground text-primary-foreground rounded-md hover:bg-[#2a2a2a] cursor-pointer flex items-center gap-2"><Plus size={13}/> Add User</button> : undefined}
       />
       <div className="flex-1 overflow-auto p-6">
@@ -4627,7 +4606,7 @@ function ScheduleScreen({ campaigns, realIdShim, openCampaign }: { campaigns: Ca
 
   async function handleAddEvent(params: { campaignId: number; kind: EventKind; date: string; title: string }): Promise<{ error: string | null }> {
     const realId = realIdShim.get(params.campaignId);
-    if (!realId) return { error: "Campaign not found." };
+    if (!realId) return { error: "Project not found." };
     const { error } = params.kind === "casting"
       ? await createCasting({ campaignId: realId, eventDate: params.date, title: params.title, createdByProfileId: profile?.id })
       : await createShootDay({ campaignId: realId, eventDate: params.date, description: params.title });
@@ -4637,7 +4616,7 @@ function ScheduleScreen({ campaigns, realIdShim, openCampaign }: { campaigns: Ca
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      <TopBar title="Calendar" sub="Across every active campaign" onMenuClick={()=>setMobileNavOpen(true)}/>
+      <TopBar title="Calendar" sub="Across every active project" onMenuClick={()=>setMobileNavOpen(true)}/>
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">Loading…</div>
       ) : (
@@ -4652,12 +4631,12 @@ function Reports() {
   const [running, setRunning] = useState<string|null>(null);
   const reportTypes = [
     { id:"ytd-finance",  label:"YTD Finance Report",       desc:"Total spend, invoices, payments, and budget utilization for the current fiscal year.", icon:BarChart2  },
-    { id:"bookings",     label:"Booking Report",            desc:"All bookings by campaign, talent, agency, and date range.", icon:Briefcase     },
-    { id:"quarterly",    label:"Quarterly Report",          desc:"Campaign performance, talent pipeline metrics, and spend summary by quarter.", icon:Calendar   },
-    { id:"campaigns",    label:"Campaign Report",           desc:"Per-campaign breakdown: submissions, approvals, bookings, and costs.", icon:Camera },
+    { id:"bookings",     label:"Booking Report",            desc:"All bookings by project, talent, agency, and date range.", icon:Briefcase     },
+    { id:"quarterly",    label:"Quarterly Report",          desc:"Project performance, talent pipeline metrics, and spend summary by quarter.", icon:Calendar   },
+    { id:"campaigns",    label:"Project Report",            desc:"Per-project breakdown: submissions, approvals, bookings, and costs.", icon:Camera },
     { id:"contracts",    label:"Contract Report",           desc:"Contract status, execution dates, and signature tracking.", icon:FileCheck    },
     { id:"agencies",     label:"Agency Performance Report", desc:"Submission volume, approval rate, and booking history by agency.", icon:Building2 },
-    { id:"declines",     label:"Decline Reasons Report",    desc:"Reasons talent was declined across all campaigns — identify patterns and brief alignment issues.", icon:X },
+    { id:"declines",     label:"Decline Reasons Report",    desc:"Reasons talent was declined across all projects — identify patterns and brief alignment issues.", icon:X },
   ];
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -4763,7 +4742,7 @@ function AuditLogPanel() {
   }
 
   function exportCsv() {
-    const header = ["Timestamp", "Actor", "Email", "Action", "Object Type", "Campaign", "IP Address"];
+    const header = ["Timestamp", "Actor", "Email", "Action", "Object Type", "Project", "IP Address"];
     const rows = entries.map(e => [
       new Date(e.occurredAt).toISOString(), e.actorName ?? "", e.actorEmail ?? "", e.action,
       e.objectType ?? "", e.campaignName ?? "", e.ipAddress ?? "",
@@ -4799,7 +4778,7 @@ function AuditLogPanel() {
                 <th className="text-left px-4 py-2 font-medium">Time</th>
                 <th className="text-left px-4 py-2 font-medium">Actor</th>
                 <th className="text-left px-4 py-2 font-medium">Action</th>
-                <th className="text-left px-4 py-2 font-medium">Campaign</th>
+                <th className="text-left px-4 py-2 font-medium">Project</th>
                 <th className="text-left px-4 py-2 font-medium"></th>
               </tr>
             </thead>
@@ -5132,7 +5111,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
         <div ref={activityRef} className="fixed bottom-6 right-6 z-40 flex items-end gap-3">
           {activityOpen && <ActivityFeedPanel onClose={()=>setActivityOpen(false)}/>}
           <button onClick={()=>setActivityOpen(o=>!o)} className="w-10 h-10 bg-foreground text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
-            <List size={16}/>
+            <History size={16}/>
           </button>
         </div>
 

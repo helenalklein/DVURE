@@ -148,8 +148,8 @@ export const ACTIVITY_EVENTS = [
   { id:5, ts:"Jun 14, 11:30 AM", actor:"Vantage Model Mgmt.", type:"Contract signed",        detail:"Sophie Chen signed CF-2025-0841 for agency.",  system:false },
   { id:6, ts:"Jun 13, 1:22 PM",  actor:"Vellani",      type:"Talent approved",        detail:"Zara Okafor and Ines Ferreira approved.",      system:false },
   { id:7, ts:"Jun 12, 9:00 AM",  actor:"System",            type:"Payout released",        detail:"Vantage Model Mgmt. commission payout $2,940.",  system:true  },
-  { id:8, ts:"Jun 10, 11:02 AM", actor:"Vantage Model Mgmt.", type:"Talent submitted",       detail:"4 talent submitted to campaign.",              system:false },
-  { id:9, ts:"Jun 10, 9:14 AM",  actor:"System",            type:"Campaign published",     detail:"AW25 Womenswear distributed to 5 agencies.",   system:true  },
+  { id:8, ts:"Jun 10, 11:02 AM", actor:"Vantage Model Mgmt.", type:"Talent submitted",       detail:"4 talent submitted to project.",              system:false },
+  { id:9, ts:"Jun 10, 9:14 AM",  actor:"System",            type:"Project published",     detail:"AW25 Womenswear distributed to 5 agencies.",   system:true  },
 ];
 
 // ─── CAMPAIGNS ────────────────────────────────────────────────────────────
