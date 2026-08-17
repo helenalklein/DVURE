@@ -41,6 +41,62 @@ export async function fetchCampaignContracts(campaignId: string): Promise<Contra
   }));
 }
 
+export interface ModelContract {
+  id: string;
+  contractNumber: string;
+  campaignName: string;
+  brandName: string;
+  dayRate: number;
+  agencyPct: number;
+  territory: string;
+  duration: string;
+  status: ContractStatus;
+  sentAt: string | null;
+  executedAt: string | null;
+  modelSignatureName: string | null;
+  signedByModelAt: string | null;
+  createdAt: string;
+}
+
+// contracts_select_own_model (0083) scopes this to the model's own
+// rows — no campaign_id filter needed, mirrors fetchBookingsForModel's
+// pattern of trusting RLS rather than re-deriving the scope client-side.
+export async function fetchContractsForModel(modelId: string): Promise<ModelContract[]> {
+  const { data, error } = await supabase
+    .from("contracts")
+    .select("id, contract_number, day_rate, agency_pct, territory, duration, status, sent_at, executed_at, model_signature_name, signed_by_model_at, created_at, campaigns(name, organizations(name))")
+    .eq("model_id", modelId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as any[]).map((r) => ({
+    id: r.id,
+    contractNumber: r.contract_number,
+    campaignName: r.campaigns?.name ?? "Unknown project",
+    brandName: r.campaigns?.organizations?.name ?? "Unknown brand",
+    dayRate: Number(r.day_rate),
+    agencyPct: Number(r.agency_pct),
+    territory: r.territory,
+    duration: r.duration,
+    status: r.status as ContractStatus,
+    sentAt: r.sent_at,
+    executedAt: r.executed_at,
+    modelSignatureName: r.model_signature_name,
+    signedByModelAt: r.signed_by_model_at,
+    createdAt: r.created_at,
+  }));
+}
+
+// The model's own in-app "type your name" signature — sign_contract_as_model
+// (0083) re-validates ownership and status server-side, so there's nothing
+// to enforce client-side beyond a non-empty typed name.
+export async function signContractAsModel(contractId: string, typedName: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("sign_contract_as_model", {
+    p_contract_id: contractId,
+    p_typed_name: typedName,
+  });
+  return { error: error?.message ?? null };
+}
+
 // contract_number is server-generated (set_contract_number() trigger,
 // 0032) — never client-supplied, so two brands generating a contract at
 // the same moment can't collide on the same number.

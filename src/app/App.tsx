@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import type { Role } from "./shared/types";
-import { cx, DvureMark, DvureSignature } from "./shared/ui";
+import { cx, DvureMark, DvureWordmark } from "./shared/ui";
 import { useAuth } from "./shared/auth";
 import LoginScreen from "./LoginScreen";
 import BrandApp from "./brand/BrandApp";
@@ -39,7 +39,7 @@ export default function App() {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-3">
         <DvureMark size={40} className="animate-pulse"/>
-        <DvureSignature size={16}/>
+        <DvureWordmark size={16}/>
       </div>
     );
   }

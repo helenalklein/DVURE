@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare } from "lucide-react";
-import { cx, Badge, TopBar, Stat, CurrentUserProvider, DvureMark, DvureSignature, MobileNavDrawer } from "../shared/ui";
+import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare, ChevronLeft, ChevronRight, PenLine } from "lucide-react";
+import { cx, Badge, TopBar, Stat, CurrentUserProvider, DvureMark, DvureSignature, MobileNavDrawer, Btn } from "../shared/ui";
 import { CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPendingConfirmationsForModel, fetchInvoicesForModel, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
 import { fetchBookingsForModel, type ModelBooking } from "../../lib/queries/bookings";
+import { fetchContractsForModel, signContractAsModel, type ModelContract, type ContractStatus } from "../../lib/queries/contracts";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 import { CompCard } from "../shared/CompCard";
 import type { Talent } from "../shared/types";
@@ -116,6 +117,93 @@ function BookingsView() {
   );
 }
 
+// A real month-grid calendar built on the model's own real bookings —
+// same fetchBookingsForModel data BookingsView already uses, just laid
+// out visually the same way CampaignCalendar's MonthGrid does for
+// brands/agencies (grid-cols-7, today marker, event chips) so it reads
+// as the same product, not a different mini-feature.
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+function parseISODate(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function AvailabilityView() {
+  const { modelProfile } = useAuth();
+  const [bookings, setBookings] = useState<ModelBooking[] | null>(null);
+  const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
+
+  useEffect(() => {
+    if (!modelProfile) { setBookings([]); return; }
+    fetchBookingsForModel(modelProfile.id).then(setBookings);
+  }, [modelProfile?.id]);
+
+  if (bookings === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = firstOfMonth.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  const cells: { date: Date; inMonth: boolean }[] = [];
+  for (let i = startWeekday - 1; i >= 0; i--) cells.push({ date: new Date(year, month - 1, daysInPrevMonth - i), inMonth: false });
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ date: new Date(year, month, d), inMonth: true });
+  while (cells.length % 7 !== 0 || cells.length < 42) cells.push({ date: new Date(year, month + 1, cells.length - startWeekday - daysInMonth + 1), inMonth: false });
+
+  const today = new Date();
+  const upcoming = bookings.filter(b => parseISODate(b.shootDate) >= new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <p className="text-sm text-muted-foreground">Your confirmed shoot days, drawn from your bookings.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="Upcoming shoot days" value={upcoming.length}/>
+        <Stat label="Total booked days" value={bookings.length}/>
+      </div>
+      <div className="glass-subtle border rounded-md overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <div className="text-sm font-semibold">{cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div>
+          <div className="flex items-center gap-1">
+            <button onClick={()=>setCursor(c=>new Date(c.getFullYear(), c.getMonth()-1, 1))} className="p-1 rounded hover:bg-secondary cursor-pointer text-muted-foreground hover:text-foreground"><ChevronLeft size={15}/></button>
+            <button onClick={()=>{ const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); setCursor(d); }} className="px-2 py-1 text-[10px] font-mono uppercase tracking-wide rounded hover:bg-secondary cursor-pointer text-muted-foreground hover:text-foreground">Today</button>
+            <button onClick={()=>setCursor(c=>new Date(c.getFullYear(), c.getMonth()+1, 1))} className="p-1 rounded hover:bg-secondary cursor-pointer text-muted-foreground hover:text-foreground"><ChevronRight size={15}/></button>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 border-t border-l border-border">
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
+            <div key={d} className="border-r border-b border-border px-2 py-1.5 text-[10px] font-mono uppercase tracking-wide text-muted-foreground bg-secondary/40">{d}</div>
+          ))}
+          {cells.map(({ date, inMonth }, i) => {
+            const dayBookings = bookings.filter(b => sameDay(parseISODate(b.shootDate), date));
+            const isToday = sameDay(date, today);
+            return (
+              <div key={i} className={cx("border-r border-b border-border min-h-[76px] p-1.5", !inMonth && "bg-secondary/20")}>
+                <div className={cx("text-[11px] font-mono mb-1 inline-flex items-center justify-center",
+                  isToday ? "w-5 h-5 rounded-full bg-foreground text-primary-foreground" : inMonth ? "text-foreground" : "text-muted-foreground/50")}>
+                  {date.getDate()}
+                </div>
+                <div className="space-y-0.5">
+                  {dayBookings.map((b,j)=>(
+                    <div key={j} title={`${b.campaignName} · ${b.brandName}`}
+                      className="flex items-center gap-1 text-[10px] px-1 py-0.5 rounded-sm bg-secondary truncate">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-foreground"/>
+                      <span className="truncate">{b.campaignName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Same real-invoice pattern already used for Crew and Agency
 // (fetchInvoicesForModel mirrors fetchInvoicesForCrewPayee) — only
 // ever populated for an independent booking, since an agency-repped
@@ -164,6 +252,97 @@ function EarningsView() {
               <Badge {...INVOICE_STATUS_BADGE[inv.status]}/>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CONTRACT_STATUS_BADGE: Record<ContractStatus, { label: string; variant: "default"|"active"|"pending"|"draft" }> = {
+  draft: { label: "Draft", variant: "draft" },
+  awaiting_signature: { label: "Awaiting your signature", variant: "pending" },
+  fully_executed: { label: "Fully executed", variant: "active" },
+};
+
+// The model's own real in-app signature — sign_contract_as_model (0083)
+// re-validates ownership/status server-side, so this is just a typed
+// legal name against an awaiting_signature contract. Distinct from
+// markContractExecuted's brand-side external-attestation path (paper/
+// DocuSign/email) — that one never touches model_signature_name, so a
+// contract executed that way shows "Executed" here with no claim that
+// the model signed it in-app.
+function ContractSignBox({ contract, onSigned }: { contract: ModelContract; onSigned: () => void }) {
+  const [typedName, setTypedName] = useState("");
+  const [signing, setSigning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!typedName.trim()) { setError("Type your full legal name to sign."); return; }
+    setSigning(true);
+    setError(null);
+    const { error } = await signContractAsModel(contract.id, typedName.trim());
+    setSigning(false);
+    if (error) { setError(error); return; }
+    onSigned();
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border space-y-2">
+      <div className="text-xs text-muted-foreground">Type your full legal name to sign this contract electronically.</div>
+      <div className="flex items-center gap-2">
+        <input value={typedName} onChange={e=>setTypedName(e.target.value)} placeholder="Full legal name"
+          className="flex-1 border border-border rounded-md px-3 py-1.5 text-base bg-input-background focus:outline-none focus:border-foreground"
+          style={{ fontFamily: "cursive" }}/>
+        <Btn size="sm" onClick={submit} disabled={signing} icon={<PenLine size={13}/>}>{signing ? "Signing…" : "Sign"}</Btn>
+      </div>
+      {error && <div className="text-xs text-red-500">{error}</div>}
+    </div>
+  );
+}
+
+function ContractsView() {
+  const { modelProfile } = useAuth();
+  const [contracts, setContracts] = useState<ModelContract[] | null>(null);
+
+  function reload() {
+    if (!modelProfile) { setContracts([]); return; }
+    fetchContractsForModel(modelProfile.id).then(setContracts);
+  }
+
+  useEffect(reload, [modelProfile?.id]);
+
+  if (contracts === null) return <div className="text-sm text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="max-w-2xl space-y-3">
+      <p className="text-sm text-muted-foreground mb-2">Contracts your bookings generate. Sign in-app once a contract is ready for your signature.</p>
+      {contracts.map(c=>(
+        <div key={c.id} className="glass-subtle border rounded-md p-4">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <div className="text-sm font-semibold">{c.campaignName}</div>
+              <div className="text-xs text-muted-foreground">{c.brandName} · {c.contractNumber}</div>
+            </div>
+            <Badge {...CONTRACT_STATUS_BADGE[c.status]}/>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border text-xs">
+            <div><div className="text-muted-foreground">Day rate</div><div className="font-mono font-medium">${c.dayRate.toLocaleString()}</div></div>
+            <div><div className="text-muted-foreground">Territory</div><div className="font-medium">{c.territory}</div></div>
+            <div><div className="text-muted-foreground">Duration</div><div className="font-medium">{c.duration}</div></div>
+          </div>
+          {c.status === "awaiting_signature" && <ContractSignBox contract={c} onSigned={reload}/>}
+          {c.status === "fully_executed" && (
+            <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+              {c.modelSignatureName
+                ? <>Signed electronically by <span className="font-medium text-foreground">{c.modelSignatureName}</span> on {c.signedByModelAt ? new Date(c.signedByModelAt).toLocaleDateString() : ""}</>
+                : <>Executed{c.executedAt ? ` on ${new Date(c.executedAt).toLocaleDateString()}` : ""}</>}
+            </div>
+          )}
+        </div>
+      ))}
+      {contracts.length===0 && (
+        <div className="flex items-center justify-center h-40 border border-dashed border-border rounded-md">
+          <div className="text-sm text-muted-foreground">No contracts yet</div>
         </div>
       )}
     </div>
@@ -258,14 +437,11 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
           <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${name} · Model`} onMenuClick={()=>setMobileNavOpen(true)}/>
           <div className="flex-1 overflow-auto p-4 md:p-6">
             {view === "bookings" && <BookingsView/>}
+            {view === "availability" && <AvailabilityView/>}
+            {view === "contracts" && <ContractsView/>}
             {view === "earnings" && <EarningsView/>}
             {view === "messages" && <MessagesView/>}
             {view === "profile" && <MyCompCardView/>}
-            {view !== "bookings" && view !== "earnings" && view !== "messages" && view !== "profile" && (
-              <div className="flex items-center justify-center h-64 border border-dashed border-border rounded-md">
-                <div className="text-sm text-muted-foreground">{NAV.find(n=>n.id===view)?.label} · coming soon</div>
-              </div>
-            )}
           </div>
         </main>
       </div>
