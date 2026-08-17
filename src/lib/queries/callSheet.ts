@@ -8,6 +8,8 @@ export interface CallSheetAssignment {
   isDepartmentLead: boolean;
   isProjectAdmin: boolean;
   rate: number | null;
+  email: string;
+  phone: string | null;
 }
 
 export type CallSheetPermission = "admin" | "producer" | "lead" | "viewer" | null;
@@ -22,7 +24,7 @@ export interface CrewDirectoryEntry {
 export async function fetchCallSheetSlots(campaignId: string): Promise<CallSheetAssignment[]> {
   const { data, error } = await supabase
     .from("campaign_crew_slots")
-    .select("role_key, crew_payee_id, is_department_lead, is_project_admin, rate, crew_payees(full_name, discipline)")
+    .select("role_key, crew_payee_id, is_department_lead, is_project_admin, rate, crew_payees(full_name, discipline, email, profiles(phone))")
     .eq("campaign_id", campaignId)
     .not("crew_payee_id", "is", null);
   if (error || !data) return [];
@@ -36,6 +38,8 @@ export async function fetchCallSheetSlots(campaignId: string): Promise<CallSheet
       isDepartmentLead: r.is_department_lead,
       isProjectAdmin: !!r.is_project_admin,
       rate: r.rate != null ? Number(r.rate) : null,
+      email: r.crew_payees.email ?? "",
+      phone: r.crew_payees.profiles?.phone ?? null,
     }));
 }
 

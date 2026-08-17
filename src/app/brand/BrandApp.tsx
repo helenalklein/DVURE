@@ -302,10 +302,10 @@ function campaignNavFor(campaign: { type: Campaign["type"]; hasInPersonCasting?:
     : [item]);
 }
 
-function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, canArchive, onArchive }: {
+function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, onHome, counts, fullExtensionUntil, isReal, canArchive, onArchive, navBadges }: {
   campaign: Campaign; section: CampaignSection; onSection: (s: CampaignSection) => void;
   onBack: () => void; onNewCampaign: () => void; onHome: () => void; counts: Record<string,number>; fullExtensionUntil?: string;
-  isReal?: boolean; canArchive?: boolean; onArchive?: () => void;
+  isReal?: boolean; canArchive?: boolean; onArchive?: () => void; navBadges?: Partial<Record<CampaignSection, number>>;
 }) {
   const currentUser = useCurrentUser();
   const orgName = currentUser?.org ?? "";
@@ -364,12 +364,19 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
       <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto">
         {nav.map(item => {
           const NavIcon = item.Icon;
+          const badge = navBadges?.[item.id];
           return (
             <button key={item.id} onClick={() => selectSection(item.id)}
               className={cx("w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left",
                 section===item.id?"bg-secondary text-foreground font-medium":"text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}>
-              <NavIcon size={14}/>{item.label}
+              <NavIcon size={14}/>
+              <span className="flex-1">{item.label}</span>
+              {!!badge && (
+                <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-[#C0392B] text-white text-[9px] font-mono font-semibold flex items-center justify-center">
+                  {badge}
+                </span>
+              )}
             </button>
           );
         })}
@@ -2046,6 +2053,10 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string|null>(null);
   const [pendingManualCount, setPendingManualCount] = useState(0);
+  // Surfaced as a badge on the Call Sheet/Run of Show nav item — set by
+  // RealCallSheet itself since it's the only thing that knows which
+  // shoot days are missing required info.
+  const [incompleteCallSheets, setIncompleteCallSheets] = useState(0);
   const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
   const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [shim, setShim] = useState<SubmissionShim>(new Map());
@@ -2281,7 +2292,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
   return (
     <>
-      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined} isReal={!!realCampaignId} canArchive={canArchive} onArchive={openArchiveConfirm}/>
+      <CampaignSidebar campaign={campaign} section={section} onSection={onSection} onBack={onBack} onNewCampaign={onNewCampaign} onHome={onHome} counts={counts} fullExtensionUntil={fullExtensionUntil||undefined} isReal={!!realCampaignId} canArchive={canArchive} onArchive={openArchiveConfirm} navBadges={{ "call-sheet": incompleteCallSheets }}/>
       <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
         <TopBar title={viewingAgency ?? sectionLabel} sub={campaign.name} onMenuClick={()=>setMobileNavOpen(true)}
           actions={viewingAgency ? <Btn variant="primary" size="sm" icon={<Send size={13}/>}
@@ -2362,7 +2373,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="call-sheet" && (
             realCampaignId
-              ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name} campaignType={campaign.type}/>
+              ? <RealCallSheet campaignId={realCampaignId} campaignName={campaign.name} campaignType={campaign.type} onIncompleteCountChange={setIncompleteCallSheets}/>
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This project predates Call Sheet and has no saved project record to attach roles to — create a new project to use Call Sheet.</div>
           )}
 

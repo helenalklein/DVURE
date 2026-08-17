@@ -47,7 +47,7 @@ function pickDefaultDay(days: ShootDaySummary[]): string | null {
 // Same timed location/schedule document for every project type — for
 // Event this is exactly the "Run of Show" concept (doors, welcome,
 // performance, close), just relabeled, not a different table or screen.
-export default function RealCallSheet({ campaignId, campaignName, campaignType }: { campaignId: string; campaignName: string; campaignType?: string }) {
+export default function RealCallSheet({ campaignId, campaignName, campaignType, onIncompleteCountChange }: { campaignId: string; campaignName: string; campaignType?: string; onIncompleteCountChange?: (count: number) => void }) {
   const docLabel = campaignType === "Event" ? "Run of Show" : "Call Sheet";
   const [shootDays, setShootDays] = useState<ShootDaySummary[] | null>(null);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
@@ -62,6 +62,12 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
 
   const canEdit = myRole === "admin" || myRole === "producer";
 
+  async function reloadDays() {
+    const days = await fetchShootDays(campaignId);
+    setShootDays(days);
+    setSelectedDayId(prev => prev ?? pickDefaultDay(days));
+  }
+
   useEffect(() => {
     let active = true;
     fetchShootDays(campaignId).then(days => {
@@ -73,6 +79,10 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
     fetchCallSheetContacts(campaignId).then(c => { if (active) setContacts(c); });
     return () => { active = false; };
   }, [campaignId]);
+
+  useEffect(() => {
+    onIncompleteCountChange?.((shootDays ?? []).filter(d => !d.isComplete).length);
+  }, [shootDays, onIncompleteCountChange]);
 
   useEffect(() => {
     let active = true;
@@ -110,6 +120,7 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
       setDetails(refreshed);
       setSchedule(refreshed?.schedule ?? []);
       setEditing(false);
+      await reloadDays();
     }
     setSaving(false);
   }
@@ -129,10 +140,15 @@ export default function RealCallSheet({ campaignId, campaignName, campaignType }
           <div className="text-heading text-lg">{campaignName} — {docLabel}</div>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {shootDays.map(d => (
-              <button key={d.id} onClick={()=>setSelectedDayId(d.id)}
-                className={cx("text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors",
+              <button key={d.id} onClick={()=>setSelectedDayId(d.id)} title={d.isComplete ? undefined : "Missing required info — location, address, or crew call time"}
+                className={cx("relative text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors",
                   selectedDayId===d.id ? "bg-foreground text-primary-foreground border-foreground" : "border-border text-muted-foreground hover:text-foreground"
-                )}>{formatDayLabel(d)}</button>
+                )}>
+                {formatDayLabel(d)}
+                {!d.isComplete && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#C0392B] border border-card"/>
+                )}
+              </button>
             ))}
           </div>
         </div>

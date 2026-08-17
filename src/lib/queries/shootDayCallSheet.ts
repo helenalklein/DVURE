@@ -11,6 +11,7 @@ export interface ShootDaySummary {
   campaignId: string;
   dateLabel: string | null;
   eventDate: string | null;
+  isComplete: boolean;
 }
 
 export interface CallSheetScheduleItem {
@@ -37,7 +38,7 @@ export interface CallSheetDetails {
 export async function fetchShootDays(campaignId: string): Promise<ShootDaySummary[]> {
   const { data, error } = await supabase.rpc("fetch_call_sheet_shoot_days", { p_campaign_id: campaignId });
   if (error || !data) return [];
-  return (data as any[]).map(r => ({ id: r.id, campaignId: r.campaign_id, dateLabel: r.date_label, eventDate: r.event_date }));
+  return (data as any[]).map(r => ({ id: r.id, campaignId: r.campaign_id, dateLabel: r.date_label, eventDate: r.event_date, isComplete: !!r.is_complete }));
 }
 
 // Returns null when no call sheet has been created for this shoot day

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Printer, Plus, X, Search, ChevronDown, Lock, Star, Shield } from "lucide-react";
+import { Printer, Plus, X, Search, ChevronDown, Lock, Star, Shield, Mail, Phone, MoreHorizontal } from "lucide-react";
 import { cx, Btn, Modal, TextInput } from "./ui";
 import { CALL_SHEET_CATEGORIES, type CallSheetCategory } from "./callSheetRoles";
 import { useAuth } from "./auth";
@@ -9,6 +9,13 @@ import {
   fetchCustomCrewRoles, addCustomCrewRole, removeCustomCrewRole,
   type CallSheetAssignment, type CrewDirectoryEntry, type CallSheetPermission, type CustomCrewRole,
 } from "../../lib/queries/callSheet";
+
+// "Absolutely required" per direct instruction — roughly 3 universal
+// roles every project needs regardless of type, not one auto-lead per
+// every fixed category. Auto-promoted to department lead the moment
+// someone fills them (no separate "make lead" click, unlike every
+// other role) and flagged "Required" while still empty.
+const REQUIRED_ROLE_KEYS = new Set(["producer", "creative_director", "photographer"]);
 
 // Shared by both tabs below — Crew (assign/manage) and Call Sheet
 // (view/print) read the exact same underlying slots, just render and
@@ -81,6 +88,7 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
   const [addingDepartment, setAddingDepartment] = useState(false);
   const [printMode, setPrintMode] = useState<"boxes" | "standard" | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const [moreMenuFor, setMoreMenuFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!printMode) return;
@@ -177,30 +185,45 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
                 const editable = canEditRole(r.key);
                 const isLead = !!a?.isDepartmentLead;
                 const isCustom = customRoleKeys.has(r.key);
+                const required = REQUIRED_ROLE_KEYS.has(r.key);
                 return (
                   <div key={r.key} className="relative group/slot">
                     <button onClick={()=>editable && setPickerRole(r)} disabled={!editable || !!printMode}
                       className={cx(
-                        "w-full text-left rounded-md p-3 aspect-square flex flex-col justify-between transition-colors",
+                        "w-full text-left rounded-md p-3 aspect-square flex flex-col justify-between transition-colors overflow-hidden relative",
                         editable ? "cursor-pointer" : "cursor-default",
                         a?.isProjectAdmin ? "border-2 border-foreground bg-secondary"
                           : isLead ? "border-2 border-foreground bg-secondary"
                           : a ? "border border-foreground/30 bg-secondary"
+                          : required ? "border border-dashed border-[#C0392B]/50 bg-secondary/30"
                           : "border border-dashed border-border bg-secondary/30",
                         editable && !a && "hover:border-foreground/40"
                       )}>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                        {r.label} {a?.isProjectAdmin ? <Shield size={9} className="fill-current shrink-0"/> : isLead && <Star size={9} className="fill-current shrink-0"/>}
+                      {a && (
+                        <div aria-hidden className="absolute -right-2 -bottom-3 text-7xl font-bold text-foreground/[0.06] leading-none select-none pointer-events-none">
+                          {a.fullName.trim().charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="relative text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                        {r.label}
+                        {a?.isProjectAdmin ? <Shield size={9} className="fill-current shrink-0"/> : isLead && <Star size={9} className="fill-current shrink-0"/>}
+                        {!a && required && <span className="text-[#C0392B] normal-case tracking-normal font-sans">· Required</span>}
                       </div>
                       {a ? (
-                        <div>
+                        <div className="relative space-y-0.5">
                           <div className="text-sm font-medium leading-snug line-clamp-2">{a.fullName}</div>
-                          {a.rate != null && <div className="text-[10px] font-mono text-muted-foreground mt-0.5">${a.rate.toLocaleString()}</div>}
+                          {a.rate != null && <div className="text-[10px] font-mono text-muted-foreground">${a.rate.toLocaleString()}</div>}
+                          {a.email && (
+                            <div className="text-[9px] text-muted-foreground truncate flex items-center gap-1"><Mail size={8} className="shrink-0"/>{a.email}</div>
+                          )}
+                          {a.phone && (
+                            <div className="text-[9px] text-muted-foreground truncate flex items-center gap-1"><Phone size={8} className="shrink-0"/>{a.phone}</div>
+                          )}
                         </div>
                       ) : editable && !printMode ? (
-                        <div className="text-xs text-muted-foreground flex items-center gap-1"><Plus size={11}/> Assign</div>
+                        <div className="relative text-xs text-muted-foreground flex items-center gap-1"><Plus size={11}/> Assign</div>
                       ) : (
-                        <div className="text-xs text-muted-foreground/50">—</div>
+                        <div className="relative text-xs text-muted-foreground/50">—</div>
                       )}
                     </button>
                     {isCustom && editable && !printMode && (
@@ -209,6 +232,23 @@ export function CrewTab({ campaignId, campaignName }: { campaignId: string; camp
                         className="call-sheet-noprint absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-card border border-border flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity hover:bg-secondary">
                         <X size={9}/>
                       </button>
+                    )}
+                    {a && editable && !printMode && (
+                      <div className="call-sheet-noprint absolute bottom-1.5 right-1.5" onClick={e=>e.stopPropagation()}>
+                        <button onClick={()=>setMoreMenuFor(moreMenuFor===r.key ? null : r.key)}
+                          title="More actions"
+                          className="w-5 h-5 rounded-full bg-card/90 border border-border flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity hover:bg-secondary">
+                          <MoreHorizontal size={11}/>
+                        </button>
+                        {moreMenuFor===r.key && (
+                          <div className="absolute bottom-full right-0 mb-1 w-36 bg-card border border-border rounded-md shadow-lg py-1 z-20">
+                            {a.email && <a href={`mailto:${a.email}`} className="block px-3 py-1.5 text-xs hover:bg-secondary">Email</a>}
+                            {a.phone && <a href={`tel:${a.phone}`} className="block px-3 py-1.5 text-xs hover:bg-secondary">Call</a>}
+                            <button onClick={async ()=>{ setMoreMenuFor(null); await clearCallSheetRole(campaignId, r.key); await reload(); }}
+                              className="block w-full text-left px-3 py-1.5 text-xs text-[#C0392B] hover:bg-secondary cursor-pointer">Remove</button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -397,6 +437,7 @@ function RolePickerModal({ role, campaignId, directory, current, canManageLeads,
     setSaving(true);
     setError(null);
     const { error: err } = await assignCallSheetRole(campaignId, role.key, payeeId);
+    if (!err && REQUIRED_ROLE_KEYS.has(role.key)) await setDepartmentLead(campaignId, role.key, true);
     setSaving(false);
     if (err) { setError(err); return; }
     onAssigned();
@@ -407,6 +448,7 @@ function RolePickerModal({ role, campaignId, directory, current, canManageLeads,
     setSaving(true);
     setError(null);
     const { error: err } = await inviteCrewToCallSheet(campaignId, role.key, inviteName.trim(), inviteEmail.trim(), null);
+    if (!err && REQUIRED_ROLE_KEYS.has(role.key)) await setDepartmentLead(campaignId, role.key, true);
     setSaving(false);
     if (err) { setError(err); return; }
     onAssigned();
