@@ -7,10 +7,9 @@
 // organizations.subscription_status/stripe_subscription_id are written
 // directly here (admin client, needs 0057's grant) rather than waiting
 // on a webhook — subscription creation is synchronous (Stripe returns
-// its real status in the same response), unlike a later status change
-// (e.g. a renewal payment failing into past_due), which would need a
-// customer.subscription.updated webhook case to stay in sync. That's
-// deliberately not built yet — this only covers first-time subscribe.
+// its real status in the same response). A later status change (e.g. a
+// renewal payment failing into past_due) is caught by stripe-webhook's
+// own customer.subscription.updated/.deleted handling instead.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
 import { corsHeaders } from "../_shared/cors.ts";

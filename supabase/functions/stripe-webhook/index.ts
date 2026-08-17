@@ -20,6 +20,10 @@
 // void_invoice_payment/confirm_invoice_payment both refuse card. Until
 // Stripe confirms success, the real per-booking split just sits staged
 // in invoice_card_payment_lines.
+//
+// Also the only place organizations.subscription_status gets updated
+// after the initial subscribe — see the customer.subscription.* cases
+// below.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@17";
 
@@ -33,6 +37,28 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+// Keeps organizations.subscription_status in sync after the initial
+// subscribe — create-subscription writes the first status synchronously
+// (Stripe returns it in the same response), but a later transition (a
+// renewal failing into past_due, a cancellation) only ever reaches us
+// through this webhook. Same mapping philosophy as create-subscription's
+// own inline version, not the collapsed one from the earlier draft of
+// this function: trialing is its own real DB state, and anything
+// ambiguous (incomplete, unpaid, paused) defaults to past_due — the
+// gating state — never to something that grants access it hasn't earned.
+function mapStripeSubscriptionStatus(status: Stripe.Subscription.Status): "trialing" | "active" | "past_due" | "canceled" {
+  switch (status) {
+    case "active": return "active";
+    case "trialing": return "trialing";
+    case "past_due": return "past_due";
+    case "canceled":
+    case "incomplete_expired":
+      return "canceled";
+    default:
+      return "past_due";
+  }
+}
 
 async function verifyAgainstAnySecret(body: string, signature: string): Promise<Stripe.Event> {
   let lastErr: unknown;
@@ -253,6 +279,31 @@ Deno.serve(async (req) => {
             stripe_connect_payouts_enabled: !!account.payouts_enabled,
           })
           .eq("stripe_connect_account_id", account.id);
+        break;
+      }
+
+      // created fires once at creation (redundant with create-subscription's
+      // own synchronous write in the normal case, but a safety net if that
+      // write ever failed after the Stripe call itself succeeded); updated
+      // fires on every later transition (a renewal payment failing into
+      // past_due, a plan change, etc). Both handled identically: re-read
+      // the real status and write it through.
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const sub = event.data.object as Stripe.Subscription;
+        await supabaseAdmin
+          .from("organizations")
+          .update({ subscription_status: mapStripeSubscriptionStatus(sub.status) })
+          .eq("stripe_subscription_id", sub.id);
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        await supabaseAdmin
+          .from("organizations")
+          .update({ subscription_status: "canceled" })
+          .eq("stripe_subscription_id", sub.id);
         break;
       }
 
