@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Pin, RotateCw, Mail, Phone, Globe } from "lucide-react";
+import { Check, Pin, RotateCw, Mail, Phone, Globe, Star } from "lucide-react";
 import { cx, XBox, Badge, CountryFlag } from "./ui";
 import type { Talent } from "./types";
 
@@ -36,7 +36,7 @@ function AgencyMonogram({ name, className = "" }: { name: string; className?: st
 // for those.
 export function CompCard({
   talent: t, onViewAgency, onClick, draggable, onDragStart, onDragEnd, selected, dragging,
-  actions, duplicateBadge, commentCount,
+  actions, duplicateBadge, commentCount, boutiqueAgencies, rate, score,
 }: {
   talent: Talent;
   onViewAgency?: (agency: string) => void;
@@ -49,6 +49,13 @@ export function CompCard({
   actions?: { label: string; onClick: () => void }[];
   duplicateBadge?: string;
   commentCount?: number;
+  // Operationally-dense fields the pipeline boards (Moodboard) want that
+  // a model's own "My Profile" view (the other CompCard consumer) has
+  // no use for — all optional, all silent when omitted, so this stays
+  // one component instead of forking into two nearly-identical cards.
+  boutiqueAgencies?: string[];
+  rate?: string;
+  score?: number;
 }) {
   const [flipped, setFlipped] = useState(false);
 
@@ -111,7 +118,7 @@ export function CompCard({
             <div className="text-[9px] text-muted-foreground font-mono truncate">
               {[t.height, t.dress].filter(Boolean).join(" · ") || "—"}
             </div>
-            {t.motherAgency && (
+            {t.motherAgency ? (
               <div className="flex items-center gap-1 mt-1 min-w-0">
                 <AgencyMonogram name={t.motherAgency} className="w-3.5 h-3.5 text-[6px]"/>
                 {onViewAgency ? (
@@ -119,6 +126,23 @@ export function CompCard({
                     className="text-[10px] text-muted-foreground truncate hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
                 ) : (
                   <span className="text-[10px] text-muted-foreground truncate">{t.motherAgency}</span>
+                )}
+              </div>
+            ) : boutiqueAgencies !== undefined ? (
+              <div className="text-[9px] text-muted-foreground truncate mt-1">Independent — no agency</div>
+            ) : null}
+            {boutiqueAgencies !== undefined && (
+              <div className="text-[9px] text-muted-foreground truncate">
+                {boutiqueAgencies.length > 0 ? `+ ${boutiqueAgencies.join(", ")}` : " "}
+              </div>
+            )}
+            {(rate !== undefined || score !== undefined) && (
+              <div className="flex items-center justify-between mt-1">
+                <div className="text-[9px] font-mono font-medium">{rate}</div>
+                {score !== undefined && (
+                  <div className="flex items-center gap-0.5">
+                    {[0,1,2,3,4].map(i=><Star key={i} size={7} className={i<score?"fill-foreground text-foreground":"text-muted-foreground"}/>)}
+                  </div>
                 )}
               </div>
             )}

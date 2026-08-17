@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav, TaxesAndFeesLabel } from "../shared/ui";
+import { CompCard } from "../shared/CompCard";
 import { getAccessGate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
@@ -539,79 +540,21 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                       const isSel=selected.includes(t.id);
                       const isDrag=dragging===t.id;
                       return (
-                        <div key={t.id} draggable
+                        <CompCard key={t.id} talent={t}
+                          draggable
                           onDragStart={()=>setDragging(t.id)}
                           onDragEnd={()=>{setDragging(null);setDragOver(null);}}
                           onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
-                          className={cx("glass-subtle rounded-md border overflow-hidden cursor-pointer select-none transition-all group",
-                            isSel?"border-foreground ring-1 ring-foreground":"border-border hover:border-foreground/40",
-                            isDrag&&"opacity-40"
-                          )}
-                        >
-                          <div className="relative">
-                            {t.photo ? <img src={t.photo} alt="" className="w-full h-32 object-cover"/> : <XBox className="w-full h-32"/>}
-                            <div className={cx("absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",isSel?"bg-foreground border-foreground":"bg-card/80 border-border")}>
-                              {isSel&&<Check size={11} className="text-primary-foreground"/>}
-                            </div>
-                          </div>
-                          <div className="p-2.5 space-y-0.5">
-                            <div className="text-xs font-semibold leading-tight truncate flex items-center gap-1">
-                              {t.name} <CountryFlag location={t.location} className="text-[11px] shrink-0"/>
-                              {t.duplicateFlag && (
-                                <span title="Submitted by more than one agency" className="w-1.5 h-1.5 rounded-full bg-[#D4A017] shrink-0"/>
-                              )}
-                            </div>
-                            {t.motherAgency ? (<>
-                              <div className="text-[10px] text-muted-foreground truncate">
-                                <span className="text-muted-foreground/70">Mother:</span>{" "}
-                                <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
-                                  className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground truncate">
-                                <span className="text-muted-foreground/70">Boutique:</span>{" "}
-                                {t.boutiqueAgencies.length > 0 ? (
-                                  t.boutiqueAgencies.map((a, i) => (
-                                    <span key={a}>
-                                      {i > 0 && ", "}
-                                      <button onClick={e=>{ e.stopPropagation(); onViewAgency(a); }}
-                                        className="hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{a}</button>
-                                    </span>
-                                  ))
-                                ) : "None"}
-                              </div>
-                            </>) : (
-                              <div className="text-[10px] text-muted-foreground truncate">
-                                <span className="text-muted-foreground/70">Independent</span> — no agency
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
-                              <span>{t.height}</span><span>·</span><span className="truncate">{t.location.split(",")[0]}</span>
-                            </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <div className="text-[10px] font-mono font-medium">{t.rate}</div>
-                              <div className="flex items-center gap-0.5">
-                                {[0,1,2,3,4].map(i=><Star key={i} size={7} className={i<t.score?"fill-foreground text-foreground":"text-muted-foreground"}/>)}
-                              </div>
-                            </div>
-                            {commentsFor(t.id).length>0 && (
-                              <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-mono pt-0.5">
-                                <Pin size={9}/> {commentsFor(t.id).length} comment{commentsFor(t.id).length!==1?"s":""}
-                              </div>
-                            )}
-                          </div>
-                          {actions.length>0&&(
-                            <div className="border-t border-border flex divide-x divide-border opacity-0 group-hover:opacity-100 transition-opacity" onClick={e=>e.stopPropagation()}>
-                              {actions.map(a=>(
-                                <button key={a.label} onClick={()=>moveWithUndo(t.id,a.stage,a.label)}
-                                  className={cx("flex-1 py-1.5 text-[10px] font-medium transition-colors",
-                                    a.label==="Decline"?"text-muted-foreground hover:bg-muted"
-                                      :a.label==="Book"||a.label==="Select"?"bg-foreground text-primary-foreground hover:bg-foreground/90"
-                                      :"text-muted-foreground hover:bg-secondary hover:text-foreground"
-                                  )}>{a.label}</button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                          onViewAgency={onViewAgency}
+                          selected={isSel}
+                          dragging={isDrag}
+                          duplicateBadge={t.duplicateFlag ? "Multiple agencies" : undefined}
+                          commentCount={commentsFor(t.id).length}
+                          boutiqueAgencies={t.boutiqueAgencies}
+                          rate={t.rate}
+                          score={t.score}
+                          actions={actions.length>0 ? actions.map(a=>({ label:a.label, onClick:()=>moveWithUndo(t.id,a.stage,a.label) })) : undefined}
+                        />
                       );
                     })}
                   </div>
