@@ -13,6 +13,7 @@ import {
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CampaignThreadMessage } from "../shared/types";
 import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav, TaxesAndFeesLabel } from "../shared/ui";
 import { CompCard } from "../shared/CompCard";
+import { fetchCampaignComments, postCampaignComment, type CampaignComment } from "../../lib/queries/campaignComments";
 import { getAccessGate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
 import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
@@ -419,6 +420,29 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   // casting/mood board. "Pipeline" is the existing drag-between-stages
   // kanban. Same underlying talent list either way, just a different lens.
   const [view, setView] = useState<"pipeline" | "board">("pipeline");
+  const { profile } = useAuth();
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [projectComments, setProjectComments] = useState<CampaignComment[]>([]);
+  const [commentInput, setCommentInput] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
+  useEffect(() => {
+    if (!realCampaignId) return;
+    let active = true;
+    fetchCampaignComments(realCampaignId).then(c => { if (active) setProjectComments(c); });
+    return () => { active = false; };
+  }, [realCampaignId]);
+
+  async function sendComment() {
+    if (!commentInput.trim() || !realCampaignId || !profile?.id) return;
+    setPostingComment(true);
+    const { error } = await postCampaignComment(realCampaignId, profile.id, commentInput.trim());
+    setPostingComment(false);
+    if (!error) {
+      setCommentInput("");
+      setProjectComments(await fetchCampaignComments(realCampaignId));
+    }
+  }
   const [drawer, setDrawer] = useState<Talent|null>(null);
   const [declineModal, setDeclineModal] = useState<Talent|null>(null);
   const [declineReason, setDeclineReason] = useState("");
@@ -742,6 +766,57 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
               ))}
             </div>
           </div>
+        )}
+
+        {/* Real internal comment board, collapsible — brand-team-only,
+            same scope as the "Brand Team" thread in Messaging, but that
+            one is mock-only (never wired to the database). This one
+            actually persists. */}
+        {commentsOpen ? (
+          <div className="w-64 shrink-0 border-l glass-strong flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+              <div>
+                <div className="text-sm font-semibold">Comments</div>
+                <div className="text-[10px] text-muted-foreground">Brand team only</div>
+              </div>
+              <button onClick={()=>setCommentsOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {!realCampaignId ? (
+                <div className="text-[10px] text-muted-foreground italic">Comments aren't available for demo projects.</div>
+              ) : projectComments.length === 0 ? (
+                <div className="text-[10px] text-muted-foreground italic">No comments yet — leave the first one for your team.</div>
+              ) : projectComments.map(c=>(
+                <div key={c.id} className="glass-subtle border rounded-md px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-semibold">{c.authorName}</span>
+                    <span className="text-[9px] font-mono text-muted-foreground shrink-0">{new Date(c.createdAt).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</span>
+                  </div>
+                  <div className="text-xs leading-relaxed">{c.text}</div>
+                </div>
+              ))}
+            </div>
+            {realCampaignId && (
+              <div className="p-3 border-t border-border shrink-0 flex gap-2">
+                <textarea value={commentInput} onChange={e=>setCommentInput(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendComment(); }}}
+                  placeholder="Leave a note for your team…" rows={2}
+                  className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+                <button onClick={sendComment} disabled={!commentInput.trim() || postingComment}
+                  className="shrink-0 px-3 rounded-md bg-foreground text-primary-foreground text-xs font-medium hover:bg-foreground/90 transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer">
+                  Post
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button onClick={()=>setCommentsOpen(true)} title="Comments"
+            className="w-7 shrink-0 border-l border-border bg-secondary/40 hover:bg-secondary flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors">
+            <MessageSquare size={13} className="text-muted-foreground"/>
+            {projectComments.length > 0 && (
+              <span className="text-[9px] font-mono text-muted-foreground">{projectComments.length}</span>
+            )}
+          </button>
         )}
       </div>
 
