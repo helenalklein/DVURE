@@ -60,6 +60,10 @@ export interface Talent {
   // brand should see the model once, not once per agency, but should
   // still know more than one agency is involved before booking).
   duplicateFlag?: boolean;
+  // Manual drag-to-reorder position within a Model Board column (0090)
+  // — a plain sort key, not an id. null means "not set yet" (sorts
+  // last, stable fallback to id order).
+  boardPosition?: number | null;
 }
 
 export type IconFn = (props: { size?: number; className?: string }) => JSX.Element | null;

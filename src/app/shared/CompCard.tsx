@@ -38,10 +38,12 @@ function Pushpin({ offset }: { offset: number }) {
   );
 }
 
-// A model's digital comp card — headshot, name, physical stats and
-// mother agency on the front; clicking anywhere on the card flips it
-// via a real 3D transform (perspective + backface-visibility) to show
-// measurements, full representation, and contact info. Used both for a
+// A model's digital comp card — headshot, name, physical stats and the
+// submitting agency (credit for whoever actually submitted) on the
+// front; clicking anywhere on the card flips it via a real 3D
+// transform (perspective + backface-visibility) to show measurements,
+// full representation — every agency, not just the submitter — and
+// contact info. Used both for a
 // model's own "My Profile" view and the drag/drop pipeline boards
 // (BrandApp's Moodboard) — operationally-dense props below are silent
 // no-ops for the simpler single-model consumer.
@@ -100,29 +102,60 @@ export function CompCard({
     if (flippedProp === undefined) setFlippedState(v);
   }
   const pinOffset = (t.id % 7) - 3; // -3..3px, stable per card
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  // Hover preview of the note's actual text — the sticker itself only
-  // ever showed an "Edit note"/"Add note" action label, never the
-  // content. Rendered as a sibling of the flip container (not inside
-  // it) so it isn't clipped by the front face's own overflow-hidden.
+  // Hover preview of the note — "Notes" when empty, the real text when
+  // one exists. Lives inside the photo area (sibling of the sticker),
+  // anchored to ITS bottom-right corner, not the whole card's — so it
+  // can never spill down into the name/rate footer or up into the row
+  // above, regardless of how long the note is.
   const [noteHovered, setNoteHovered] = useState(false);
 
-  // The default browser drag-ghost is unreliable here — this card sits
-  // inside a [perspective:1000px] 3D-transform context for the flip,
-  // and browsers are inconsistent about snapshotting elements with
-  // backface-visibility inside one (often only the <img> shows up,
-  // dropping name/agency/pin). Setting an explicit drag image off the
-  // outer wrapper — outside that 3D context — sidesteps it entirely.
-  function handleDragStart(e: React.DragEvent) {
-    if (wrapperRef.current) {
-      const rect = wrapperRef.current.getBoundingClientRect();
-      e.dataTransfer.setDragImage(wrapperRef.current, e.clientX - rect.left, e.clientY - rect.top);
+  // Native HTML5 drag-and-drop (draggable="true" + dragstart/dragover/
+  // drop) turned out to be unreliable — it doesn't reliably engage at
+  // all in some environments, and when it doesn't, the press-and-move
+  // gesture the browser was supposed to treat as a drag falls through
+  // to a plain click instead, flipping the card the user meant to
+  // drag. Tracking the gesture ourselves via pointer events sidesteps
+  // the whole problem: "is this a drag" becomes "did the pointer move
+  // more than a few px before it came back up," which we can answer
+  // with total certainty ourselves instead of trusting the browser's
+  // own drag heuristics.
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const isDraggingRef = useRef(false);
+
+  function handlePointerDown(e: React.PointerEvent) {
+    if (!draggable || e.button !== 0) return;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+  }
+  function handlePointerMove(e: PointerEvent) {
+    if (!dragStartRef.current || isDraggingRef.current) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    if (Math.hypot(dx, dy) > 6) {
+      isDraggingRef.current = true;
+      onDragStart?.();
     }
-    onDragStart?.();
+  }
+  function handlePointerUp() {
+    window.removeEventListener("pointermove", handlePointerMove);
+    dragStartRef.current = null;
+    if (isDraggingRef.current) {
+      onDragEnd?.();
+      // Reset one tick later, not immediately — pointerup always fires
+      // before the click event this same gesture may still trigger, so
+      // the flag needs to survive a moment longer to actually suppress it.
+      setTimeout(() => { isDraggingRef.current = false; }, 0);
+    }
+  }
+  function handleFrontClick() {
+    if (isDraggingRef.current) return;
+    setFlipped(true);
+    onExpand?.();
   }
 
   return (
-    <div ref={wrapperRef} className="relative aspect-[3/4] [perspective:1000px] transition-transform duration-200"
+    <div className="relative aspect-[3/4] [perspective:1000px] transition-transform duration-200"
       style={{ transform: rotate ? `rotate(${rotate}deg)` : undefined }}>
       <Pushpin offset={pinOffset}/>
       <div
@@ -130,15 +163,14 @@ export function CompCard({
         style={{ transform: flipped ? "rotateY(180deg)" : undefined }}
       >
         {/* Front */}
-        <div draggable={draggable}
-          onDragStart={handleDragStart}
-          onDragEnd={onDragEnd}
-          onClick={()=>{ setFlipped(true); onExpand?.(); }}
+        <div onPointerDown={handlePointerDown}
+          onClick={handleFrontClick}
+          data-card-id={t.id}
           className={cx("absolute inset-0 [backface-visibility:hidden] glass-subtle rounded-md border overflow-hidden select-none transition-all group flex flex-col cursor-pointer",
             selected ? "border-foreground ring-1 ring-foreground" : "border-border hover:border-foreground/40",
             dragging && "opacity-40"
           )}
-          style={{ boxShadow: "0 3px 8px -2px rgba(30,28,26,0.28), 0 1px 2px rgba(30,28,26,0.16)" }}
+          style={{ boxShadow: "0 3px 8px -2px rgba(30,28,26,0.28), 0 1px 2px rgba(30,28,26,0.16)", touchAction: draggable ? "none" : undefined }}
         >
           <div className="relative flex-1 min-h-0">
             {t.photo ? (
@@ -160,16 +192,29 @@ export function CompCard({
               </div>
             )}
             {/* Staff note sticker — a real per-model note, not just
-                decoration. Bright when a note's on file, faint until
-                hovered when there isn't, so it doesn't shout "empty". */}
+                decoration. Always visible so it doesn't shout "empty" —
+                the star is the actual "has a note" signal. Custom
+                hover preview below (not a native title=) so it shows
+                instantly instead of waiting on the browser's own
+                tooltip delay. */}
             {onNoteClick && (
               <button onClick={e=>{ e.stopPropagation(); onNoteClick(); }}
                 onMouseEnter={()=>setNoteHovered(true)}
                 onMouseLeave={()=>setNoteHovered(false)}
-                title={t.note ? "Edit note" : "Add note"}
                 className="absolute bottom-0 right-0 w-5 h-5 overflow-hidden">
                 <div className="absolute -bottom-2.5 -right-2.5 w-5 h-5 rotate-45" style={{ background: "#d9603b" }}/>
+                {t.note && <Star size={7} className="absolute bottom-0.5 right-0.5 fill-white text-white"/>}
               </button>
+            )}
+            {/* Note preview — anchored to the PHOTO area's own
+                bottom-right corner (the same box the sticker lives in),
+                not the whole card's, so it can never spill down into
+                the name/rate footer below or up into the row above. */}
+            {noteHovered && !flipped && (
+              <div className="absolute bottom-0 right-0 z-20 max-w-[85%] max-h-[80%] overflow-auto pointer-events-none rounded-md border shadow-lg px-2 py-1.5 text-[9px] leading-snug whitespace-pre-wrap break-words"
+                style={{ background: "#fdf1de", borderColor: "#d9603b", color: "#3d2c1f" }}>
+                {t.note || "Notes"}
+              </div>
             )}
             {selected !== undefined && (
               <div className={cx("absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all", selected ? "bg-foreground border-foreground" : "bg-card/80 border-border")}>
@@ -203,24 +248,18 @@ export function CompCard({
             <div className="text-[9px] text-muted-foreground font-mono truncate">
               {[t.height, t.dress].filter(Boolean).join(" · ") || "—"}
             </div>
-            {t.motherAgency ? (
-              <div className="flex items-center gap-1 mt-1 min-w-0">
-                <AgencyMonogram name={t.motherAgency} className="w-3.5 h-3.5 text-[6px]"/>
-                {onViewAgency ? (
-                  <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.motherAgency); }}
-                    className="text-[10px] text-muted-foreground truncate hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.motherAgency}</button>
-                ) : (
-                  <span className="text-[10px] text-muted-foreground truncate">{t.motherAgency}</span>
-                )}
-              </div>
-            ) : boutiqueAgencies !== undefined ? (
-              <div className="text-[9px] text-muted-foreground truncate mt-1">Independent — no agency</div>
-            ) : null}
-            {boutiqueAgencies !== undefined && (
-              <div className="text-[9px] text-muted-foreground truncate">
-                {boutiqueAgencies.length > 0 ? `+ ${boutiqueAgencies.join(", ")}` : " "}
-              </div>
-            )}
+            {/* Front credits whoever actually submitted — the model's
+                full representation (mother + every boutique) is a flip
+                away on the back, not squeezed in here. */}
+            <div className="flex items-center gap-1 mt-1 min-w-0">
+              {t.agency !== "Independent" && <AgencyMonogram name={t.agency} className="w-3.5 h-3.5 text-[6px]"/>}
+              {onViewAgency && t.agency !== "Independent" ? (
+                <button onClick={e=>{ e.stopPropagation(); onViewAgency(t.agency); }}
+                  className="text-[10px] text-muted-foreground truncate hover:text-foreground hover:underline underline-offset-2 cursor-pointer">{t.agency}</button>
+              ) : (
+                <span className="text-[10px] text-muted-foreground truncate">{t.agency}</span>
+              )}
+            </div>
             {(rate !== undefined || score !== undefined) && (
               <div className="flex items-center justify-between mt-1">
                 <div className="text-[9px] font-mono font-medium">{rate}</div>
@@ -290,16 +329,6 @@ export function CompCard({
           </div>
         </div>
       </div>
-      {/* Note preview — a sibling of the flip container (not inside
-          it), same reason Pushpin lives out here: the front face has
-          overflow-hidden for its own rounded corners/photo crop, which
-          would clip a popover trying to escape past the card's edge. */}
-      {noteHovered && t.note && !flipped && (
-        <div className="absolute bottom-6 right-0 z-20 w-40 pointer-events-none rounded-md border shadow-lg px-2.5 py-2 text-[10px] leading-snug whitespace-pre-wrap break-words"
-          style={{ background: "#fdf1de", borderColor: "#d9603b", color: "#3d2c1f" }}>
-          {t.note}
-        </div>
-      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ import { SAMPLE_TALENT, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS,
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo, updateOrgDefaultFinalizationHours } from "../../lib/queries/auth";
 import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign, updateCampaignFinalizationHours, finalizeCampaignBoard } from "../../lib/queries/campaigns";
-import { fetchCampaignSubmissions, updateSubmissionStage, updateSubmissionNotes, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
+import { fetchCampaignSubmissions, updateSubmissionStage, updateSubmissionNotes, updateSubmissionPosition, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, PLATFORM_FEE_PCT_ACH, PLATFORM_FEE_PCT_CARD } from "../../lib/queries/bookings";
 import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
@@ -430,6 +430,11 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 type BoardColId = "submitted" | "hold" | "booked";
 const HOLD_STAGES: SubmissionStage[] = ["shortlisted", "selected"];
+// Static id->dropStage/locked map for the pointer-based drag system below —
+// kept outside the column render loop so the window-level drag effect
+// doesn't need COLUMNS (which is rebuilt every render off live talent
+// arrays) in its dependency list.
+const COL_DROP_STAGE: Record<BoardColId, SubmissionStage> = { submitted: "submitted", hold: "selected", booked: "booked" };
 
 // Placeholder-only botanical line art for the expand popup's photo
 // tiles — standing in for a model's real portfolio shots (not wired up
@@ -644,10 +649,19 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     return (((id * 31 + 7) % 9) - 4) * 0.8; // -3.2..3.2deg
   }
 
+  // Manual drag-to-reorder position (0090) — null (not yet positioned)
+  // sorts last, falling back to id so the order is at least stable
+  // rather than jumping around on every render.
+  function byBoardPosition(a: Talent, b: Talent) {
+    const pa = a.boardPosition ?? Infinity;
+    const pb = b.boardPosition ?? Infinity;
+    return pa !== pb ? pa - pb : a.id - b.id;
+  }
+
   const notSelected = talent.filter(t => t.stage === "declined" || t.stage === "released");
-  const submittedTalent = talent.filter(t => t.stage === "submitted" || t.stage === "candidate");
-  const holdTalent = talent.filter(t => HOLD_STAGES.includes(t.stage));
-  const bookedTalent = talent.filter(t => t.stage === "booked");
+  const submittedTalent = talent.filter(t => t.stage === "submitted" || t.stage === "candidate").sort(byBoardPosition);
+  const holdTalent = talent.filter(t => HOLD_STAGES.includes(t.stage)).sort(byBoardPosition);
+  const bookedTalent = talent.filter(t => t.stage === "booked").sort(byBoardPosition);
 
   // No manual "now go book them" button — the instant a contract comes
   // back signed, this fires the same real booking form (day rate/days/
@@ -668,8 +682,18 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   const totalNeeded = 4;
   const daysRemaining = 8;
 
-  function moveTo(id: number, stage: SubmissionStage) {
-    setTalent(prev => prev.map(t => t.id === id ? { ...t, stage } : t));
+  function moveTo(id: number, stage: SubmissionStage, boardPosition?: number | null) {
+    setTalent(prev => prev.map(t => t.id === id ? { ...t, stage, ...(boardPosition !== undefined ? { boardPosition } : {}) } : t));
+  }
+
+  // Appends to the end of a column — used when a card is dropped on the
+  // column's empty background rather than on a specific neighbor, so it
+  // still lands somewhere sane instead of keeping whatever position it
+  // had in its old column.
+  function nextPositionFor(stage: SubmissionStage): number {
+    const inStage = talent.filter(t => t.stage === stage || (stage === "selected" && HOLD_STAGES.includes(t.stage)));
+    if (inStage.length === 0) return 100;
+    return Math.max(...inStage.map(t => t.boardPosition ?? 0)) + 100;
   }
 
   function showToast(msg: string, undo: () => void) {
@@ -685,10 +709,101 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     const prev = talent.find(t => t.id === id);
     if (!prev) return;
     const prevStage = prev.stage;
-    moveTo(id, newStage);
+    const prevPosition = prev.boardPosition;
+    moveTo(id, newStage, nextPositionFor(newStage));
     if (newStage === "selected") onContractPrompt({ ...prev, stage: newStage });
-    showToast(`${prev.name} moved to ${label}`, () => moveTo(id, prevStage));
+    showToast(`${prev.name} moved to ${label}`, () => moveTo(id, prevStage, prevPosition));
   }
+
+  // Dropping directly onto another card, rather than the column's empty
+  // background — reorders within a column (the actual "move a card and
+  // have it stay where I put it" ask) by landing on the midpoint between
+  // the target and its current predecessor; dropping onto a card in a
+  // different column moves it there too, same as the column-level drop.
+  // insertAfter comes from which half of the target card was dropped on
+  // (see the wrapper's onDrop below) — lets a card land in any position,
+  // not just "right before whichever card you happened to drop on".
+  function reorderOnto(targetId: number, dropStage: SubmissionStage, locked: boolean, insertAfter: boolean) {
+    const draggedId = dragging;
+    setDragging(null);
+    setDragOver(null);
+    if (draggedId === null || draggedId === targetId) return;
+    const draggedT = talent.find(t => t.id === draggedId);
+    const targetT = talent.find(t => t.id === targetId);
+    if (!draggedT || !targetT) return;
+    if (locked) { setLockedDropError(draggedT.name); return; }
+
+    const columnCards = talent
+      .filter(t => t.stage === targetT.stage && t.id !== draggedId)
+      .sort(byBoardPosition);
+    const targetIdx = columnCards.findIndex(t => t.id === targetId);
+    const targetPos = targetT.boardPosition ?? 100;
+    let newPosition: number;
+    if (insertAfter) {
+      const nextCard = targetIdx < columnCards.length - 1 ? columnCards[targetIdx + 1] : null;
+      newPosition = nextCard ? (targetPos + (nextCard.boardPosition ?? targetPos + 200)) / 2 : targetPos + 100;
+    } else {
+      const prevCard = targetIdx > 0 ? columnCards[targetIdx - 1] : null;
+      newPosition = prevCard ? ((prevCard.boardPosition ?? 0) + targetPos) / 2 : targetPos - 100;
+    }
+
+    const enteringHold = draggedT.stage !== dropStage && dropStage === "selected";
+    moveTo(draggedId, dropStage, newPosition);
+    if (enteringHold) onContractPrompt({ ...draggedT, stage: dropStage });
+  }
+
+  // CompCard drives its own pointer-based drag DETECTION (pointerdown +
+  // a movement threshold, see CompCard.tsx) and calls onDragStart/onDragEnd
+  // — but it has no idea what's under the pointer. This effect is the
+  // other half: once a drag is live (dragging !== null), it tracks the
+  // pointer over the whole window and does the actual hit-testing via
+  // data-column/data-card-id attributes, replacing what native HTML5
+  // dragover/drop used to do. Native DnD was dropped entirely (see
+  // CompCard.tsx) since it wasn't reliably engaging in the field.
+  useEffect(() => {
+    if (dragging === null) return;
+    const draggedId = dragging;
+
+    function targetsAt(x: number, y: number) {
+      const el = document.elementFromPoint(x, y);
+      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
+      const colEl = el?.closest("[data-column]") as HTMLElement | null;
+      const colId = (colEl?.dataset.column as BoardColId | undefined) ?? null;
+      return { cardEl, colId };
+    }
+
+    function handleMove(e: PointerEvent) {
+      const { colId } = targetsAt(e.clientX, e.clientY);
+      setDragOver(colId);
+    }
+
+    function handleUp(e: PointerEvent) {
+      const { cardEl, colId } = targetsAt(e.clientX, e.clientY);
+      if (!colId) { setDragging(null); setDragOver(null); return; }
+      const dropStage = COL_DROP_STAGE[colId];
+      const locked = colId === "booked";
+
+      const targetId = cardEl ? Number(cardEl.dataset.cardId) : NaN;
+      if (!Number.isNaN(targetId) && targetId !== draggedId) {
+        const rect = cardEl!.getBoundingClientRect();
+        const insertAfter = (e.clientY - rect.top) > rect.height / 2;
+        reorderOnto(targetId, dropStage, locked, insertAfter);
+        return;
+      }
+
+      if (locked) { setLockedDropError(talent.find(t => t.id === draggedId)?.name ?? null); }
+      else { moveWithUndo(draggedId, dropStage, colId === "hold" ? "Hold" : "Submitted"); }
+      setDragging(null);
+      setDragOver(null);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [dragging, talent]);
 
   function bulkMove(ids: number[], newStage: SubmissionStage, label: string) {
     const prevMap = ids.map(id => ({ id, stage: talent.find(x => x.id === id)?.stage ?? "submitted" as SubmissionStage }));
@@ -822,17 +937,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
               const colStyle: React.CSSProperties = col.id==="hold" ? { flex: "0 0 288px" } : { flex: "2 1 0%" };
               return (
                 <div key={col.id}
+                  data-column={col.id}
                   className={cx("min-w-[180px] flex flex-col border-r border-border last:border-0 transition-colors",
                     locked && "border-l-2 border-l-foreground",
                     isOver?"bg-secondary/60":"bg-background")}
                   style={colStyle}
-                  onDragOver={e=>{ if (locked) return; e.preventDefault();setDragOver(col.id);}}
-                  onDragLeave={()=>setDragOver(null)}
-                  onDrop={()=>{
-                    if (dragging===null) return;
-                    if (locked) { setLockedDropError(talent.find(t=>t.id===dragging)?.name ?? null); setDragging(null); setDragOver(null); return; }
-                    moveWithUndo(dragging,col.dropStage,col.label);setDragging(null);setDragOver(null);
-                  }}
                 >
                   <div className={cx("px-4 py-3 border-b border-border flex items-center justify-between shrink-0 gap-2", col.id==="booked"?"bg-foreground":"glass")}>
                     <div className="flex items-center gap-2 min-w-0">
@@ -862,7 +971,6 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                         <CompCard key={t.id} talent={t}
                           draggable={!locked}
                           onDragStart={()=>setDragging(t.id)}
-                          onDragEnd={()=>{setDragging(null);setDragOver(null);}}
                           onCommentClick={()=>{setCommentModalTalent(t);setCommentDraft("");}}
                           onNoteClick={()=>{setNoteModalTalent(t);setNoteDraft(t.note ?? "");}}
                           onExpand={()=>setExpandedTalent(t)}
@@ -2635,12 +2743,20 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
       if (realCampaignId) {
         for (const t of next) {
           const prevT = prev.find(p => p.id === t.id);
-          if (prevT && prevT.stage !== t.stage) {
-            const entry = shim.get(t.id);
-            if (entry) updateSubmissionStage(entry.submissionId, t.stage, {
+          if (!prevT) continue;
+          const entry = shim.get(t.id);
+          if (!entry) continue;
+          if (prevT.stage !== t.stage) {
+            updateSubmissionStage(entry.submissionId, t.stage, {
               reviewedByProfileId: profile?.id,
               declineReason: t.stage === "declined" ? opts?.declineReason : undefined,
             });
+          }
+          // Drag-to-reorder (0090) — a plain position write, no review
+          // metadata attached, so it doesn't fight the stage update
+          // above when both change on the same drop.
+          if (t.boardPosition != null && prevT.boardPosition !== t.boardPosition) {
+            updateSubmissionPosition(entry.submissionId, t.boardPosition);
           }
         }
       }

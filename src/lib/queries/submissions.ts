@@ -57,13 +57,20 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
   const { data: subs, error } = await supabase
     .from("submissions")
     .select(`
-      id, model_id, stage, availability, rate_quoted, notes, brand_score,
+      id, model_id, stage, availability, rate_quoted, notes, brand_score, board_position,
       submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
       submitted_by:profiles!submissions_submitted_by_profile_id_fkey(full_name, email),
       model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url, email, sex)
     `)
-    .eq("campaign_id", campaignId);
+    .eq("campaign_id", campaignId)
+    // Without an explicit order, Postgres doesn't guarantee row order is
+    // stable across queries — harmless for most rows, but the canonical-row
+    // pick below (STAGE_RANK reduce, ties won by whichever row is first)
+    // needs a stable order or a model with two same-stage submissions (one
+    // per submitting agency) can flip which row is "canonical" from one
+    // fetch to the next, silently changing which board_position shows.
+    .order("created_at", { ascending: true });
 
   if (error || !subs || subs.length === 0) return { talent: [], shim: new Map(), duplicates: new Map() };
 
@@ -146,6 +153,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       dress: m?.dress ?? "",
       exp: m?.experience ?? "",
       score: canonical.brand_score ?? 0,
+      boardPosition: canonical.board_position ?? null,
       duplicateFlag: group.length > 1,
     };
   });
@@ -192,6 +200,15 @@ export async function updateSubmissionStage(
 // note needs one so staff can add or change it after the fact.
 export async function updateSubmissionNotes(submissionId: string, notes: string) {
   const { error } = await supabase.from("submissions").update({ notes, updated_at: new Date().toISOString() }).eq("id", submissionId);
+  return { error: error?.message ?? null };
+}
+
+// Drag-to-reorder within a column (0090) — a plain float, not an
+// integer id, since dropping between two existing cards lands on the
+// midpoint of their positions rather than needing to renumber the
+// whole column on every move.
+export async function updateSubmissionPosition(submissionId: string, boardPosition: number) {
+  const { error } = await supabase.from("submissions").update({ board_position: boardPosition }).eq("id", submissionId);
   return { error: error?.message ?? null };
 }
 
