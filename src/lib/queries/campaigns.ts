@@ -62,7 +62,7 @@ export async function fetchPartneredAgencies(brandOrgId: string): Promise<{ id: 
 export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaigns: Campaign[]; realIdShim: Map<number, string> }> {
   const { data: rows, error } = await supabase
     .from("campaigns")
-    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at, territory, has_in_person_casting")
+    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at, territory, has_in_person_casting, finalization_hours, board_finalized_at")
     .eq("brand_org_id", brandOrgId)
     .order("created_at", { ascending: true }); // stable shim ids across reloads — a real deep link depends on this
 
@@ -105,6 +105,9 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
       dueUrgency,
       submissionOpen: formatDateLong(r.submission_open),
       submissionClose: formatDateLong(r.submission_close),
+      submissionCloseISO: r.submission_close ?? undefined,
+      finalizationHours: r.finalization_hours ?? null,
+      boardFinalizedAt: r.board_finalized_at ?? null,
       submitted: c.submitted,
       approved: c.approved,
       booked: c.booked,
@@ -163,6 +166,22 @@ export async function createCampaign(params: {
 // campaign into the existing Archived tab.
 export async function archiveCampaign(campaignId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.from("campaigns").update({ status: "archived" }).eq("id", campaignId);
+  return { error: error?.message ?? null };
+}
+
+// Per-campaign finalization deadline override — null clears it back to
+// "use this brand's org-wide default" (see updateOrgDefaultFinalizationHours).
+export async function updateCampaignFinalizationHours(campaignId: string, hours: number | null): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("campaigns").update({ finalization_hours: hours }).eq("id", campaignId);
+  return { error: error?.message ?? null };
+}
+
+// Runs finalize_campaign_board (0088): auto-declines every remaining
+// Submitted-stage candidate and permanently flips the Model Board into
+// its clean, Booked-only view. Idempotent — safe to call even if the
+// cron sweep already finalized this campaign first.
+export async function finalizeCampaignBoard(campaignId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("finalize_campaign_board", { p_campaign_id: campaignId });
   return { error: error?.message ?? null };
 }
 

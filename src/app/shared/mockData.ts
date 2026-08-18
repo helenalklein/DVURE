@@ -50,6 +50,53 @@ export const MOCK_NOW = new Date("2026-07-21");
 // rows in that stage yet, so it isn't a pipeline column either.
 // (Negotiation/counter-offer states are a deliberate Phase-1 cut, not an oversight.)
 
+// Same 14 local grayscale portraits used below for the mock roster —
+// also handed out deterministically to real submitted models (see
+// submissions.ts) instead of whatever photo actually lives on their
+// profile. Two reasons: it keeps every card on the Model Board in the
+// same consistent editorial black-and-white style regardless of what a
+// given model uploaded, and it means the real fetch never has to swap
+// in a different-looking image after this same array's already showing
+// as the pre-fetch placeholder — nothing to "flash" from or to.
+// Split by presenting gender so a menswear model never lands on a
+// womenswear portrait or vice versa. model_profiles.sex (0086) is the
+// real signal now, agency-set at intake — dress-size convention
+// (letter sizes S/M/L/XL for menswear, numeric for womenswear, the
+// same convention the original SAMPLE_TALENT entries these 14 photos
+// came from already used) is only the fallback for a model whose sex
+// hasn't been recorded yet, or who's non-binary/other, where there's
+// no single right bucket to begin with.
+const MALE_STOCK_PHOTOS: string[] = [photoCalebStone, photoJamesWhitfield, photoAmirHassan];
+const FEMALE_STOCK_PHOTOS: string[] = [
+  photoZaraOkafor, photoAmaraDiallo, photoMilaTran, photoPetraNovak, photoInesFerreira,
+  photoNadiaPetrov, photoSofiaBrandt, photoLenaVogel, photoChiaraRusso, photoMayaChen, photoPriyaSharma,
+];
+
+function isMenswearSize(dress: string | null | undefined): boolean {
+  return !!dress && /^(XXS|XS|S|M|L|XL|XXL|XXXL)$/i.test(dress.trim());
+}
+
+function isMalePresenting(sex: string | null | undefined, dress: string | null | undefined): boolean {
+  if (sex === "male") return true;
+  if (sex === "female") return false;
+  return isMenswearSize(dress); // sex unset, non_binary, or other — fall back to the old guess
+}
+
+// Assigns every model in the list its own portrait within its gender
+// bucket — sorted by modelId (a stable UUID, not fetch order) before
+// handing out photos round-robin, so the same roster always produces
+// the same assignment across reloads, and nobody in the same bucket
+// repeats a photo unless the bucket's actual roster outgrows its 3 or
+// 11-photo pool.
+export function assignStockPhotos(models: { modelId: string; dress: string | null | undefined; sex?: string | null }[]): Map<string, string> {
+  const male = models.filter(m => isMalePresenting(m.sex, m.dress)).sort((a, b) => a.modelId.localeCompare(b.modelId));
+  const female = models.filter(m => !isMalePresenting(m.sex, m.dress)).sort((a, b) => a.modelId.localeCompare(b.modelId));
+  const result = new Map<string, string>();
+  male.forEach((m, i) => result.set(m.modelId, MALE_STOCK_PHOTOS[i % MALE_STOCK_PHOTOS.length]));
+  female.forEach((m, i) => result.set(m.modelId, FEMALE_STOCK_PHOTOS[i % FEMALE_STOCK_PHOTOS.length]));
+  return result;
+}
+
 export const SAMPLE_TALENT: Talent[] = [
   { id:1,  name:"Zara Okafor",     photo:photoZaraOkafor,     agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:["Kindred Talent"], location:"New York, NY",    rate:"$980/day",   stage:"selected",  avail:"available", note:"Strong editorial presence.", height:`5'10"`, bust:`34"`, waist:`24"`, dress:"US 4",  exp:"8 yrs",  score:5 },
   { id:2,  name:"Amara Diallo",    photo:photoAmaraDiallo,    agency:"Vantage Model Mgmt.", motherAgency:"Vantage Model Mgmt.", boutiqueAgencies:["Bloom Agency"], location:"Paris, FR",       rate:"$1,150/day", stage:"selected",  avail:"available", note:"Approved. Initiating booking.", height:`5'11"`, bust:`34"`, waist:`25"`, dress:"US 4",  exp:"10 yrs", score:5 },

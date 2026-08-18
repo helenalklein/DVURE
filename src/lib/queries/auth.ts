@@ -14,7 +14,7 @@ export async function fetchProfile(userId: string) {
 export async function fetchOrgMembership(profileId: string) {
   return supabase
     .from("org_memberships")
-    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at, logo_url, payment_locked, self_described_services, founding_member)")
+    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at, logo_url, payment_locked, self_described_services, founding_member, default_finalization_hours)")
     .eq("profile_id", profileId)
     .maybeSingle();
 }
@@ -24,10 +24,18 @@ export async function updateOrgLogo(orgId: string, dataUri: string | null): Prom
   return { error: error?.message ?? null };
 }
 
+// Org-wide fallback for any campaign that hasn't set its own
+// finalization_hours override (0088) — a brand admin edits this in
+// Settings > Organization.
+export async function updateOrgDefaultFinalizationHours(orgId: string, hours: number): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("organizations").update({ default_finalization_hours: hours }).eq("id", orgId);
+  return { error: error?.message ?? null };
+}
+
 export async function fetchModelProfile(profileId: string) {
   return supabase
     .from("model_profiles")
-    .select("id, full_name, location, photo_url, height, bust, waist, dress, default_day_rate, email")
+    .select("id, full_name, location, photo_url, height, bust, waist, dress, default_day_rate, email, date_of_birth, guardian_name, sex, pronouns")
     .eq("profile_id", profileId)
     .maybeSingle();
 }

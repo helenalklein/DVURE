@@ -18,7 +18,14 @@ export interface Talent {
   // Demo-only headshot for the mock roster (SAMPLE_TALENT) — real
   // submissions have no photo source wired yet, so this is undefined
   // for anything coming from fetchCampaignSubmissions().
+  // For real submissions this is a stock portrait assigned by
+  // assignStockPhotos (mockData.ts), not the model's actual uploaded
+  // photo — see that function's own comment for why.
   photo?: string;
+  // Real column on model_profiles (0086), agency-set at intake. Also
+  // what assignStockPhotos prefers over the dress-size heuristic when
+  // present.
+  sex?: string;
   // agency = who actually submitted this candidate (mother or boutique —
   // whichever agency clicked submit). motherAgency/boutiqueAgency show on
   // the card regardless of who submitted, so the brand always knows the
@@ -100,6 +107,7 @@ export interface RosterModel {
   exclusivity?: RepresentationExclusivity;
   effectiveStartDate?: string;
   effectiveEndDate?: string | null;
+  sex?: string;
 }
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
@@ -168,6 +176,20 @@ export interface Campaign {
   // whether the campaign workspace shows a Casting tab at all — most
   // campaigns never need one.
   hasInPersonCasting?: boolean;
+  // Raw ISO twin of submissionClose (see dueDateISO above) — the
+  // finalization countdown needs a real timestamp to do math against,
+  // not the Date-parseable-but-year-optional display string.
+  submissionCloseISO?: string;
+  // Null means "use this brand's org-wide default" (OrgInfo.
+  // defaultFinalizationHours) rather than a hardcoded fallback here, so
+  // changing the org default retroactively applies to every campaign
+  // that hasn't set its own override.
+  finalizationHours?: number | null;
+  // Set once, permanently, by finalize_campaign_board — either the
+  // manual "Finalize" button or the auto-finalize cron sweep
+  // (submission_close + finalizationHours hours later). Non-null means
+  // the Model Board has switched to its clean, Booked-only permanent view.
+  boardFinalizedAt?: string | null;
 }
 
 // A physical runway show — the shared event. Not owned by any one

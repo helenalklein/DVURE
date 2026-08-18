@@ -167,3 +167,34 @@ export async function endRepresentationRelationship(relationshipId: string, effe
   });
   return { error: error?.message ?? null };
 }
+
+export type ModelSex = "male" | "female" | "non_binary" | "other";
+
+// Separate from add_new_model_to_roster/create_representation_relationship
+// on purpose (0086) — called right after either one, once the model
+// definitely exists, rather than folded into either untracked legacy
+// RPC's own signature.
+export async function setModelIntakeDetails(modelId: string, details: {
+  sex?: ModelSex; guardianName?: string; guardianEmail?: string; guardianRelationship?: string;
+  // Purely informational for a minor — the guardian stays the account
+  // holder and the only one who can sign; this just lets a 16/17 year
+  // old also be reachable directly (e.g. day-of, on set).
+  secondaryEmail?: string; secondaryPhone?: string;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("set_model_intake_details", {
+    p_model_id: modelId,
+    p_sex: details.sex ?? null,
+    p_guardian_name: details.guardianName || null,
+    p_guardian_email: details.guardianEmail || null,
+    p_guardian_relationship: details.guardianRelationship || null,
+    p_secondary_email: details.secondaryEmail || null,
+    p_secondary_phone: details.secondaryPhone || null,
+  });
+  return { error: error?.message ?? null };
+}
+
+// The one field on a model's profile the model sets for themselves.
+export async function updateMyPronouns(pronouns: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("update_my_pronouns", { p_pronouns: pronouns });
+  return { error: error?.message ?? null };
+}

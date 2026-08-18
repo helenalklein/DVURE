@@ -1,5 +1,6 @@
 import { supabase } from "../supabaseClient";
 import { logAuditEvent } from "../audit";
+import { assignStockPhotos } from "../../app/shared/mockData";
 import type { Talent, SubmissionStage } from "../../app/shared/types";
 
 // Talent.id is `number` throughout the app (mock ids 1-14) — rather than
@@ -35,6 +36,7 @@ interface ModelRow {
   experience: string | null;
   photo_url: string | null;
   email: string | null;
+  sex: string | null;
 }
 
 function formatRate(n: number | null): string {
@@ -59,7 +61,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
       submitted_by:profiles!submissions_submitted_by_profile_id_fkey(full_name, email),
-      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url, email)
+      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url, email, sex)
     `)
     .eq("campaign_id", campaignId);
 
@@ -93,6 +95,14 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
     groups.set(s.model_id, [...(groups.get(s.model_id) ?? []), s]);
   }
 
+  // One assignment pass over every model on this board at once — the
+  // only way to guarantee nobody in the same gender bucket repeats a
+  // photo, which a per-model hash (the previous approach) couldn't do.
+  const stockPhotos = assignStockPhotos([...groups.entries()].map(([modelId, group]) => {
+    const row = group[0]?.model_profiles as ModelRow | undefined;
+    return { modelId, dress: row?.dress, sex: row?.sex };
+  }));
+
   const shim: SubmissionShim = new Map();
   const duplicates: DuplicatesShim = new Map();
   const talent: Talent[] = [...groups.entries()].map(([modelId, group], i) => {
@@ -117,7 +127,8 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
     return {
       id,
       name: m?.full_name ?? "Unknown",
-      photo: m?.photo_url ?? undefined,
+      photo: stockPhotos.get(modelId),
+      sex: m?.sex ?? undefined,
       agency: canonical.submitting_agency?.name ?? "Independent",
       motherAgency: motherByModel.get(modelId) ?? "",
       boutiqueAgencies: boutiqueByModel.get(modelId) ?? [],
@@ -174,6 +185,14 @@ export async function updateSubmissionStage(
   }
 
   return { error };
+}
+
+// notes already existed on submissions (set once at submit time, read
+// back into Talent.note) but had no update path — the card's sticky
+// note needs one so staff can add or change it after the fact.
+export async function updateSubmissionNotes(submissionId: string, notes: string) {
+  const { error } = await supabase.from("submissions").update({ notes, updated_at: new Date().toISOString() }).eq("id", submissionId);
+  return { error: error?.message ?? null };
 }
 
 // Thin wrapper over the submit_talent RPC — replaces the old raw insert

@@ -28,6 +28,11 @@ export interface OrgInfo {
   // later price increase. Never true for brands (brands don't pay a
   // subscription at all, see accessGate.ts).
   foundingMember: boolean;
+  // Fallback finalization window (hours after submission_close) for any
+  // campaign that hasn't set its own override — see Campaign.
+  // finalizationHours (0088). Brand-only setting, edited in Settings >
+  // Organization; defaults to 48 server-side.
+  defaultFinalizationHours: number;
 }
 
 export interface ModelAgencyInfo {
@@ -51,6 +56,10 @@ export interface ModelInfo {
   dress: string | null;
   dayRate: number | null;
   email: string | null;
+  dateOfBirth: string | null;
+  guardianName: string | null;
+  sex: string | null;
+  pronouns: string | null;
 }
 
 export interface CrewInfo {
@@ -115,7 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: modelProfile.id, fullName: modelProfile.full_name, location: modelProfile.location,
           photoUrl: modelProfile.photo_url, height: modelProfile.height, bust: modelProfile.bust,
           waist: modelProfile.waist, dress: modelProfile.dress, dayRate: modelProfile.default_day_rate,
-          email: modelProfile.email,
+          email: modelProfile.email, dateOfBirth: modelProfile.date_of_birth, guardianName: modelProfile.guardian_name,
+          sex: modelProfile.sex, pronouns: modelProfile.pronouns,
         },
         modelAgencies: (rels ?? []).map((r: any) => ({
           orgId: r.organizations.id,
@@ -161,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         paymentLocked: !!orgRow.payment_locked,
         selfDescribedServices: orgRow.self_described_services,
         foundingMember: !!orgRow.founding_member,
+        defaultFinalizationHours: orgRow.default_finalization_hours ?? 48,
       },
     });
   }, []);
