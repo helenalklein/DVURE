@@ -6,15 +6,16 @@ import { useAuth } from "../shared/auth";
 import { fetchPendingConfirmationsForModel, fetchInvoicesForModel, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
 import { fetchBookingsForModel, type ModelBooking } from "../../lib/queries/bookings";
 import { fetchContractsForModel, signContractAsModel, type ModelContract, type ContractStatus } from "../../lib/queries/contracts";
+import { updateMyPronouns } from "../../lib/queries/roster";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 import { CompCard } from "../shared/CompCard";
 import type { Talent } from "../shared/types";
 
-type View = "bookings" | "availability" | "contracts" | "earnings" | "profile" | "messages";
+type View = "bookings" | "schedule" | "contracts" | "earnings" | "profile" | "messages";
 
 const NAV: { id: View; label: string; Icon: typeof Briefcase }[] = [
   { id:"bookings",     label:"My Bookings",   Icon:Briefcase  },
-  { id:"availability", label:"Availability",  Icon:Calendar   },
+  { id:"schedule",     label:"Schedule",      Icon:Calendar   },
   { id:"contracts",    label:"Contracts",     Icon:FileCheck  },
   { id:"earnings",     label:"Earnings",      Icon:CreditCard },
   { id:"messages",     label:"Project Updates", Icon:MessageSquare  },
@@ -130,7 +131,7 @@ function parseISODate(s: string) {
   return new Date(y, m - 1, d);
 }
 
-function AvailabilityView() {
+function ScheduleView() {
   const { modelProfile } = useAuth();
   const [bookings, setBookings] = useState<ModelBooking[] | null>(null);
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
@@ -155,7 +156,10 @@ function AvailabilityView() {
   while (cells.length % 7 !== 0 || cells.length < 42) cells.push({ date: new Date(year, month + 1, cells.length - startWeekday - daysInMonth + 1), inMonth: false });
 
   const today = new Date();
-  const upcoming = bookings.filter(b => parseISODate(b.shootDate) >= new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+  const upcoming = bookings
+    .filter(b => parseISODate(b.shootDate) >= new Date(today.getFullYear(), today.getMonth(), today.getDate()))
+    .sort((a, b) => parseISODate(a.shootDate).getTime() - parseISODate(b.shootDate).getTime());
+  const nextShoot = upcoming[0] ?? null;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -199,6 +203,30 @@ function AvailabilityView() {
             );
           })}
         </div>
+      </div>
+
+      <div className="glass-subtle border rounded-md p-4">
+        <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Next Shoot</div>
+        {nextShoot ? (
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold">{nextShoot.campaignName}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {nextShoot.brandName}{nextShoot.agencyName ? ` · via ${nextShoot.agencyName}` : ""}
+              </div>
+              <div className="text-xs text-muted-foreground mt-2 font-mono">
+                {parseISODate(nextShoot.shootDate).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                {" · "}{nextShoot.days} day{nextShoot.days>1?"s":""}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Day rate</div>
+              <div className="text-sm font-mono font-semibold">${nextShoot.dayRate.toLocaleString()}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">No upcoming shoots on the books.</div>
+        )}
       </div>
     </div>
   );
@@ -271,13 +299,42 @@ const CONTRACT_STATUS_BADGE: Record<ContractStatus, { label: string; variant: "d
 // DocuSign/email) — that one never touches model_signature_name, so a
 // contract executed that way shows "Executed" here with no claim that
 // the model signed it in-app.
+// A typed name that doesn't match the model's own profile name is
+// almost always a typo, not an intentional legal name change — this is
+// a real e-signature, not a free-text field, so it's worth a hard stop
+// rather than trusting whatever got typed. Whitespace/case-insensitive
+// so "elena marsh" or "Elena  Marsh" still pass.
+function normalizeName(s: string) {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// ToS 7.17 — a minor's contract is signed by the identified guardian,
+// not the minor. is_model_minor (0086) is the real, server-enforced
+// version of this same check; this is just the client-side mirror so
+// the UI can ask for the right name up front instead of failing after
+// a submit.
+function isMinor(dateOfBirth: string | null | undefined): boolean {
+  if (!dateOfBirth) return false;
+  const eighteenYearsAgo = new Date();
+  eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+  return new Date(dateOfBirth) > eighteenYearsAgo;
+}
+
 function ContractSignBox({ contract, onSigned }: { contract: ModelContract; onSigned: () => void }) {
+  const { modelProfile } = useAuth();
   const [typedName, setTypedName] = useState("");
   const [signing, setSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const minor = isMinor(modelProfile?.dateOfBirth);
+  const expectedName = minor ? modelProfile?.guardianName : modelProfile?.fullName;
+
   async function submit() {
-    if (!typedName.trim()) { setError("Type your full legal name to sign."); return; }
+    if (!typedName.trim()) { setError(`Type ${minor ? "the parent/guardian's" : "your"} full legal name to sign.`); return; }
+    if (expectedName && normalizeName(typedName) !== normalizeName(expectedName)) {
+      setError(`That doesn't match ${minor ? "the parent/guardian on file" : "your profile name"} (${expectedName}) — check the spelling and try again.`);
+      return;
+    }
     setSigning(true);
     setError(null);
     const { error } = await signContractAsModel(contract.id, typedName.trim());
@@ -286,11 +343,23 @@ function ContractSignBox({ contract, onSigned }: { contract: ModelContract; onSi
     onSigned();
   }
 
+  if (minor && !modelProfile?.guardianName) {
+    return (
+      <div className="mt-3 pt-3 border-t border-border">
+        <div className="text-xs text-red-500">No parent or guardian is on file yet — your agency needs to add one before this contract can be signed.</div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
-      <div className="text-xs text-muted-foreground">Type your full legal name to sign this contract electronically.</div>
+      <div className="text-xs text-muted-foreground">
+        {minor
+          ? "This model is a minor — type the parent or guardian's full legal name to sign this contract electronically."
+          : "Type your full legal name to sign this contract electronically."}
+      </div>
       <div className="flex items-center gap-2">
-        <input value={typedName} onChange={e=>setTypedName(e.target.value)} placeholder="Full legal name"
+        <input value={typedName} onChange={e=>setTypedName(e.target.value)} placeholder={minor ? "Parent/guardian's full legal name" : "Full legal name"}
           className="flex-1 border border-border rounded-md px-3 py-1.5 text-base bg-input-background focus:outline-none focus:border-foreground"
           style={{ fontFamily: "cursive" }}/>
         <Btn size="sm" onClick={submit} disabled={signing} icon={<PenLine size={13}/>}>{signing ? "Signing…" : "Sign"}</Btn>
@@ -355,6 +424,47 @@ function ContractsView() {
 // fields (stage, score, duplicate flags) are filled with neutral
 // values CompCard doesn't render when there's no duplicateBadge/
 // actions/etc. passed in.
+const SEX_LABEL: Record<string, string> = { male: "Male", female: "Female", non_binary: "Non-binary", other: "Other" };
+const PRONOUN_PRESETS = ["She/her", "He/him", "They/them"];
+
+// The one field on this whole profile the model sets for themselves —
+// sex and everything else here comes from the agency at intake.
+function PronounsEditor() {
+  const { modelProfile, refreshIdentity } = useAuth();
+  const current = modelProfile?.pronouns ?? "";
+  const isCustom = !!current && !PRONOUN_PRESETS.includes(current);
+  const [selection, setSelection] = useState(isCustom ? "Other" : current);
+  const [custom, setCustom] = useState(isCustom ? current : "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save(value: string) {
+    setSaving(true);
+    setSaved(false);
+    const { error } = await updateMyPronouns(value);
+    setSaving(false);
+    if (!error) { setSaved(true); await refreshIdentity(); }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <select value={selection}
+        onChange={e=>{ const v = e.target.value; setSelection(v); if (v !== "Other") save(v); }}
+        className="border border-border rounded-md px-2 py-1.5 text-xs bg-input-background focus:outline-none focus:border-foreground cursor-pointer">
+        <option value="">Not set</option>
+        {PRONOUN_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+        <option value="Other">Other…</option>
+      </select>
+      {selection === "Other" && (
+        <input value={custom} onChange={e=>setCustom(e.target.value)} onBlur={()=>custom.trim() && save(custom.trim())}
+          placeholder="Type your own" className="border border-border rounded-md px-2 py-1.5 text-xs bg-input-background focus:outline-none focus:border-foreground w-32"/>
+      )}
+      {saving && <span className="text-[10px] text-muted-foreground">Saving…</span>}
+      {saved && !saving && <span className="text-[10px] text-muted-foreground">Saved</span>}
+    </div>
+  );
+}
+
 function MyCompCardView() {
   const { modelProfile, modelAgencies } = useAuth();
   const motherAgency = modelAgencies?.find(a => a.isMotherAgency)?.name ?? modelAgencies?.[0]?.name ?? "";
@@ -378,6 +488,16 @@ function MyCompCardView() {
     <div className="max-w-xs">
       <div className="text-xs text-muted-foreground mb-3">This is what brands and agencies see when you're submitted — hover the card and click the flip icon to see the back.</div>
       <CompCard talent={talent}/>
+      <div className="mt-4 space-y-2.5 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Sex</span>
+          <span className="font-medium">{modelProfile.sex ? SEX_LABEL[modelProfile.sex] ?? modelProfile.sex : "Not set — ask your agency"}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Pronouns</span>
+          <PronounsEditor/>
+        </div>
+      </div>
     </div>
   );
 }
@@ -437,7 +557,7 @@ export default function ModelApp({ onLogout }: { onLogout: () => void }) {
           <TopBar title={NAV.find(n=>n.id===view)?.label ?? ""} sub={`${name} · Model`} onMenuClick={()=>setMobileNavOpen(true)}/>
           <div className="flex-1 overflow-auto p-4 md:p-6">
             {view === "bookings" && <BookingsView/>}
-            {view === "availability" && <AvailabilityView/>}
+            {view === "schedule" && <ScheduleView/>}
             {view === "contracts" && <ContractsView/>}
             {view === "earnings" && <EarningsView/>}
             {view === "messages" && <MessagesView/>}

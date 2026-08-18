@@ -43,7 +43,7 @@ export default function CrewMoodboardView({ campaignId }: { campaignId: string }
                 {stageCards.map(c => (
                   <div key={c.modelId} className="glass-subtle rounded-md border border-border overflow-hidden">
                     <div className="relative">
-                      {c.photo ? <img src={c.photo} alt="" className="w-full h-32 object-cover"/> : <XBox className="w-full h-32"/>}
+                      {c.photo ? <img src={c.photo} alt="" className="w-full h-32 object-cover grayscale"/> : <XBox className="w-full h-32"/>}
                     </div>
                     <div className="p-2.5 space-y-0.5">
                       <div className="text-xs font-semibold leading-tight truncate flex items-center gap-1">

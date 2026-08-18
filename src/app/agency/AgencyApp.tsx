@@ -7,7 +7,7 @@ import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
 import {
   fetchAgencyRoster, checkPossibleModelDuplicate, addNewModelToRoster, linkModelToExistingRoster,
-  type RelationshipTerms,
+  setModelIntakeDetails, type RelationshipTerms, type ModelSex,
 } from "../../lib/queries/roster";
 import { createModelDocument, uploadModelDocumentFile, type DocumentCategory } from "../../lib/queries/documents";
 import { findCampaignIdByName } from "../../lib/queries/campaigns";
@@ -521,6 +521,13 @@ const CURATED_TERRITORIES = [
   "New York", "Los Angeles", "Miami", "Chicago", "Paris", "Milan", "London", "Tokyo", "Shanghai",
   "United States", "Europe", "North America", "Worldwide",
 ];
+const SEX_OPTIONS: { value: ModelSex | ""; label: string }[] = [
+  { value: "", label: "Select…" },
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "non_binary", label: "Non-binary" },
+  { value: "other", label: "Other" },
+];
 const EXCLUSIVITY_OPTIONS: { value: RepresentationExclusivity; label: string }[] = [
   { value: "not_specified", label: "Not specified" },
   { value: "exclusive", label: "Exclusive" },
@@ -556,6 +563,11 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
   const [rate, setRate] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phone, setPhone] = useState("");
+  const [sex, setSex] = useState<ModelSex | "">("");
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianRelationship, setGuardianRelationship] = useState("");
+  const [secondaryEmail, setSecondaryEmail] = useState("");
+  const [secondaryPhone, setSecondaryPhone] = useState("");
 
   const [checkingDup, setCheckingDup] = useState(false);
   const [dupConfidence, setDupConfidence] = useState<"high" | "low" | null>(null);
@@ -602,8 +614,13 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
     setTerritoryInput("");
   }
 
+  // ToS 7.17 — a minor needs an identified parent/guardian on file
+  // before their profile can go further; computed from DOB rather than
+  // asked separately, so there's nothing for the agency to get wrong.
+  const isMinorInput = !!dateOfBirth && new Date(dateOfBirth) > new Date(new Date().setFullYear(new Date().getFullYear() - 18));
+
   const allAttested = attestAuthority && attestUploadRights && attestAccurate && attestWillUpdate;
-  const step1Valid = !!name && !!email && (dupConfidence !== "high" || dupResolved);
+  const step1Valid = !!name && !!email && (dupConfidence !== "high" || dupResolved) && (!isMinorInput || !!guardianName.trim());
   const step2Valid = !!representationType && territories.length > 0;
   const step3Valid = !file || allAttested; // document is optional, but attestations are required if one is attached
 
@@ -635,6 +652,17 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
       modelId = r.modelId;
       relationshipId = r.relationshipId;
       overlapWarning = r.overlapWarning;
+    }
+
+    if (modelId && (sex || (isMinorInput && guardianName.trim()))) {
+      await setModelIntakeDetails(modelId, {
+        sex: sex || undefined,
+        guardianName: isMinorInput ? guardianName.trim() : undefined,
+        guardianEmail: isMinorInput ? email.trim() || undefined : undefined,
+        guardianRelationship: isMinorInput ? guardianRelationship.trim() || undefined : undefined,
+        secondaryEmail: isMinorInput ? secondaryEmail.trim() || undefined : undefined,
+        secondaryPhone: isMinorInput ? secondaryPhone.trim() || undefined : undefined,
+      });
     }
 
     if (file && modelId) {
@@ -698,14 +726,36 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
       {step === 1 && (
         <div className="p-5 space-y-3">
           <TextInput label="Full Name" placeholder="e.g. Nadia Petrov" value={name} onChange={e=>setName(e.target.value)}/>
-          <TextInput label="Email" placeholder="model@example.com" type="email" value={email}
+          <TextInput label={isMinorInput ? "Guardian's Email" : "Email"} placeholder={isMinorInput ? "parent@example.com" : "model@example.com"} type="email" value={email}
             onChange={e=>setEmail(e.target.value)} onBlur={runDuplicateCheck}/>
           <div className="grid grid-cols-2 gap-3">
-            <TextInput label="Phone" placeholder="Optional" value={phone} onChange={e=>setPhone(e.target.value)} onBlur={runDuplicateCheck}/>
+            <TextInput label={isMinorInput ? "Guardian's Phone" : "Phone"} placeholder="Optional" value={phone} onChange={e=>setPhone(e.target.value)} onBlur={runDuplicateCheck}/>
             <TextInput label="Date of Birth" placeholder="YYYY-MM-DD" type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} onBlur={runDuplicateCheck}/>
           </div>
+          {isMinorInput && (
+            <div className="text-[10px] text-muted-foreground -mt-1.5">This model is a minor — their DVURE account and invite go to the guardian's email above, not a separate child email.</div>
+          )}
           <TextInput label="Location" placeholder="e.g. New York, NY" value={location} onChange={e=>setLocation(e.target.value)}/>
           <TextInput label="Day Rate" placeholder="e.g. $1,000/day" value={rate} onChange={e=>setRate(e.target.value)}/>
+          <FSelect label="Sex" options={SEX_OPTIONS.map(o=>o.label)}
+            value={SEX_OPTIONS.find(o=>o.value===sex)?.label}
+            onChange={v=>setSex((SEX_OPTIONS.find(o=>o.label===v)?.value ?? "") as ModelSex | "")}/>
+
+          {isMinorInput && (
+            <div className="border border-border rounded-md p-3 space-y-2.5 bg-secondary/30">
+              <div className="text-xs font-medium">Parent/Guardian (required — this model is a minor)</div>
+              <div className="text-[10px] text-muted-foreground">The account above (email/phone) belongs to the guardian — this is their name and relationship to the model, needed separately since it has to match what they type to sign a contract.</div>
+              <TextInput label="Guardian Full Name" placeholder="e.g. Maria Petrov" value={guardianName} onChange={e=>setGuardianName(e.target.value)}/>
+              <TextInput label="Relationship" placeholder="e.g. Mother" value={guardianRelationship} onChange={e=>setGuardianRelationship(e.target.value)}/>
+              <div className="pt-1 border-t border-border">
+                <div className="text-[10px] text-muted-foreground mb-2">Optional — a 16/17 year old can also be reachable directly (e.g. on set). The guardian stays the account holder and still signs everything; this doesn't change that.</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <TextInput label="Model's Own Email" placeholder="Optional" type="email" value={secondaryEmail} onChange={e=>setSecondaryEmail(e.target.value)}/>
+                  <TextInput label="Model's Own Phone" placeholder="Optional" value={secondaryPhone} onChange={e=>setSecondaryPhone(e.target.value)}/>
+                </div>
+              </div>
+            </div>
+          )}
 
           {checkingDup && <div className="text-[10px] text-muted-foreground font-mono">Checking for an existing profile…</div>}
 
