@@ -1,7 +1,7 @@
 # DVURE Pilot Services Agreement
 
 **Effective Date:** 08/09/2026
-**Last Updated Date:** 08/15/2026
+**Last Updated Date:** 08/17/2026
 
 This Pilot Services Agreement ("Agreement") is entered into between **DVURE** ("Platform," "we," "us") and the organization identified on the applicable order form or pilot invitation ("Customer," "you"), governing Customer's participation in DVURE's pilot program and use of the DVURE platform to source, cast, book, and pay talent, agencies, and production personnel in connection with Customer's campaigns.
 
@@ -51,9 +51,7 @@ A party may disclose Confidential Information when required by law, regulation, 
 3.5 Platform Security. DVURE will use reasonable administrative, technical, and organizational measures designed to protect information maintained through the Platform. No electronic system can be guaranteed to be completely secure, and DVURE does not guarantee that unauthorized access, disclosure, or loss will never occur.
 3.6 Survival. The obligations contained in this Article shall continue after termination of a User's account or these Terms for so long as the applicable information remains confidential, except where otherwise required by applicable law.
 
-## 4. Confidentiality
-
-4. PAYMENT TERMS
+## 4. Payment Terms
 
 4.1 Invoices and Payment Obligations. DVURE may provide tools that allow Users to create, issue, receive, track, and manage invoices and other payment-related records in connection with Projects and transactions conducted through or facilitated by the Platform.
 Users are solely responsible for the accuracy of invoice information,
@@ -561,6 +559,26 @@ including actions taken by individuals whom the User authorizes to
 access or use the Account.
 An organization is responsible for managing its own authorized users
 and permissions.
+7.17 MINOR MODELS. During the Pilot, DVURE may permit Agency Users located in and
+operating within the Pilot Territory to create and manage profiles
+for Minor Models, subject to any requirements established by DVURE.
+A Minor Model may not create or maintain an independent DVURE Account
+or independently accept bookings, execute agreements, control payment
+instructions, or otherwise act as an authorized User of the Platform.
+A parent or legal guardian must be identified and approved as the
+authorized adult responsible for the Minor Model's participation in
+the Platform.
+Where DVURE provides for electronic execution of an agreement,
+consent, release, booking, or other document concerning a Minor Model,
+the applicable parent or legal guardian must execute such document on
+the Minor Model's behalf where required.
+The Agency and other Users involved in a Project remain responsible
+for determining and satisfying all laws, permits, consents, working
+hour restrictions, payment requirements, trust requirements, and other
+requirements applicable to the engagement of a Minor Model.
+DVURE does not represent that the use of a Minor Model through the
+Platform satisfies all legal requirements applicable to the particular
+Project, jurisdiction, User, or engagement.
 
 ## 8. PRIVACY AND DATA
 
@@ -1124,6 +1142,6 @@ DVURE INC.
 Email: support@dvure.com
 Address: 12090 N Thornydale Road, Suite 110, #320
 13.18 Effective Date.
-These Pilot Terms of Service are effective as of [DATE] and apply to
+These Pilot Terms of Service are effective as of 08/09/2026 and apply to
 all Users who accept, access, or use the Platform on or after that
 date.
