@@ -16,11 +16,11 @@ import { CompCard } from "../shared/CompCard";
 import { fetchCampaignComments, postCampaignComment, type CampaignComment } from "../../lib/queries/campaignComments";
 import { getAccessGate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
-import { SAMPLE_TALENT, PIPELINE_STAGES, DECLINE_REASONS, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
+import { SAMPLE_TALENT, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
-import { updateOrgLogo } from "../../lib/queries/auth";
-import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign } from "../../lib/queries/campaigns";
-import { fetchCampaignSubmissions, updateSubmissionStage, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
+import { updateOrgLogo, updateOrgDefaultFinalizationHours } from "../../lib/queries/auth";
+import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign, updateCampaignFinalizationHours, finalizeCampaignBoard } from "../../lib/queries/campaigns";
+import { fetchCampaignSubmissions, updateSubmissionStage, updateSubmissionNotes, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, PLATFORM_FEE_PCT_ACH, PLATFORM_FEE_PCT_CARD } from "../../lib/queries/bookings";
 import { recordInvoicePayment, confirmInvoicePayment, voidInvoicePayment, fetchInvoicesForBrand, fetchInvoiceById, type Invoice, type InvoicePayment, type InvoiceStatus, type ManualPaymentMethod, type PaymentMethod, type RecordInvoicePaymentParams } from "../../lib/queries/payments";
@@ -56,13 +56,21 @@ const PARTNERED_AGENCIES = ["Vantage Model Management","Meridian Models","Solenn
 
 // ─── CONTRACT MODAL ────────────────────────────────────────────────────────
 
-function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: () => void; onLater: () => void }) {
+// Usage-rights term for the resulting images — separate from the shoot
+// date itself (a booking might be one day; the brand's right to use the
+// photos runs longer). Editable here since it's the one term a brand
+// actually needs to set per deal, not a fixed default masquerading as
+// one — the old copy claimed "Edit" with nothing on the screen to edit.
+const CONTRACT_DURATIONS = ["30 days", "90 days", "6 months", "1 year", "2 years", "In perpetuity"];
+
+function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: (duration: string) => void; onLater: (duration: string) => void }) {
+  const [duration, setDuration] = useState("1 year");
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="glass-strong border rounded-md w-full max-w-md mx-4 overflow-hidden shadow-xl">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="text-heading text-sm">Contract Generated</div>
-          <button onClick={onLater} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+          <button onClick={()=>onLater(duration)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
         </div>
         <div className="p-5 space-y-4">
           <div className="bg-secondary border border-border rounded-md p-4">
@@ -73,19 +81,26 @@ function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: ()
                 <div className="text-xs text-muted-foreground">CF-2025-{900 + talent.id} · {talent.agency}</div>
               </div>
             </div>
-            {[["Day Rate", talent.rate],["Agency Commission", talent.agency==="Independent" ? "N/A — independent" : "20%"],["Territory","United States"],["Duration","1 year"]].map(([k,v])=>(
-              <div key={k} className="flex justify-between text-xs py-1 border-b border-border last:border-0">
+            {[["Day Rate", talent.rate],["Agency Commission", talent.agency==="Independent" ? "N/A — independent" : "20%"],["Territory","United States"]].map(([k,v])=>(
+              <div key={k} className="flex justify-between items-center text-xs py-1 border-b border-border">
                 <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
               </div>
             ))}
+            <div className="flex justify-between items-center text-xs py-1">
+              <span className="text-muted-foreground">Usage Rights</span>
+              <select value={duration} onChange={e=>setDuration(e.target.value)}
+                className="bg-transparent text-right font-medium focus:outline-none cursor-pointer">
+                {CONTRACT_DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
           </div>
           <div className="text-xs text-muted-foreground leading-relaxed">
-            A contract has been automatically generated based on {talent.name}'s booking rate. Review and edit before sending to {talent.agency} for signature.
+            A contract has been generated based on {talent.name}'s booking rate.
           </div>
         </div>
         <div className="px-5 pb-5 flex gap-2">
-          <Btn variant="primary" icon={<Edit3 size={13}/>} onClick={onSend}>Edit & Send Contract</Btn>
-          <Btn variant="outline" onClick={onLater}>Send Later</Btn>
+          <Btn variant="primary" onClick={()=>onSend(duration)}>Send Contract</Btn>
+          <Btn variant="outline" onClick={()=>onLater(duration)}>Review Later</Btn>
         </div>
       </div>
     </div>
@@ -142,6 +157,7 @@ function BrandSidebar({ active, onNav, onLogout }: {
   const navBadge: Partial<Record<GlobalView, number>> = {
     "payments-global":  OVERDUE_ACTIONS.filter(a=>a.type==="Payment").length,
     "contracts-global": OVERDUE_ACTIONS.filter(a=>a.type==="Contract").length,
+    "messaging":        INBOX_MSGS.filter(m=>!m.read).length,
   };
   return (
     <MobileNavDrawer open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
@@ -383,11 +399,11 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         })}
       </nav>
       <div className="px-3 py-3 border-t border-border">
-        <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 px-1">Pipeline</div>
-        {PIPELINE_STAGES.map(s => (
-          <div key={s.id} className="flex items-center justify-between px-1 py-0.5">
-            <span className="text-xs text-muted-foreground">{s.label}</span>
-            <span className="text-xs font-mono font-semibold">{counts[s.id] ?? 0}</span>
+        <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 px-1">Model Board</div>
+        {[["Submitted",counts.submitted],["Hold",counts.approved],["Booked",counts.booked]].map(([label,v]) => (
+          <div key={label as string} className="flex items-center justify-between px-1 py-0.5">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-xs font-mono font-semibold">{v}</span>
           </div>
         ))}
       </div>
@@ -404,27 +420,144 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
 
 // ─── SUBMISSIONS (KANBAN: Submitted -> Shortlisted -> Selected -> Booked) ──
 
-function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded, duplicates }: {
+// Just three real states now, not the old four-stage pipeline: Submitted
+// (everyone sent in, unreviewed), Hold (shortlisted+selected merged —
+// "essentially approved," dragging a card in triggers the existing
+// approve-generates-a-contract flow), and Booked (a real booking exists).
+// Reduced to one screen, drag-and-flip only — no bulk-select tooling.
+// Declining is a single deliberate action (Decline All on Submitted),
+// not a per-card button, so a stray click can't quietly reject someone.
+
+type BoardColId = "submitted" | "hold" | "booked";
+const HOLD_STAGES: SubmissionStage[] = ["shortlisted", "selected"];
+
+// Placeholder-only botanical line art for the expand popup's photo
+// tiles — standing in for a model's real portfolio shots (not wired up
+// yet) purely so the "back of a comp card" layout itself is visible.
+// Grayscale-toned to match every real photo elsewhere in the app.
+const FLOWER_BG = ["#EFEAE1", "#E7E0D2", "#F0EBE0", "#E4DDCF", "#EDE7DA"];
+function FlowerArt({ variant, className = "" }: { variant: number; className?: string }) {
+  const v = ((variant % 5) + 5) % 5;
+  return (
+    <div className={cx("relative overflow-hidden flex items-center justify-center", className)} style={{ background: FLOWER_BG[variant % FLOWER_BG.length] }}>
+      <svg viewBox="0 0 100 100" className="w-[72%] h-[72%] opacity-80" style={{ filter: "grayscale(1)" }}>
+        <g fill="none" stroke="#6b6558" strokeWidth="1.5">
+          {v === 0 && (<>
+            <circle cx="50" cy="42" r="5.5" fill="#6b6558" stroke="none"/>
+            {[0,72,144,216,288].map(a=>(<ellipse key={a} cx="50" cy="24" rx="8" ry="15" transform={`rotate(${a} 50 42)`}/>))}
+            <path d="M50 58 L50 90" strokeWidth="2"/>
+            <path d="M50 72 Q40 70 36 80" strokeWidth="1.4"/>
+          </>)}
+          {v === 1 && (<>
+            <circle cx="50" cy="42" r="4"/>
+            <circle cx="50" cy="42" r="10" opacity="0.7"/>
+            <circle cx="50" cy="42" r="16" opacity="0.45"/>
+            <path d="M50 58 L50 90" strokeWidth="2"/>
+            <path d="M50 74 Q60 72 64 82" strokeWidth="1.4"/>
+          </>)}
+          {v === 2 && (<>
+            <path d="M50 90 Q46 58 54 30" strokeWidth="1.6"/>
+            {[[54,30],[47,44],[58,54],[44,64],[56,74]].map(([cx,cy],i)=>(
+              <g key={i}>
+                {[0,60,120,180,240,300].map(a=>(<ellipse key={a} cx={cx} cy={cy-4.5} rx="3" ry="5.5" transform={`rotate(${a} ${cx} ${cy})`}/>))}
+              </g>
+            ))}
+          </>)}
+          {v === 3 && (<>
+            <path d="M50 90 L50 48"/>
+            <path d="M50 48 Q40 48 38 34 Q44 40 50 36 Q56 40 62 34 Q60 48 50 48 Z"/>
+            <path d="M50 74 Q38 72 34 82" strokeWidth="1.3"/>
+            <path d="M50 80 Q62 78 66 88" strokeWidth="1.3"/>
+          </>)}
+          {v === 4 && (<>
+            <path d="M50 90 Q52 60 46 28" strokeWidth="1.6"/>
+            <path d="M48 70 Q30 66 24 76 Q40 78 48 70 Z"/>
+            <path d="M46 52 Q64 48 70 58 Q52 60 46 52 Z"/>
+            <path d="M45 34 Q32 26 34 16 Q46 22 45 34 Z"/>
+            <path d="M46 28 Q58 22 58 12 Q47 16 46 28 Z"/>
+          </>)}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// "2d 4h", "6h 12m", "38m" — coarser than that (seconds) doesn't matter
+// for a finalization window measured in hours/days, and finer than that
+// (whole days, like dueLabelAndUrgency in campaigns.ts) is too blunt to
+// show a countdown against a default-48h deadline.
+function formatCountdown(targetMs: number, nowMs: number): string {
+  const ms = targetMs - nowMs;
+  if (ms <= 0) return "0m";
+  const totalMinutes = Math.floor(ms / 60_000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded, duplicates, shim, campaign, orgDefaultFinalizationHours, onFinalized }: {
   talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[], opts?: { declineReason?: string }) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
-  realCampaignId?: string | null; onIndependentAdded?: () => void; duplicates?: DuplicatesShim;
+  realCampaignId?: string | null; onIndependentAdded?: () => void; duplicates?: DuplicatesShim; shim: SubmissionShim;
+  // campaign is undefined only for the mock/demo board (no realCampaignId)
+  // — the finalization countdown and Finalize button simply don't render
+  // in that case, same as every other real-data-only affordance here.
+  campaign?: Campaign; orgDefaultFinalizationHours?: number; onFinalized?: () => Promise<unknown>;
 }) {
-  const duplicatesShim: DuplicatesShim = duplicates ?? new Map();
-  const [selected, setSelected] = useState<number[]>([]);
   const [showIndependentModal, setShowIndependentModal] = useState(false);
+  // Booked is drag-locked (see COLUMNS/onDrop below) — the only way a
+  // card gets there is a real fully_executed contract, checked here
+  // against the model's own real modelId via the same shim ContractsTab
+  // uses. Fetched on mount; the model signs from their own session, so
+  // this can go stale until the brand reopens/reloads the board — same
+  // one-shot-fetch posture as the rest of this screen (comments, etc).
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  useEffect(() => {
+    if (!realCampaignId) { setContracts([]); return; }
+    let active = true;
+    fetchCampaignContracts(realCampaignId).then(c => { if (active) setContracts(c); });
+    return () => { active = false; };
+  }, [realCampaignId]);
+  const signedModelIds = new Set(contracts.filter(c => c.status === "fully_executed").map(c => c.modelId));
+  function isSigned(talentId: number) {
+    const modelId = shim.get(talentId)?.modelId;
+    return !!modelId && signedModelIds.has(modelId);
+  }
+  // The Hold banner — "where's their contract at" — draft means
+  // generated but not sent yet (brand chose "Review Later"),
+  // awaiting_signature means it's in the model's hands now.
+  function holdBanner(talentId: number): string | undefined {
+    const modelId = shim.get(talentId)?.modelId;
+    const contract = modelId ? contracts.find(c => c.modelId === modelId) : undefined;
+    if (!contract) return undefined;
+    if (contract.status === "draft") return "Contract pending send";
+    if (contract.status === "awaiting_signature") return "Contract sent, pending signature";
+    return undefined;
+  }
   const [dragging, setDragging] = useState<number|null>(null);
-  const [dragOver, setDragOver] = useState<SubmissionStage|null>(null);
+  const [dragOver, setDragOver] = useState<BoardColId|null>(null);
   const [toast, setToast] = useState<{ msg: string; undo: () => void }|null>(null);
   const [showRejected, setShowRejected] = useState(false);
-  // "Board" is the dense, all-at-once wall view — every card in the
-  // pipeline at once, no column grouping, closest to a real physical
-  // casting/mood board. "Pipeline" is the existing drag-between-stages
-  // kanban. Same underlying talent list either way, just a different lens.
-  const [view, setView] = useState<"pipeline" | "board">("pipeline");
   const { profile } = useAuth();
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [projectComments, setProjectComments] = useState<CampaignComment[]>([]);
   const [commentInput, setCommentInput] = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  // "Unread" is local-only (no read-state column on campaign_comments) —
+  // a per-campaign last-seen timestamp in localStorage, refreshed every
+  // time the panel opens. Good enough for "does this need a look",
+  // not meant to sync across devices.
+  const lastSeenKey = realCampaignId ? `dvure_comments_seen_${realCampaignId}` : null;
+  const [lastSeenComments, setLastSeenComments] = useState<number>(() => (lastSeenKey && Number(localStorage.getItem(lastSeenKey))) || 0);
+  const unreadComments = projectComments.filter(c => new Date(c.createdAt).getTime() > lastSeenComments).length;
+  function openComments() {
+    setCommentsOpen(true);
+    const now = Date.now();
+    setLastSeenComments(now);
+    if (lastSeenKey) localStorage.setItem(lastSeenKey, String(now));
+  }
 
   useEffect(() => {
     if (!realCampaignId) return;
@@ -443,9 +576,57 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
       setProjectComments(await fetchCampaignComments(realCampaignId));
     }
   }
-  const [drawer, setDrawer] = useState<Talent|null>(null);
-  const [declineModal, setDeclineModal] = useState<Talent|null>(null);
-  const [declineReason, setDeclineReason] = useState("");
+  const [expandedTalent, setExpandedTalent] = useState<Talent|null>(null);
+  const [commentModalTalent, setCommentModalTalent] = useState<Talent|null>(null);
+  const [noteModalTalent, setNoteModalTalent] = useState<Talent|null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [declineAllConfirm, setDeclineAllConfirm] = useState(false);
+  const [lockedDropError, setLockedDropError] = useState<string | null>(null);
+
+  // ─── Finalization ───────────────────────────────────────────────────
+  const boardFinalized = !!campaign?.boardFinalizedAt;
+  const submissionCloseMs = campaign?.submissionCloseISO ? new Date(campaign.submissionCloseISO).getTime() : null;
+  const effectiveFinalizationHours = campaign?.finalizationHours ?? orgDefaultFinalizationHours ?? 48;
+  const finalizeDeadlineMs = submissionCloseMs != null ? submissionCloseMs + effectiveFinalizationHours * 3_600_000 : null;
+  // Ticks the countdown display — stops once finalized, nothing left to count down to.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (boardFinalized) return;
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [boardFinalized]);
+  const submissionsClosed = submissionCloseMs != null && now >= submissionCloseMs;
+  const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [holdsMenuOpen, setHoldsMenuOpen] = useState(false);
+
+  async function handleFinalize() {
+    if (!realCampaignId) { setFinalizeConfirmOpen(false); return; }
+    setFinalizing(true);
+    setFinalizeError(null);
+    const { error } = await finalizeCampaignBoard(realCampaignId);
+    setFinalizing(false);
+    if (error) { setFinalizeError(error); return; }
+    setFinalizeConfirmOpen(false);
+    await onFinalized?.();
+  }
+
+  // Takes the text explicitly rather than reading noteDraft off state —
+  // the Delete button needs to save an empty string immediately, and
+  // setNoteDraft("") then calling this wouldn't see that update yet
+  // (same tick, still the stale closure).
+  async function saveNote(text: string) {
+    if (!noteModalTalent) return;
+    setSavingNote(true);
+    const submissionId = shim.get(noteModalTalent.id)?.submissionId;
+    if (submissionId) await updateSubmissionNotes(submissionId, text);
+    const id = noteModalTalent.id;
+    setTalent(prev => prev.map(t => t.id === id ? { ...t, note: text } : t));
+    setSavingNote(false);
+    setNoteModalTalent(null);
+  }
   const [commentDraft, setCommentDraft] = useState("");
 
   const commentsFor = (talentId: number) => comments.filter(c => c.talentId === talentId);
@@ -456,19 +637,35 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     setCommentDraft("");
   }
 
-  const byStage = (s: SubmissionStage) => talent.filter(t => t.stage === s);
+  // Stable per-card tilt, seeded off the talent id so it's the same
+  // every render/reload, not re-randomized — pinned to a board, not
+  // reshuffled by it.
+  function cardTilt(id: number) {
+    return (((id * 31 + 7) % 9) - 4) * 0.8; // -3.2..3.2deg
+  }
+
   const notSelected = talent.filter(t => t.stage === "declined" || t.stage === "released");
-  // Board view — every card at once, no columns, closest to a real
-  // physical casting wall. Booked/further-along first (most
-  // consequential to see at a glance), then alphabetical within a stage.
-  const boardTalent = [...talent]
-    .filter(t => t.stage !== "declined" && t.stage !== "released")
-    .sort((a, b) => {
-      const rankDiff = PIPELINE_STAGES.findIndex(s=>s.id===b.stage) - PIPELINE_STAGES.findIndex(s=>s.id===a.stage);
-      return rankDiff !== 0 ? rankDiff : a.name.localeCompare(b.name);
-    });
+  const submittedTalent = talent.filter(t => t.stage === "submitted" || t.stage === "candidate");
+  const holdTalent = talent.filter(t => HOLD_STAGES.includes(t.stage));
+  const bookedTalent = talent.filter(t => t.stage === "booked");
+
+  // No manual "now go book them" button — the instant a contract comes
+  // back signed, this fires the same real booking form (day rate/days/
+  // shoot date still need a human, that's real logistics data nobody
+  // can invent) automatically instead of waiting on a click. Guarded by
+  // a ref so a contract that's already been prompted once — brand
+  // closed the modal, whatever — doesn't reopen it on every re-render.
+  const autoPromptedRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    for (const t of holdTalent) {
+      if (isSigned(t.id) && !autoPromptedRef.current.has(t.id)) {
+        autoPromptedRef.current.add(t.id);
+        onBook([t.id]);
+      }
+    }
+  }, [contracts, holdTalent]);
+
   const totalNeeded = 4;
-  const booked = byStage("booked").length;
   const daysRemaining = 8;
 
   function moveTo(id: number, stage: SubmissionStage) {
@@ -481,11 +678,6 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   }
 
   function moveWithUndo(id: number, newStage: SubmissionStage, label: string) {
-    if (newStage === "declined") {
-      const t = talent.find(x => x.id === id);
-      if (t) setDeclineModal(t);
-      return;
-    }
     if (newStage === "booked") {
       onBook([id]);
       return;
@@ -499,27 +691,23 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   }
 
   function bulkMove(ids: number[], newStage: SubmissionStage, label: string) {
-    if (newStage === "booked") {
-      onBook(ids);
-      setSelected([]);
-      return;
-    }
     const prevMap = ids.map(id => ({ id, stage: talent.find(x => x.id === id)?.stage ?? "submitted" as SubmissionStage }));
     ids.forEach(id => moveTo(id, newStage));
-    setSelected([]);
-    showToast(`${ids.length} models moved to ${label}`, () => { prevMap.forEach(({ id, stage }) => moveTo(id, stage)); });
+    showToast(`${ids.length} model${ids.length===1?"":"s"} ${label}`, () => { prevMap.forEach(({ id, stage }) => moveTo(id, stage)); });
   }
 
-  function toggleSelect(id: number) {
-    setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  function declineAllSubmitted() {
+    const ids = submittedTalent.map(t => t.id);
+    setDeclineAllConfirm(false);
+    if (ids.length === 0) return;
+    bulkMove(ids, "declined", "declined");
   }
 
-  const STAGE_ACTIONS: Partial<Record<SubmissionStage, { stage: SubmissionStage; label: string }[]>> = {
-    submitted:   [{ stage:"shortlisted", label:"Shortlist" }, { stage:"declined", label:"Decline" }],
-    shortlisted: [{ stage:"selected", label:"Select" }, { stage:"released", label:"Release" }, { stage:"submitted", label:"Return" }],
-    selected:    [{ stage:"booked", label:"Book" }, { stage:"released", label:"Release" }, { stage:"shortlisted", label:"Return" }],
-    booked:      [],
-  };
+  const COLUMNS: { id: BoardColId; label: string; cards: Talent[]; dropStage: SubmissionStage }[] = [
+    { id: "submitted", label: "Submitted", cards: submittedTalent, dropStage: "submitted" },
+    { id: "hold",      label: "Hold",      cards: holdTalent,      dropStage: "selected" },
+    { id: "booked",    label: "Booked",    cards: bookedTalent,    dropStage: "booked" },
+  ];
 
   return (
     <div className="flex-1 flex flex-col h-full relative">
@@ -531,115 +719,168 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground border-l border-border pl-3">
           <span><span className="font-semibold text-foreground">{talent.filter(t=>t.stage!=="declined"&&t.stage!=="released").length}</span> in pipeline</span>
           <span>·</span>
-          <span><span className="font-semibold text-foreground">{booked}/{totalNeeded}</span> booked</span>
-          <span>·</span>
-          <span className={cx("font-semibold", daysRemaining<=3?"text-foreground":"text-muted-foreground")}>{daysRemaining} days left</span>
+          <span><span className="font-semibold text-foreground">{bookedTalent.length}/{totalNeeded}</span> booked</span>
+          {campaign && submissionCloseMs != null && (
+            <>
+              <span>·</span>
+              {boardFinalized ? (
+                <span className="font-semibold text-foreground">Board finalized</span>
+              ) : !submissionsClosed ? (
+                <span>Submissions close in <span className="font-semibold text-foreground">{formatCountdown(submissionCloseMs, now)}</span></span>
+              ) : finalizeDeadlineMs != null ? (
+                <span>Auto-finalizes in <span className="font-semibold text-urgent">{formatCountdown(finalizeDeadlineMs, now)}</span></span>
+              ) : null}
+            </>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center border border-border rounded-md p-0.5 gap-0.5">
-            {(["pipeline","board"] as const).map(v=>(
-              <button key={v} onClick={()=>setView(v)}
-                className={cx("text-[10px] font-mono uppercase tracking-wide px-2.5 py-1 rounded-sm transition-colors cursor-pointer",
-                  view===v ? "bg-foreground text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                )}>{v}</button>
-            ))}
-          </div>
-          {realCampaignId && INDEPENDENT_MODELS_ENABLED && (
-            <button onClick={()=>setShowIndependentModal(true)}
+          {boardFinalized ? (
+            <div className="relative">
+              <button onClick={()=>setHoldsMenuOpen(p=>!p)}
+                className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
+                {holdsMenuOpen ? <ChevronUp size={10}/> : <ChevronDown size={10}/>} Holds ({holdTalent.length})
+              </button>
+              {holdsMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-64 glass-strong border rounded-md shadow-xl z-30 overflow-hidden">
+                  <div className="px-3 py-2 border-b border-border text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                    Still contract-pending — appear here on the board the moment they sign
+                  </div>
+                  {holdTalent.length===0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground">Nobody on hold.</div>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto divide-y divide-border">
+                      {holdTalent.map(t=>(
+                        <button key={t.id} onClick={()=>{ setExpandedTalent(t); setHoldsMenuOpen(false); }}
+                          className="w-full text-left px-3 py-2 hover:bg-secondary transition-colors">
+                          <div className="text-xs font-medium">{t.name}</div>
+                          <div className="text-[10px] text-muted-foreground">{holdBanner(t.id) ?? "Awaiting review"}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (<>
+            {campaign && realCampaignId && (
+              <Btn variant="primary" size="sm" onClick={()=>{ setFinalizeError(null); setFinalizeConfirmOpen(true); }}>Finalize Board</Btn>
+            )}
+            {realCampaignId && INDEPENDENT_MODELS_ENABLED && (
+              <button onClick={()=>setShowIndependentModal(true)}
+                className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
+                <Plus size={10}/> Add Independent Model
+              </button>
+            )}
+            <button onClick={() => setShowRejected(p=>!p)}
               className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
-              <Plus size={10}/> Add Independent Model
+              {showRejected ? <ChevronUp size={10}/> : <ChevronDown size={10}/>} Not Selected ({notSelected.length})
             </button>
-          )}
-          <button onClick={() => setShowRejected(p=>!p)}
-            className="text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5 hover:bg-secondary transition-colors flex items-center gap-1">
-            {showRejected ? <ChevronUp size={10}/> : <ChevronDown size={10}/>} Not Selected ({notSelected.length})
-          </button>
+          </>)}
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden flex min-h-0">
         <div className="flex-1 overflow-auto">
-          {view === "board" && (
+          {boardFinalized ? (
             <div className="p-4">
-              <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(112px, 1fr))" }}>
-                {boardTalent.map(t => {
-                  const isSel = selected.includes(t.id);
-                  return (
-                    <div key={t.id}>
-                      <CompCard talent={t}
-                        onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
-                        onViewAgency={onViewAgency}
-                        selected={isSel}
-                        duplicateBadge={t.duplicateFlag ? "Multiple agencies" : undefined}
-                        commentCount={commentsFor(t.id).length}
-                        boutiqueAgencies={t.boutiqueAgencies}
-                        rate={t.rate}
-                        score={t.score}
-                      />
-                      <div className="mt-1 text-[9px] font-mono uppercase tracking-widest text-center text-muted-foreground truncate">
-                        {PIPELINE_STAGES.find(s=>s.id===t.stage)?.label ?? t.stage}
-                      </div>
-                    </div>
-                  );
-                })}
-                {boardTalent.length===0 && (
-                  <div className="col-span-full glass-subtle border border-dashed rounded-md p-10 text-center text-sm text-muted-foreground">Nobody in the pipeline yet.</div>
-                )}
-              </div>
+              {bookedTalent.length===0 ? (
+                <div className="h-40 flex items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
+                  Nobody booked yet — this board updates live as Hold-stage models sign.
+                </div>
+              ) : (
+                <div className="grid gap-x-3 gap-y-6" style={{ gridTemplateColumns: "repeat(auto-fill, 128px)" }}>
+                  {bookedTalent.map(t=>(
+                    <CompCard key={t.id} talent={t}
+                      draggable={false}
+                      onCommentClick={()=>{setCommentModalTalent(t);setCommentDraft("");}}
+                      onNoteClick={()=>{setNoteModalTalent(t);setNoteDraft(t.note ?? "");}}
+                      onExpand={()=>setExpandedTalent(t)}
+                      flipped={expandedTalent?.id === t.id}
+                      onFlippedChange={v=>{ if (!v) setExpandedTalent(null); }}
+                      onViewAgency={onViewAgency}
+                      rotate={cardTilt(t.id)}
+                      commentCount={commentsFor(t.id).length}
+                      boutiqueAgencies={t.boutiqueAgencies}
+                      rate={t.rate}
+                      score={t.score}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-          {view === "pipeline" && (
-          <div className="flex gap-0 h-full min-w-max">
-            {PIPELINE_STAGES.map(stage => {
-              const cards = byStage(stage.id);
-              const isOver = dragOver === stage.id;
-              const actions = STAGE_ACTIONS[stage.id] ?? [];
+          ) : (
+          <div className="flex gap-0 h-full w-full">
+            {COLUMNS.map(col => {
+              const cards = col.cards;
+              const isOver = dragOver === col.id;
+              const locked = col.id === "booked";
+              // Hold is a fixed lane — just wide enough for 2 cards —
+              // it's meant to be a brief holding pen, not a place to
+              // linger. Booked and Submitted split what's left; Booked
+              // gives up its old edge (was 3, now 2) to fund Hold's
+              // width rather than taking it out of Submitted.
+              const colStyle: React.CSSProperties = col.id==="hold" ? { flex: "0 0 288px" } : { flex: "2 1 0%" };
               return (
-                <div key={stage.id}
-                  className={cx("w-64 flex-shrink-0 flex flex-col border-r border-border last:border-0 transition-colors", isOver?"bg-secondary/60":"bg-background")}
-                  onDragOver={e=>{e.preventDefault();setDragOver(stage.id);}}
+                <div key={col.id}
+                  className={cx("min-w-[180px] flex flex-col border-r border-border last:border-0 transition-colors",
+                    locked && "border-l-2 border-l-foreground",
+                    isOver?"bg-secondary/60":"bg-background")}
+                  style={colStyle}
+                  onDragOver={e=>{ if (locked) return; e.preventDefault();setDragOver(col.id);}}
                   onDragLeave={()=>setDragOver(null)}
-                  onDrop={()=>{if(dragging!==null){moveWithUndo(dragging,stage.id,stage.label);setDragging(null);setDragOver(null);}}}
+                  onDrop={()=>{
+                    if (dragging===null) return;
+                    if (locked) { setLockedDropError(talent.find(t=>t.id===dragging)?.name ?? null); setDragging(null); setDragOver(null); return; }
+                    moveWithUndo(dragging,col.dropStage,col.label);setDragging(null);setDragOver(null);
+                  }}
                 >
-                  <div className={cx("px-4 py-3 border-b border-border flex items-center justify-between shrink-0", stage.id==="booked"?"bg-foreground":"glass")}>
-                    <div className="flex items-center gap-2">
-                      <span className={cx("text-sm font-semibold",stage.id==="booked"?"text-primary-foreground":"")}>{stage.label}</span>
-                      <span className={cx("text-xs font-mono px-1.5 py-0.5 rounded-sm font-semibold",stage.id==="booked"?"bg-primary-foreground/15 text-primary-foreground":"bg-secondary text-foreground")}>{cards.length}</span>
+                  <div className={cx("px-4 py-3 border-b border-border flex items-center justify-between shrink-0 gap-2", col.id==="booked"?"bg-foreground":"glass")}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={cx("text-sm font-semibold",col.id==="booked"?"text-primary-foreground":"")}>{col.label}</span>
+                      <span className={cx("text-xs font-mono px-1.5 py-0.5 rounded-sm font-semibold",col.id==="booked"?"bg-primary-foreground/15 text-primary-foreground":"bg-secondary text-foreground")}>{cards.length}</span>
                     </div>
-                    {cards.length>0&&(
-                      <button onClick={()=>setSelected(p=>{const ids=cards.map(c=>c.id);const all=ids.every(id=>p.includes(id));return all?p.filter(id=>!ids.includes(id)):[...new Set([...p,...ids])];})}
-                        className={cx("text-[10px] font-mono",stage.id==="booked"?"text-primary-foreground/60 hover:text-primary-foreground":"text-muted-foreground hover:text-foreground")}>
-                        Select all
+                    {col.id==="submitted" && cards.length>0 && (
+                      <button onClick={()=>setDeclineAllConfirm(true)}
+                        className="text-[10px] font-mono text-muted-foreground hover:text-urgent shrink-0 cursor-pointer">
+                        Decline all
                       </button>
                     )}
+                    {locked && (
+                      <span className="text-[9px] font-mono text-primary-foreground/60 shrink-0">Signed only</span>
+                    )}
                   </div>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  <div className="flex-1 overflow-y-auto p-3 pt-4 bg-secondary">
                     {cards.length===0&&(
-                      <div className={cx("h-20 flex items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground",isOver?"border-foreground bg-secondary":"border-border")}>
-                        {isOver?"Drop here":"Empty"}
+                      <div className={cx("h-20 flex items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground",isOver&&!locked?"border-foreground bg-foreground/5":"border-border")}>
+                        {locked ? "Nobody booked yet" : isOver ? "Drop here" : "Empty"}
                       </div>
                     )}
+                    <div className="grid gap-x-3 gap-y-6" style={{ gridTemplateColumns: "repeat(auto-fill, 128px)" }}>
                     {cards.map(t=>{
-                      const isSel=selected.includes(t.id);
                       const isDrag=dragging===t.id;
                       return (
                         <CompCard key={t.id} talent={t}
-                          draggable
+                          draggable={!locked}
                           onDragStart={()=>setDragging(t.id)}
                           onDragEnd={()=>{setDragging(null);setDragOver(null);}}
-                          onClick={()=>{toggleSelect(t.id);setDrawer(t);setCommentDraft("");}}
+                          onCommentClick={()=>{setCommentModalTalent(t);setCommentDraft("");}}
+                          onNoteClick={()=>{setNoteModalTalent(t);setNoteDraft(t.note ?? "");}}
+                          onExpand={()=>setExpandedTalent(t)}
+                          flipped={expandedTalent?.id === t.id}
+                          onFlippedChange={v=>{ if (!v) setExpandedTalent(null); }}
                           onViewAgency={onViewAgency}
-                          selected={isSel}
                           dragging={isDrag}
+                          rotate={isDrag ? 0 : cardTilt(t.id)}
+                          statusBanner={col.id==="hold" ? holdBanner(t.id) : undefined}
                           duplicateBadge={t.duplicateFlag ? "Multiple agencies" : undefined}
                           commentCount={commentsFor(t.id).length}
                           boutiqueAgencies={t.boutiqueAgencies}
                           rate={t.rate}
                           score={t.score}
-                          actions={actions.length>0 ? actions.map(a=>({ label:a.label, onClick:()=>moveWithUndo(t.id,a.stage,a.label) })) : undefined}
                         />
                       );
                     })}
+                    </div>
                   </div>
                 </div>
               );
@@ -648,122 +889,153 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           )}
         </div>
 
-        {drawer && (
-          <div className="w-72 shrink-0 border-l glass-strong flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
-              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{drawer.name} <CountryFlag location={drawer.location} className="text-xs"/></div>
-              <button onClick={()=>{setDrawer(null);setSelected(p=>p.filter(x=>x!==drawer.id));}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
-            </div>
-            <div className="flex-1 overflow-auto p-4 space-y-4">
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Portfolio</div>
-                {drawer.photo ? <img src={drawer.photo} alt="" className="w-full h-36 rounded-md object-cover"/> : <XBox className="w-full h-36 rounded-md"/>}
-                <div className="grid grid-cols-3 gap-1 mt-1">{[0,1,2].map(i=><XBox key={i} className="aspect-square rounded-sm"/>)}</div>
+        {/* The exhaustive view — small on purpose, and the backdrop is
+            just a transparent click-catcher (no dim/blur) so the
+            card's own flip stays visible underneath while this is
+            open. Closing it (X or click-outside) flips the card back
+            via the controlled flipped/onFlippedChange prop above. */}
+        {expandedTalent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6" onClick={()=>setExpandedTalent(null)}>
+            {/* Rectangular, comp-card-back proportions — a real one puts
+                its hero photo + info in the bottom-left, wrapped by a
+                collage of smaller shots on the right; mirrored here so
+                the info wraps into the bottom-right instead. */}
+            <div className="glass-strong border rounded-lg w-full max-w-lg max-h-[85vh] overflow-auto shadow-2xl" onClick={e=>e.stopPropagation()}>
+              <div className="px-4 py-2.5 border-b border-border flex items-center justify-between sticky top-0 bg-card z-10">
+                <div className="text-sm font-semibold flex items-center gap-1.5">{expandedTalent.name} <CountryFlag location={expandedTalent.location} className="text-xs"/></div>
+                <button onClick={()=>setExpandedTalent(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Measurements</div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[["Height",drawer.height],["Bust",drawer.bust],["Waist",drawer.waist],["Hips","35\""],["Dress",drawer.dress],["Shoe","US 8"]].map(([k,v])=>(
-                    <div key={k} className="bg-secondary rounded-sm px-2 py-1.5">
-                      <div className="text-[9px] font-mono text-muted-foreground">{k}</div>
-                      <div className="text-xs font-medium">{v}</div>
+              <div className="grid grid-cols-[1.15fr_1fr] gap-3 p-4">
+                {/* Left: asymmetric photo collage — same tilted, "pinned
+                    by hand" idea as the board itself, scaled up into a
+                    real spread instead of a cramped strip. Flower art is
+                    a placeholder for real portfolio photos, not wired up
+                    yet. */}
+                <div className="relative h-[280px]">
+                  {[
+                    { w: "60%", top: "0%",  left: "0%",  rot: -4, z: 2, variant: 0 },
+                    { w: "48%", top: "6%",  left: "54%", rot: 6,  z: 3, variant: 2 },
+                    { w: "44%", top: "60%", left: "2%",  rot: 5,  z: 1, variant: 3 },
+                    { w: "50%", top: "54%", left: "46%", rot: -6, z: 1, variant: 4 },
+                  ].map((p,i)=>(
+                    <div key={i} className="absolute aspect-[3/4]" style={{ top: p.top, left: p.left, width: p.w, zIndex: p.z, transform: `rotate(${p.rot}deg)` }}>
+                      <FlowerArt variant={p.variant} className="w-full h-full rounded-sm border border-border shadow-md"/>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Agency Representation</div>
-                <div className="bg-secondary rounded-md p-3 space-y-2">
-                  <div>
-                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Mother Agency</div>
-                    <button onClick={()=>onViewAgency(drawer.motherAgency)} className="text-xs font-semibold hover:underline underline-offset-2 cursor-pointer">{drawer.motherAgency}</button>
-                  </div>
-                  <div className="pt-2 border-t border-border">
-                    <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">Boutique Agenc{drawer.boutiqueAgencies.length===1?"y":"ies"}</div>
-                    {drawer.boutiqueAgencies.length > 0 ? (
-                      <div className="flex flex-wrap gap-x-1.5">
-                        {drawer.boutiqueAgencies.map((a, i) => (
-                          <span key={a} className="text-xs font-semibold">
-                            {i > 0 && ", "}
-                            <button onClick={()=>onViewAgency(a)} className="hover:underline underline-offset-2 cursor-pointer">{a}</button>
-                          </span>
-                        ))}
-                      </div>
-                    ) : <div className="text-xs font-semibold">None</div>}
-                  </div>
-                  <div className="pt-2 border-t border-border text-[10px] text-muted-foreground">
-                    Submitted via {drawer.agency}
-                    {drawer.submittedByName ? ` · ${drawer.submittedByName}` : ""}
-                    {drawer.submittedByEmail ? ` · ${drawer.submittedByEmail}` : ""}
-                  </div>
-                  {drawer.duplicateFlag && duplicatesShim.get(drawer.id) && (
-                    <div className="pt-2 border-t border-border">
-                      <div className="text-[9px] font-mono text-urgent uppercase tracking-wide mb-1">Submitted by {duplicatesShim.get(drawer.id)!.length} agencies</div>
-                      <div className="space-y-1">
-                        {duplicatesShim.get(drawer.id)!.map(d => (
-                          <div key={d.submissionId} className="flex items-center justify-between text-[10px]">
-                            <button onClick={()=>onViewAgency(d.agencyName)} className="hover:underline underline-offset-2 cursor-pointer">{d.agencyName}</button>
-                            <span className="text-muted-foreground capitalize">{d.stage}</span>
-                          </div>
-                        ))}
-                      </div>
+                {/* Right: hero photo + all the info, wrapped into the
+                    bottom-right corner by the collage on the left. */}
+                <div className="flex flex-col min-w-0">
+                  <FlowerArt variant={1} className="w-full aspect-[3/4] rounded-sm border border-border shadow-md shrink-0"/>
+                  <div className="flex-1 flex flex-col justify-end gap-1.5 pt-2 min-w-0 text-[9px]">
+                    <div className="grid grid-cols-2 gap-1">
+                      {[["Height",expandedTalent.height],["Bust",expandedTalent.bust],["Waist",expandedTalent.waist],["Dress",expandedTalent.dress],
+                        ["Sex",expandedTalent.sex ? ({male:"Male",female:"Female",non_binary:"Non-binary",other:"Other"} as Record<string,string>)[expandedTalent.sex] ?? expandedTalent.sex : ""],
+                        ["Rate",expandedTalent.rate]].filter(([,v])=>v).map(([k,v])=>(
+                        <div key={k} className="bg-secondary rounded-sm px-1.5 py-1">
+                          <div className="text-[7px] font-mono text-muted-foreground">{k}</div>
+                          <div className="text-[10px] font-medium truncate">{v}</div>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                    <div className="space-y-0.5">
+                      {expandedTalent.motherAgency ? (
+                        <div className="flex justify-between gap-2 py-0.5 border-b border-border">
+                          <span className="text-muted-foreground shrink-0">Mother</span>
+                          <button onClick={()=>onViewAgency(expandedTalent.motherAgency)} className="font-medium hover:underline underline-offset-2 cursor-pointer truncate">{expandedTalent.motherAgency}</button>
+                        </div>
+                      ) : <div className="text-muted-foreground py-0.5 border-b border-border">Independent — no agency</div>}
+                      {!!expandedTalent.boutiqueAgencies?.length && (
+                        <div className="flex justify-between gap-2 py-0.5 border-b border-border">
+                          <span className="text-muted-foreground shrink-0">Boutique</span><span className="font-medium truncate">{expandedTalent.boutiqueAgencies.join(", ")}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between gap-2 py-0.5 border-b border-border"><span className="text-muted-foreground shrink-0">Agency Contact</span><span className="font-medium text-muted-foreground/60">Not set</span></div>
+                      <div className="flex justify-between gap-2 py-0.5 border-b border-border"><span className="text-muted-foreground shrink-0">Model Email</span><span className="font-medium truncate">{expandedTalent.modelEmail || "Not set"}</span></div>
+                      <div className="flex justify-between gap-2 py-0.5 border-b border-border"><span className="text-muted-foreground shrink-0">Model Phone</span><span className="font-medium text-muted-foreground/60">Not set</span></div>
+                      {["Instagram","TikTok"].map(k=>(
+                        <div key={k} className="flex justify-between gap-2 py-0.5 border-b border-border last:border-0">
+                          <span className="text-muted-foreground shrink-0">{k}</span><span className="font-medium text-muted-foreground/60">Not set</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Details</div>
-                {[["Location",drawer.location],["Experience",drawer.exp],["Day Rate",drawer.rate]].map(([k,v])=>(
-                  <div key={k} className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
-                    <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
+              <div className="px-4 pb-4 flex gap-2">
+                <Btn variant="outline" size="sm" onClick={()=>{setCommentModalTalent(expandedTalent);setCommentDraft("");}}>Comments ({commentsFor(expandedTalent.id).length})</Btn>
+                <Btn variant="outline" size="sm" onClick={()=>{setNoteModalTalent(expandedTalent);setNoteDraft(expandedTalent.note ?? "");}}>{expandedTalent.note ? "Edit Note" : "Add Note"}</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Click a card to flip it (measurements/agency/contact on the
+            back — see CompCard) — this comment modal is the only other
+            per-candidate surface left, opened from the card's own
+            comment-count pin, not a general-purpose side panel. */}
+        {commentModalTalent && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setCommentModalTalent(null)}>
+            <div className="glass-strong border rounded-md w-full max-w-sm mx-4 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+              <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
+                <div className="text-sm font-semibold truncate flex items-center gap-1.5">{commentModalTalent.name} <CountryFlag location={commentModalTalent.location} className="text-xs"/></div>
+                <button onClick={()=>setCommentModalTalent(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+              </div>
+              <div className="max-h-72 overflow-auto p-4 space-y-2">
+                {commentsFor(commentModalTalent.id).length===0 && (
+                  <div className="text-[10px] text-muted-foreground italic">No comments yet — leave the first one for your team.</div>
+                )}
+                {commentsFor(commentModalTalent.id).map(c=>(
+                  <div key={c.id} className="glass-subtle border rounded-md px-3 py-2 relative">
+                    <div className="absolute top-0 left-3 -translate-y-1/2 w-2 h-2 rounded-full bg-foreground/70"/>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-semibold">{c.author}</span>
+                      <span className="text-[9px] font-mono text-muted-foreground shrink-0">{c.ts}</span>
+                    </div>
+                    <div className="text-xs leading-relaxed">{c.text}</div>
                   </div>
                 ))}
               </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Pin size={10}/> Comments
-                </div>
-                <div className="space-y-2 mb-2">
-                  {commentsFor(drawer.id).length===0 && (
-                    <div className="text-[10px] text-muted-foreground italic">No comments yet — leave the first one for your team.</div>
-                  )}
-                  {commentsFor(drawer.id).map(c=>(
-                    <div key={c.id} className="glass-subtle border rounded-md px-3 py-2 relative">
-                      <div className="absolute top-0 left-3 -translate-y-1/2 w-2 h-2 rounded-full bg-foreground/70"/>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs font-semibold">{c.author}</span>
-                        <span className="text-[9px] font-mono text-muted-foreground shrink-0">{c.ts}</span>
-                      </div>
-                      <div className="text-xs leading-relaxed">{c.text}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <textarea value={commentDraft} onChange={e=>setCommentDraft(e.target.value)}
-                    onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); postComment(drawer.id); }}}
-                    placeholder="Leave a comment for your team…" rows={2}
-                    className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
-                  <button onClick={()=>postComment(drawer.id)} disabled={!commentDraft.trim()}
-                    className="shrink-0 px-3 rounded-md bg-foreground text-primary-foreground text-xs font-medium hover:bg-foreground/90 transition-colors disabled:opacity-30 disabled:pointer-events-none">
-                    Post
-                  </button>
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-2">Notes</div>
-                <textarea defaultValue={drawer.note||""} placeholder="Add internal notes…" rows={3}
-                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+              <div className="p-4 pt-0 flex gap-2">
+                <textarea value={commentDraft} onChange={e=>setCommentDraft(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); postComment(commentModalTalent.id); }}}
+                  placeholder="Leave a comment for your team…" rows={2}
+                  className="flex-1 bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+                <button onClick={()=>postComment(commentModalTalent.id)} disabled={!commentDraft.trim()}
+                  className="shrink-0 px-3 rounded-md bg-foreground text-primary-foreground text-xs font-medium hover:bg-foreground/90 transition-colors disabled:opacity-30 disabled:pointer-events-none">
+                  Post
+                </button>
               </div>
             </div>
-            <div className="border-t border-border p-3 space-y-2 shrink-0">
-              {(STAGE_ACTIONS[drawer.stage] ?? []).map(a=>(
-                <button key={a.label} onClick={()=>{moveWithUndo(drawer.id,a.stage,a.label);setDrawer(null);}}
-                  className={cx("w-full rounded-md transition-colors",
-                    a.label==="Book"||a.label==="Select"||a.label==="Shortlist"
-                      ?"py-2 text-xs font-medium bg-foreground text-primary-foreground hover:bg-foreground/90"
-                      :"py-1.5 text-xs text-muted-foreground border border-border hover:bg-muted"
-                  )}>{a.label}</button>
-              ))}
+          </div>
+        )}
+
+        {/* The card's orange corner sticker — a real per-model note,
+            not decoration. */}
+        {noteModalTalent && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setNoteModalTalent(null)}>
+            <div className="glass-strong border rounded-md w-full max-w-sm mx-4 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+              <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
+                <div className="text-sm font-semibold truncate">Note — {noteModalTalent.name}</div>
+                <button onClick={()=>setNoteModalTalent(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+              </div>
+              <div className="p-4 space-y-3">
+                <textarea value={noteDraft} onChange={e=>setNoteDraft(e.target.value)} autoFocus
+                  placeholder="e.g. Client loved her in the fitting, prioritize for hero shot…" rows={4}
+                  className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:border-foreground resize-none"/>
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <Btn variant="primary" size="sm" onClick={()=>saveNote(noteDraft)} disabled={savingNote}>{savingNote ? "Saving…" : "Save"}</Btn>
+                    <Btn variant="outline" size="sm" onClick={()=>setNoteModalTalent(null)}>Cancel</Btn>
+                  </div>
+                  {noteModalTalent.note && (
+                    <button onClick={()=>saveNote("")} disabled={savingNote}
+                      className="text-xs font-mono text-muted-foreground hover:text-urgent transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none">
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -810,8 +1082,11 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
             )}
           </div>
         ) : (
-          <button onClick={()=>setCommentsOpen(true)} title="Comments"
-            className="w-7 shrink-0 border-l border-border bg-secondary/40 hover:bg-secondary flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors">
+          <button onClick={openComments} title={unreadComments>0 ? `${unreadComments} new comment${unreadComments===1?"":"s"}` : "Comments"}
+            className="relative w-7 shrink-0 border-l border-border bg-secondary/40 hover:bg-secondary flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors">
+            {unreadComments > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-urgent"/>
+            )}
             <MessageSquare size={13} className="text-muted-foreground"/>
             {projectComments.length > 0 && (
               <span className="text-[9px] font-mono text-muted-foreground">{projectComments.length}</span>
@@ -840,20 +1115,6 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         </div>
       )}
 
-      {selected.length > 0 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-primary-foreground rounded-lg shadow-lg px-4 py-3 flex items-center gap-4 z-30">
-          <span className="text-sm font-semibold whitespace-nowrap">{selected.length} selected</span>
-          <div className="flex items-center gap-2">
-            {["Select","Book"].map(label=>{
-              const m: Record<string,SubmissionStage>={Select:"selected",Book:"booked"};
-              return <button key={label} onClick={()=>bulkMove(selected,m[label],label)} className="text-xs font-medium bg-primary-foreground/15 hover:bg-primary-foreground/25 px-3 py-1.5 rounded-md">{label}</button>;
-            })}
-            <button onClick={()=>bulkMove(selected,"declined","Declined")} className="text-xs text-primary-foreground/60 hover:text-primary-foreground hover:bg-primary-foreground/10 px-2 py-1.5 rounded-md">Decline</button>
-            <button onClick={()=>setSelected([])} className="ml-1 text-primary-foreground/60 hover:text-primary-foreground"><X size={15}/></button>
-          </div>
-        </div>
-      )}
-
       {toast && (
         <div className="absolute bottom-6 right-6 glass-subtle border rounded-md shadow-lg px-4 py-3 flex items-center gap-4 z-30 max-w-sm">
           <span className="text-sm flex-1">{toast.msg}</span>
@@ -862,34 +1123,34 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         </div>
       )}
 
-      {declineModal && (
+      {declineAllConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="glass-strong border rounded-md w-80 overflow-hidden shadow-xl">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="text-heading text-sm">Decline — {declineModal.name}</div>
-              <button onClick={()=>{setDeclineModal(null);setDeclineReason("");}} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            <div className="px-5 py-4 border-b border-border">
+              <div className="text-heading text-sm">Decline all submitted?</div>
             </div>
-            <div className="p-5 space-y-3">
-              <div className="text-xs text-muted-foreground">Select a reason to log for reporting purposes.</div>
-              <div className="space-y-1.5">
-                {DECLINE_REASONS.map(r=>(
-                  <button key={r} onClick={()=>setDeclineReason(r)}
-                    className={cx("w-full text-left px-3 py-2 text-sm rounded-md border transition-colors",
-                      declineReason===r?"bg-foreground text-primary-foreground border-foreground":"border-border hover:bg-secondary"
-                    )}>{r}</button>
-                ))}
-              </div>
+            <div className="p-5 text-sm text-muted-foreground">
+              This declines all {submittedTalent.length} model{submittedTalent.length===1?"":"s"} currently in Submitted. You can undo right after, or restore individually from Not Selected.
             </div>
             <div className="px-5 pb-5 flex gap-2">
-              <Btn variant="primary" disabled={!declineReason} onClick={()=>{
-                const t=declineModal;
-                const prevStage=t.stage;
-                const reason=declineReason;
-                setTalent(prev => prev.map(x => x.id===t.id ? { ...x, stage:"declined" } : x), { declineReason: reason });
-                setDeclineModal(null);setDeclineReason("");
-                showToast(`${t.name} declined`,()=>moveTo(t.id,prevStage));
-              }}>Confirm Decline</Btn>
-              <Btn variant="outline" onClick={()=>{setDeclineModal(null);setDeclineReason("");}}>Cancel</Btn>
+              <Btn variant="primary" onClick={declineAllSubmitted}>Decline All</Btn>
+              <Btn variant="outline" onClick={()=>setDeclineAllConfirm(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lockedDropError && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setLockedDropError(null)}>
+          <div className="glass-strong border border-urgent rounded-md w-80 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-border">
+              <div className="text-heading text-sm text-urgent">Error: needs signed contract first</div>
+            </div>
+            <div className="p-5 text-sm text-muted-foreground">
+              {lockedDropError} can't move to Booked yet — that only happens automatically once their contract comes back signed. Drop them in Hold to send one.
+            </div>
+            <div className="px-5 pb-5">
+              <Btn variant="outline" onClick={()=>setLockedDropError(null)}>Okay</Btn>
             </div>
           </div>
         </div>
@@ -899,6 +1160,25 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
         <AddIndependentModelModal campaignId={realCampaignId}
           onClose={()=>setShowIndependentModal(false)}
           onAdded={()=>{ setShowIndependentModal(false); onIndependentAdded?.(); }}/>
+      )}
+
+      {finalizeConfirmOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass-strong border rounded-md w-96 overflow-hidden shadow-xl">
+            <div className="px-5 py-4 border-b border-border">
+              <div className="text-heading text-sm">Finalize this board?</div>
+            </div>
+            <div className="p-5 text-sm text-muted-foreground space-y-2">
+              <p>Any submitted talent not already declined, held, or selected will be <span className="font-semibold text-foreground">auto-declined</span>.</p>
+              <p>The board then becomes a clean view of Booked models only — Hold-stage candidates keep processing in the background and appear here the moment they sign. This can't be undone.</p>
+              {finalizeError && <p className="text-urgent">{finalizeError}</p>}
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" disabled={finalizing} onClick={handleFinalize}>{finalizing ? "Finalizing…" : "Finalize Board"}</Btn>
+              <Btn variant="outline" disabled={finalizing} onClick={()=>setFinalizeConfirmOpen(false)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -957,7 +1237,7 @@ function AddIndependentModelModal({ campaignId, onClose, onAdded }: {
             ) : results.map(m => (
               <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-md border border-border">
                 <div className="w-9 h-9 rounded-full bg-secondary shrink-0 overflow-hidden flex items-center justify-center">
-                  {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover"/> : <User size={16} className="text-muted-foreground"/>}
+                  {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-full h-full object-cover grayscale"/> : <User size={16} className="text-muted-foreground"/>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{m.fullName}</div>
@@ -2129,6 +2409,58 @@ function ExtendSubmissionModal({ campaign, onClose, onGrant }: {
   );
 }
 
+// Per-campaign override for how many hours after submissions close the
+// board auto-finalizes (0088) — clearing back to "—" falls through to
+// the brand's org-wide default (Settings > Organization), same
+// null-means-inherit shape as finalizationHours itself.
+function FinalizationWindowModal({ campaign, orgDefaultHours, onClose, onSave }: {
+  campaign: Campaign; orgDefaultHours: number; onClose: () => void; onSave: (hours: number | null) => Promise<{ error: string | null }>;
+}) {
+  const [useOverride, setUseOverride] = useState(campaign.finalizationHours != null);
+  const [hours, setHours] = useState(campaign.finalizationHours ?? orgDefaultHours);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    const { error } = await onSave(useOverride ? hours : null);
+    setSaving(false);
+    if (error) { setError(error); return; }
+    onClose();
+  }
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-sm">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-heading text-sm">Finalization Window</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-4">
+        <p className="text-xs text-muted-foreground">How long after submissions close before this board auto-finalizes (auto-declining anyone left in Submitted).</p>
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <input type="radio" checked={!useOverride} onChange={()=>setUseOverride(false)} className="accent-foreground"/>
+          <span className="text-sm">Use org default ({orgDefaultHours}h)</span>
+        </label>
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <input type="radio" checked={useOverride} onChange={()=>setUseOverride(true)} className="accent-foreground"/>
+          <span className="text-sm">Custom for this project</span>
+        </label>
+        {useOverride && (
+          <div className="flex items-center gap-2 pl-6">
+            <input type="number" min={1} value={hours} onChange={e=>setHours(Math.max(1, Number(e.target.value)||1))}
+              className="w-20 border border-border rounded-md bg-input-background px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+            <span className="text-sm text-muted-foreground">hours</span>
+          </div>
+        )}
+        {error && <div className="text-xs text-red-500">{error}</div>}
+      </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <Btn variant="primary" disabled={saving} onClick={handleSave}>{saving ? "Saving…" : "Save"}</Btn>
+        <Btn variant="outline" disabled={saving} onClick={onClose}>Cancel</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 // Reached by clicking a mother/boutique agency name from a candidate
 // card. Deliberately minimal — real agency profiles (roster size,
 // standing partnership history, etc.) are follow-up work; this just
@@ -2172,8 +2504,13 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   );
 }
 
-function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onArchived }: {
+function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onArchived, onCampaignChanged }: {
   campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onArchived?: () => void;
+  // Refetches the campaigns list without navigating away — unlike
+  // onArchived, which also kicks back to the campaigns list. Finalizing
+  // a board (or editing its finalization window) needs the former: the
+  // brand stays put and watches the board switch to its clean view.
+  onCampaignChanged?: () => Promise<unknown>;
 }) {
   const { profile, org } = useAuth();
   const { setOpen: setMobileNavOpen } = useMobileNav();
@@ -2185,7 +2522,13 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   // RealCallSheet itself since it's the only thing that knows which
   // shoot days are missing required info.
   const [incompleteCallSheets, setIncompleteCallSheets] = useState(0);
-  const [talent, setTalent] = useState<Talent[]>(SAMPLE_TALENT);
+  // Real campaigns (known synchronously from realIdShim, no fetch needed
+  // to find out) start empty rather than showing SAMPLE_TALENT and then
+  // swapping it out once the real fetch lands — that swap was the
+  // "flash" of mock names/photos on every reload. Only genuinely mock
+  // campaigns (nothing in realIdShim) keep the SAMPLE_TALENT demo look,
+  // since nothing will ever overwrite it for those.
+  const [talent, setTalent] = useState<Talent[]>(() => realIdShim.has(campaignId) ? [] : SAMPLE_TALENT);
   const [comments, setComments] = useState<CardComment[]>(CARD_COMMENTS);
   const [shim, setShim] = useState<SubmissionShim>(new Map());
   const [duplicates, setDuplicates] = useState<DuplicatesShim>(new Map());
@@ -2196,6 +2539,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [contractModal, setContractModal] = useState<Talent|null>(null);
   const [extensions, setExtensions] = useState<SubmissionExtension[]>([]);
   const [showExtendModal, setShowExtendModal] = useState(false);
+  const [showFinalizationModal, setShowFinalizationModal] = useState(false);
   const [viewingAgency, setViewingAgency] = useState<string|null>(null);
   const [focusAgency, setFocusAgency] = useState<string|null>(null);
   const [bookModal, setBookModal] = useState<{ ids: number[] } | null>(null);
@@ -2232,6 +2576,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
     setRealCampaignId(realId);
     reloadPayees(realId);
     if (!realId) return; // no real campaign for this id — mock data already seeded above
+    setTalent([]); // clear whatever the previously-viewed real campaign left behind, not a flash of it under this one
     (async () => {
       const { talent: realTalent, shim: realShim, duplicates: realDuplicates } = await fetchCampaignSubmissions(realId);
       if (!active) return;
@@ -2311,12 +2656,12 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   // Fires from the "Contract Generated" modal at approval time — before
   // a real booking necessarily exists yet, which is why contracts key
   // off model_id directly rather than requiring a booking_id.
-  async function generateContractFor(t: Talent, sendImmediately: boolean) {
+  async function generateContractFor(t: Talent, sendImmediately: boolean, duration: string) {
     if (!realCampaignId || !profile) return; // mock campaign — nothing real to persist
     const realModelId = shim.get(t.id)?.modelId;
     if (!realModelId) return;
     const dayRate = Number(String(t.rate).replace(/[^0-9.]/g, "")) || 0;
-    await createContract({ campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT / 100, createdByProfileId: profile.id, sendImmediately });
+    await createContract({ campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT / 100, createdByProfileId: profile.id, sendImmediately, duration });
   }
 
   function openBookModal(ids: number[]) {
@@ -2486,11 +2831,31 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                     </div>
                   ))}
                 </div>
+                <div className="glass-subtle border rounded-md p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Finalization Window</div>
+                    <Btn variant="outline" size="sm" onClick={()=>setShowFinalizationModal(true)}>Edit</Btn>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-border last:border-0 text-xs">
+                    <span className="text-muted-foreground">Auto-finalizes</span>
+                    <span className="font-medium">
+                      {campaign.finalizationHours != null ? `${campaign.finalizationHours}h` : `${org?.defaultFinalizationHours ?? 48}h (org default)`} after submissions close
+                    </span>
+                  </div>
+                  {campaign.boardFinalizedAt && (
+                    <div className="flex justify-between py-1.5 text-xs">
+                      <span className="text-muted-foreground">Finalized</span>
+                      <span className="font-medium">{new Date(campaign.boardFinalizedAt).toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"})}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }} duplicates={duplicates}/>}
+          {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }} duplicates={duplicates} shim={shim}
+            campaign={campaign} orgDefaultFinalizationHours={org?.defaultFinalizationHours}
+            onFinalized={async()=>{ if (realCampaignId) await refetchTalent(realCampaignId); await onCampaignChanged?.(); }}/>}
 
 
           {section==="crew" && (
@@ -2571,26 +2936,14 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
       {contractModal && (
         <ContractModal talent={contractModal}
-          onSend={async ()=>{ await generateContractFor(contractModal, true); setContractModal(null); }}
-          onLater={async ()=>{ await generateContractFor(contractModal, false); setContractModal(null); }}/>
+          onSend={async (duration)=>{ await generateContractFor(contractModal, true, duration); setContractModal(null); }}
+          onLater={async (duration)=>{ await generateContractFor(contractModal, false, duration); setContractModal(null); }}/>
       )}
       {bookModal && (
         <Modal onClose={()=>{ if (!bookSaving) setBookModal(null); }} maxWidth="max-w-md">
           <div className="p-6 space-y-4">
             <div>
               <div className="text-heading text-lg">Confirm booking</div>
-              <div className="text-sm text-muted-foreground mt-0.5">
-                Day rate, days, and shoot date for {bookModal.ids.length === 1 ? "this model" : `these ${bookModal.ids.length} models`}.{" "}
-                {(() => {
-                  const selectedTalent = bookModal.ids.map(id => talent.find(t => t.id === id)).filter((t): t is Talent => !!t);
-                  const hasIndependent = selectedTalent.some(t => t.agency === "Independent");
-                  const hasRepped = selectedTalent.some(t => t.agency !== "Independent");
-                  const feeRange = `${PLATFORM_FEE_PCT_ACH}–${PLATFORM_FEE_PCT_CARD}% depending on how they pay`;
-                  if (hasIndependent && !hasRepped) return `No agency in the middle — just DVURE's taxes and fees (${feeRange}).`;
-                  if (hasIndependent && hasRepped) return `Repped models use DVURE's standard agency split (${DEFAULT_AGENCY_PCT}%) plus taxes and fees (${feeRange}); independent models pay only taxes and fees.`;
-                  return `Agency split is DVURE's standard ${DEFAULT_AGENCY_PCT}%, plus taxes and fees (${feeRange}).`;
-                })()}
-              </div>
             </div>
             <div className="space-y-3 max-h-72 overflow-y-auto">
               {bookModal.ids.map(id => {
@@ -2631,6 +2984,16 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
       {showExtendModal && (
         <ExtendSubmissionModal campaign={campaign} onClose={()=>setShowExtendModal(false)}
           onGrant={ext=>{ setExtensions(prev=>[...prev, ext]); setShowExtendModal(false); }}/>
+      )}
+      {showFinalizationModal && realCampaignId && (
+        <FinalizationWindowModal campaign={campaign} orgDefaultHours={org?.defaultFinalizationHours ?? 48}
+          onClose={()=>setShowFinalizationModal(false)}
+          onSave={async hours=>{
+            const { error } = await updateCampaignFinalizationHours(realCampaignId, hours);
+            if (error) return { error };
+            await onCampaignChanged?.();
+            return { error: null };
+          }}/>
       )}
       {showArchiveConfirm && (
         <div className="fixed inset-0 bg-foreground/50 flex items-center justify-center z-[60] p-4">
@@ -4912,11 +5275,25 @@ function AuditLogPanel() {
 
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
   const user = useCurrentUser();
+  const { org, refreshIdentity } = useAuth();
   const { setOpen: setMobileNavOpen } = useMobileNav();
   const isAdmin = user?.access === "administrator";
   const [tab, setTab] = useState<"profile"|"subscription"|"billing"|"security"|"org"|"notifications"|"audit">("profile");
   const [channels, setChannels] = useState<string[]>(["Email"]);
   const [timing, setTiming] = useState<string[]>(["1 day before","Day of"]);
+  const [defaultFinalizationHours, setDefaultFinalizationHours] = useState(48);
+  const [savingFinalizationHours, setSavingFinalizationHours] = useState(false);
+  const [finalizationHoursError, setFinalizationHoursError] = useState<string | null>(null);
+  useEffect(() => { if (org) setDefaultFinalizationHours(org.defaultFinalizationHours); }, [org?.defaultFinalizationHours]);
+  async function saveDefaultFinalizationHours() {
+    if (!org) return;
+    setSavingFinalizationHours(true);
+    setFinalizationHoursError(null);
+    const { error } = await updateOrgDefaultFinalizationHours(org.id, defaultFinalizationHours);
+    if (error) { setSavingFinalizationHours(false); setFinalizationHoursError(error); return; }
+    await refreshIdentity();
+    setSavingFinalizationHours(false);
+  }
   const toggle = (arr: string[], val: string, set: (a:string[])=>void) =>
     set(arr.includes(val)?arr.filter(v=>v!==val):[...arr,val]);
   // Subscription and Audit Log are both administrator-only surfaces —
@@ -5016,6 +5393,22 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                     <FieldLabel>Organization Name</FieldLabel>
                     <div className="w-full bg-muted border border-border rounded-md px-3 py-2 text-sm text-muted-foreground">{user?.org}</div>
                   </div>
+                </div>
+                <div className="glass-subtle border rounded-md p-4 space-y-2">
+                  <FieldLabel>Default Finalization Window</FieldLabel>
+                  <p className="text-xs text-muted-foreground">
+                    How long after a project's submission window closes its Model Board auto-finalizes, unless that project sets its own override in its Overview tab.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <input type="number" min={1} value={defaultFinalizationHours}
+                      onChange={e=>setDefaultFinalizationHours(Math.max(1, Number(e.target.value)||1))}
+                      className="w-20 border border-border rounded-md bg-input-background px-3 py-2 text-sm focus:outline-none focus:border-foreground"/>
+                    <span className="text-sm text-muted-foreground">hours</span>
+                    <Btn variant="outline" size="sm" disabled={savingFinalizationHours} onClick={saveDefaultFinalizationHours}>
+                      {savingFinalizationHours ? "Saving…" : "Save"}
+                    </Btn>
+                  </div>
+                  {finalizationHoursError && <div className="text-xs text-red-500">{finalizationHoursError}</div>}
                 </div>
                 <SupportTicketForm defaultCategory="delete_organization"/>
               </div>
@@ -5166,7 +5559,7 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
       <MobileNavProvider>
       <div className="h-screen flex bg-background overflow-hidden">
         {activeCampaignId != null ? (
-          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onArchived={async()=>{ await refetchCampaigns(); backToCampaigns(); }}/>
+          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onArchived={async()=>{ await refetchCampaigns(); backToCampaigns(); }} onCampaignChanged={refetchCampaigns}/>
         ) : (
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onLogout={onLogout}/>
