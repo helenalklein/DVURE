@@ -62,7 +62,7 @@ export async function fetchPartneredAgencies(brandOrgId: string): Promise<{ id: 
 export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaigns: Campaign[]; realIdShim: Map<number, string> }> {
   const { data: rows, error } = await supabase
     .from("campaigns")
-    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at, territory, has_in_person_casting, finalization_hours, board_finalized_at")
+    .select("id, name, type, status, due_date, submission_open, submission_close, talent_needed, budget, created_at, territory, has_in_person_casting, finalization_hours, board_finalized_at, location, shoot_start_date, shoot_end_date, overtime_included, overtime_rate, overtime_increment_minutes, overtime_included_hours, additional_services_included")
     .eq("brand_org_id", brandOrgId)
     .order("created_at", { ascending: true }); // stable shim ids across reloads — a real deep link depends on this
 
@@ -117,6 +117,14 @@ export async function fetchBrandCampaigns(brandOrgId: string): Promise<{ campaig
       remaining: budget,
       territory: r.territory ?? undefined,
       hasInPersonCasting: !!r.has_in_person_casting,
+      location: r.location ?? null,
+      shootStartDate: r.shoot_start_date ?? null,
+      shootEndDate: r.shoot_end_date ?? null,
+      overtimeIncluded: !!r.overtime_included,
+      overtimeRate: r.overtime_rate ?? null,
+      overtimeIncrementMinutes: r.overtime_increment_minutes ?? null,
+      overtimeIncludedHours: r.overtime_included_hours ?? null,
+      additionalServicesIncluded: !!r.additional_services_included,
     };
   });
 
@@ -136,6 +144,14 @@ export async function createCampaign(params: {
   budget?: number;
   territory?: string;
   hasInPersonCasting?: boolean;
+  location?: string;
+  shootStartDate?: string;
+  shootEndDate?: string;
+  overtimeIncluded?: boolean;
+  overtimeRate?: number;
+  overtimeIncrementMinutes?: number;
+  overtimeIncludedHours?: number;
+  additionalServicesIncluded?: boolean;
 }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from("campaigns")
@@ -152,11 +168,50 @@ export async function createCampaign(params: {
       created_by_profile_id: params.createdByProfileId,
       territory: params.territory || null,
       has_in_person_casting: params.hasInPersonCasting ?? false,
+      location: params.location || null,
+      shoot_start_date: params.shootStartDate || null,
+      shoot_end_date: params.shootEndDate || null,
+      overtime_included: params.overtimeIncluded ?? false,
+      overtime_rate: params.overtimeRate ?? null,
+      overtime_increment_minutes: params.overtimeIncrementMinutes ?? null,
+      overtime_included_hours: params.overtimeIncludedHours ?? null,
+      additional_services_included: params.additionalServicesIncluded ?? false,
     })
     .select("id")
     .single();
   if (error || !data) return { id: null, error: error?.message ?? "Couldn't create project." };
   return { id: data.id as string, error: null };
+}
+
+// Post-creation fix path for the two required-before-Hold fields
+// (needsProjectDetails, Moodboard) — covers campaigns that predate this
+// change (real dev data: AW25 has neither set) and anyone who saved a
+// draft before filling them in. Also lets overtime/additional-services
+// terms be turned on after the fact, not just at creation.
+export async function updateCampaignProjectDetails(campaignId: string, params: {
+  location?: string;
+  shootStartDate?: string;
+  shootEndDate?: string;
+  overtimeIncluded?: boolean;
+  overtimeRate?: number;
+  overtimeIncrementMinutes?: number;
+  overtimeIncludedHours?: number;
+  additionalServicesIncluded?: boolean;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("campaigns")
+    .update({
+      location: params.location || null,
+      shoot_start_date: params.shootStartDate || null,
+      shoot_end_date: params.shootEndDate || null,
+      ...(params.overtimeIncluded !== undefined ? { overtime_included: params.overtimeIncluded } : {}),
+      overtime_rate: params.overtimeRate ?? null,
+      overtime_increment_minutes: params.overtimeIncrementMinutes ?? null,
+      overtime_included_hours: params.overtimeIncludedHours ?? null,
+      ...(params.additionalServicesIncluded !== undefined ? { additional_services_included: params.additionalServicesIncluded } : {}),
+    })
+    .eq("id", campaignId);
+  return { error: error?.message ?? null };
 }
 
 // "Mark Complete" and "Archive" are the same action today — there's no

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { Check, Pin, RotateCw, Mail, Phone, Globe, Star } from "lucide-react";
-import { cx, XBox, Badge, CountryFlag } from "./ui";
+import { Check, Pin, RotateCw, Mail, Phone, Globe, Star, MessageCircle } from "lucide-react";
+import { cx, XBox, Badge, CountryFlag, isMinor } from "./ui";
 import type { Talent } from "./types";
 
 // Small deterministic color tile for an agency name, sized for the
@@ -48,7 +48,7 @@ function Pushpin({ offset }: { offset: number }) {
 // (BrandApp's Moodboard) — operationally-dense props below are silent
 // no-ops for the simpler single-model consumer.
 export function CompCard({
-  talent: t, onViewAgency, onCommentClick, onNoteClick, onExpand, draggable, onDragStart, onDragEnd, selected, dragging,
+  talent: t, onViewAgency, onCommentClick, onNoteClick, onNegotiateClick, onExpand, draggable, onDragStart, onDragEnd, selected, dragging,
   actions, duplicateBadge, commentCount, boutiqueAgencies, rate, score, rotate,
   location, exp, statusBanner, flipped: flippedProp, onFlippedChange,
 }: {
@@ -60,6 +60,10 @@ export function CompCard({
   onCommentClick?: () => void;
   // The corner sticker — real per-model staff note, not decoration.
   onNoteClick?: () => void;
+  // Top-left corner icon, shown only when `rate` is set (Hold/Booked —
+  // financial terms exist to negotiate) — opens the rate negotiation
+  // thread for this candidate's contract.
+  onNegotiateClick?: () => void;
   // Fires alongside the flip — the flip is the transition, this is
   // where the exhaustive detail (socials, agency contacts, full
   // contact info) actually lives, since a card face is too small to
@@ -108,6 +112,8 @@ export function CompCard({
   // can never spill down into the name/rate footer or up into the row
   // above, regardless of how long the note is.
   const [noteHovered, setNoteHovered] = useState(false);
+  const [minorHovered, setMinorHovered] = useState(false);
+  const minor = isMinor(t.dateOfBirth);
 
   // Native HTML5 drag-and-drop (draggable="true" + dragstart/dragover/
   // drop) turned out to be unreliable — it doesn't reliably engage at
@@ -121,6 +127,17 @@ export function CompCard({
   // own drag heuristics.
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
+  // The card's own outer wrapper — moved directly via imperative style
+  // mutations, not React state. A drag can fire 60+ move events/sec;
+  // routing that through setState/re-render would mean React diffing on
+  // every pixel of cursor movement, which reads as laggy. Direct DOM
+  // writes here are the standard escape hatch for exactly this kind of
+  // high-frequency, purely-visual update.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  function applyDragTransform(dx: number, dy: number) {
+    if (wrapperRef.current) wrapperRef.current.style.transform = `translate(${dx}px, ${dy}px) scale(1.04)`;
+  }
 
   function handlePointerDown(e: React.PointerEvent) {
     if (!draggable || e.button !== 0) return;
@@ -129,18 +146,51 @@ export function CompCard({
     window.addEventListener("pointerup", handlePointerUp, { once: true });
   }
   function handlePointerMove(e: PointerEvent) {
-    if (!dragStartRef.current || isDraggingRef.current) return;
+    if (!dragStartRef.current) return;
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
-    if (Math.hypot(dx, dy) > 6) {
+    if (!isDraggingRef.current) {
+      if (Math.hypot(dx, dy) <= 6) return;
       isDraggingRef.current = true;
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transition = "none";
+        wrapperRef.current.style.zIndex = "50";
+      }
+      // onDragStart flips the parent's `dragging` prop, which flips
+      // `rotate` to 0 (Moodboard: rotate={isDrag?0:cardTilt(t.id)}) —
+      // the wrapper's own JSX still declares style={{transform: rotate
+      // ? `rotate(${rotate}deg)` : undefined}}, so React's very next
+      // reconciliation touches this same transform property. If that
+      // reconciliation lands after the synchronous write just below, it
+      // silently wipes it — a one-frame flash back to no-transform right
+      // as the drag starts. The immediate write handles the normal case;
+      // the setTimeout(0) is a safety net that reapplies once more after
+      // any React flush has had a chance to run, macrotask-guaranteed to
+      // fire after React 18's batched update (sync or microtask either
+      // way) — unlike requestAnimationFrame, which browsers can throttle
+      // or altogether skip for a backgrounded/non-composited tab.
       onDragStart?.();
+      setTimeout(() => { if (isDraggingRef.current && dragStartRef.current) applyDragTransform(dx, dy); }, 0);
     }
+    // Real 1:1 cursor tracking — this is the part that was missing
+    // entirely before: onDragStart used to fire once and nothing ever
+    // visually followed the pointer until drop, which is why dragging
+    // didn't feel like dragging at all.
+    applyDragTransform(dx, dy);
   }
   function handlePointerUp() {
     window.removeEventListener("pointermove", handlePointerMove);
     dragStartRef.current = null;
     if (isDraggingRef.current) {
+      // Hand the transform property back to React (rotate resumes
+      // controlling it once `dragging` flips back to false) before
+      // onDragEnd triggers that re-render, so there's no stale
+      // leftover translate hanging around for a frame.
+      if (wrapperRef.current) {
+        wrapperRef.current.style.transform = "";
+        wrapperRef.current.style.transition = "";
+        wrapperRef.current.style.zIndex = "";
+      }
       onDragEnd?.();
       // Reset one tick later, not immediately — pointerup always fires
       // before the click event this same gesture may still trigger, so
@@ -155,7 +205,7 @@ export function CompCard({
   }
 
   return (
-    <div className="relative aspect-[3/4] [perspective:1000px] transition-transform duration-200"
+    <div ref={wrapperRef} className="relative aspect-[3/4] [perspective:1000px] transition-transform duration-200"
       style={{ transform: rotate ? `rotate(${rotate}deg)` : undefined }}>
       <Pushpin offset={pinOffset}/>
       <div
@@ -168,9 +218,18 @@ export function CompCard({
           data-card-id={t.id}
           className={cx("absolute inset-0 [backface-visibility:hidden] glass-subtle rounded-md border overflow-hidden select-none transition-all group flex flex-col cursor-pointer",
             selected ? "border-foreground ring-1 ring-foreground" : "border-border hover:border-foreground/40",
-            dragging && "opacity-40"
+            // Solid, not faded — this element is now the thing actively
+            // following the cursor (wrapperRef's transform, above), so
+            // it needs to read as a real card being picked up, not a
+            // translucent ghost left behind in its old spot.
+            dragging && "cursor-grabbing"
           )}
-          style={{ boxShadow: "0 3px 8px -2px rgba(30,28,26,0.28), 0 1px 2px rgba(30,28,26,0.16)", touchAction: draggable ? "none" : undefined }}
+          style={{
+            boxShadow: dragging
+              ? "0 16px 32px -8px rgba(30,28,26,0.45), 0 4px 10px -2px rgba(30,28,26,0.3)"
+              : "0 3px 8px -2px rgba(30,28,26,0.28), 0 1px 2px rgba(30,28,26,0.16)",
+            touchAction: draggable ? "none" : undefined,
+          }}
         >
           <div className="relative flex-1 min-h-0">
             {t.photo ? (
@@ -189,6 +248,26 @@ export function CompCard({
             {statusBanner && (
               <div className="absolute inset-x-0 top-0 bg-black/65 text-white text-[8px] font-mono uppercase tracking-wide text-center px-1 py-1 leading-tight">
                 {statusBanner}
+              </div>
+            )}
+            {/* Minor badge — mirrors the note sticker's corner-triangle
+                treatment (bottom-right there, top-right here) so the two
+                read as the same visual language. Purely informational:
+                the signing gate itself (0086) already checks this
+                server-side regardless of whether this renders. */}
+            {minor && (
+              <div className="absolute top-0 right-0 w-5 h-5 overflow-hidden pointer-events-none z-10">
+                <div className="absolute -top-2.5 -right-2.5 w-5 h-5 rotate-45 pointer-events-auto"
+                  style={{ background: "#3d3a35" }}
+                  onMouseEnter={()=>setMinorHovered(true)}
+                  onMouseLeave={()=>setMinorHovered(false)}/>
+                <Star size={7} className="absolute top-0.5 right-0.5 fill-white text-white"/>
+              </div>
+            )}
+            {minorHovered && !flipped && (
+              <div className="absolute top-0 right-0 z-20 max-w-[85%] pointer-events-none rounded-md border shadow-lg px-2 py-1.5 text-[9px] leading-snug"
+                style={{ background: "#fdf1de", borderColor: "#3d3a35", color: "#3d2c1f" }}>
+                Minor — guardian signs
               </div>
             )}
             {/* Staff note sticker — a real per-model note, not just
@@ -225,6 +304,12 @@ export function CompCard({
               <div className="absolute top-8 left-1.5">
                 <Badge label={duplicateBadge} variant="warning"/>
               </div>
+            )}
+            {rate !== undefined && onNegotiateClick && (
+              <button onClick={e=>{ e.stopPropagation(); onNegotiateClick(); }} title="Rate negotiation"
+                className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition-colors">
+                <MessageCircle size={10}/>
+              </button>
             )}
             {!!commentCount && (
               <button onClick={e=>{ e.stopPropagation(); onCommentClick?.(); }}

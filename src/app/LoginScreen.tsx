@@ -27,6 +27,8 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   const [signup, setSignup] = useState<SignupStep | null>(null);
   const [signupRole, setSignupRole] = useState<SignupRole>("brand");
   const [companyName, setCompanyName] = useState("");
+  const [companyTitle, setCompanyTitle] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
   const [fullName, setFullName] = useState("");
   const [workEmail, setWorkEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -63,7 +65,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   function closeSignup() {
     setSignup(null);
     setSignupError(null);
-    setCompanyName(""); setFullName(""); setWorkEmail(""); setSignupPassword("");
+    setCompanyName(""); setCompanyTitle(""); setCompanyAddress(""); setFullName(""); setWorkEmail(""); setSignupPassword("");
   }
 
   async function handleSignIn() {
@@ -77,7 +79,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
   async function runProvisioning() {
     setSignupError(null);
     const orgType = signupRole === "brand" ? "brand" : "agency";
-    const { error: orgError } = await completeOrgSignup(companyName, orgType);
+    const { error: orgError } = await completeOrgSignup(companyName, orgType, companyTitle, companyAddress);
     if (orgError) {
       setSignupError(orgError);
       return;
@@ -216,7 +218,9 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
               <div className="space-y-3 pt-1">
                 <TextInput label={signupRole==="brand"?"Brand Name":"Agency Name"} value={companyName} onChange={e=>setCompanyName(e.target.value)}
                   placeholder={signupRole==="brand"?"e.g. Vellani":"e.g. Vantage Model Management"}/>
+                <TextInput label="Company Address" value={companyAddress} onChange={e=>setCompanyAddress(e.target.value)} placeholder="123 Broadway, New York, NY"/>
                 <TextInput label="Your Name" value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="e.g. Jordan Lee"/>
+                <TextInput label="Your Title" value={companyTitle} onChange={e=>setCompanyTitle(e.target.value)} placeholder="e.g. Creative Director"/>
                 <TextInput label="Work Email" type="email" value={workEmail} onChange={e=>setWorkEmail(e.target.value)} placeholder="you@company.com"/>
                 <TextInput label="Password" type="password" value={signupPassword} onChange={e=>setSignupPassword(e.target.value)} placeholder="••••••••"/>
                 {passwordTooShort && <div className="text-xs text-red-500">Password must be at least 6 characters.</div>}
@@ -227,7 +231,7 @@ export default function LoginScreen({ onModalOpenChange }: { onModalOpenChange: 
                 </div>
               )}
               <Btn variant="primary" fullWidth
-                disabled={!companyName || !fullName || !workEmail || !signupPassword || passwordTooShort}
+                disabled={!companyName || !companyAddress || !fullName || !companyTitle || !workEmail || !signupPassword || passwordTooShort}
                 onClick={handleStartTrial}>
                 Start Free Trial
               </Btn>

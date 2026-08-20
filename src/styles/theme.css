@@ -47,7 +47,10 @@
      not from UI chrome. Primary CTAs (Btn variant="primary") are solid
      ink-on-cream, same relationship as --foreground/--background. Token
      name kept as "gold" rather than renamed across every call site —
-     it's what "primary accent" resolves to, not a literal color promise. */
+     it's what "primary accent" resolves to, not a literal color promise.
+     (An oxblood/gold reskin was tried and reverted the same session —
+     real color-scheme work is being deferred to an actual designer
+     rather than iterated on blind in chat.) */
   --gold: #1E1C1A;
   --gold-foreground: #F8F6F2;
   /* Urgent/overdue accent — the raw DVURE red, unmodified. (A brightened

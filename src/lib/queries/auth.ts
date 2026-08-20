@@ -14,7 +14,7 @@ export async function fetchProfile(userId: string) {
 export async function fetchOrgMembership(profileId: string) {
   return supabase
     .from("org_memberships")
-    .select("access_level, title, organizations(id, name, org_type, verification_status, subscription_status, trial_ends_at, logo_url, payment_locked, self_described_services, founding_member, default_finalization_hours)")
+    .select("access_level, title, organizations(id, name, org_type, address, verification_status, subscription_status, trial_ends_at, logo_url, payment_locked, self_described_services, founding_member, default_finalization_hours, default_contract_template_id)")
     .eq("profile_id", profileId)
     .maybeSingle();
 }

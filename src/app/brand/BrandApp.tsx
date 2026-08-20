@@ -8,18 +8,18 @@ import {
   Settings, Building2, Shield,
   Calendar, FileText, List, BookOpen, History,
   BarChart2, FileCheck, Send, Edit3, Eye, ChevronUp,
-  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone, Package
+  User, Users, LogOut, Pin, Lock, Globe, Shirt, Home, Megaphone, Package, Trash2
 } from "lucide-react";
 import type { SubmissionStage, Talent, IconFn, CardComment, Campaign, CampaignThreadMessage } from "../shared/types";
-import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav, TaxesAndFeesLabel } from "../shared/ui";
+import { cx, XBox, UserAvatar, PolaroidIcon, Badge, Btn, Stat, FieldLabel, TextInput, FSelect, Textarea, Chip, SidebarBadge, TopBar, ActivityFeedPanel, CurrentUserProvider, useCurrentUser, Modal, CountryFlag, DvureSignature, DvureWordmark, DvureMark, GateBanner, OrgLogoBox, MobileNavDrawer, MobileNavProvider, useMobileNav, TaxesAndFeesLabel, RichTextEditor, ContractTemplateGateBanner, NegotiationThread } from "../shared/ui";
 import { CompCard } from "../shared/CompCard";
 import { fetchCampaignComments, postCampaignComment, type CampaignComment } from "../../lib/queries/campaignComments";
-import { getAccessGate } from "../shared/accessGate";
+import { getAccessGate, needsContractTemplate } from "../shared/accessGate";
 import { INDEPENDENT_MODELS_ENABLED } from "../shared/featureFlags";
 import { SAMPLE_TALENT, ORG_USERS, ACCESS_BADGE, ACTIVITY_EVENTS, CARD_COMMENTS, RUNWAY_SHOWS, RUNWAY_SHOW_OTHER_BRANDS, MOCK_NOW, CAMPAIGN_AGENCIES, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY, assignCampaignCovers } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo, updateOrgDefaultFinalizationHours } from "../../lib/queries/auth";
-import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign, updateCampaignFinalizationHours, finalizeCampaignBoard } from "../../lib/queries/campaigns";
+import { fetchPartneredAgencies, fetchBrandCampaigns, createCampaign, distributeCampaignToAgencies, archiveCampaign, updateCampaignFinalizationHours, finalizeCampaignBoard, updateCampaignProjectDetails } from "../../lib/queries/campaigns";
 import { fetchCampaignSubmissions, updateSubmissionStage, updateSubmissionNotes, updateSubmissionPosition, type SubmissionShim, type DuplicatesShim } from "../../lib/queries/submissions";
 import { fetchSubmissionComments, insertSubmissionComment } from "../../lib/queries/comments";
 import { createBooking, DEFAULT_AGENCY_PCT, PLATFORM_FEE_PCT_ACH, PLATFORM_FEE_PCT_CARD } from "../../lib/queries/bookings";
@@ -37,7 +37,11 @@ import { fetchCampaignsNeedingLeads, type CampaignNeedingLeads, fetchCallSheetSl
 import { fetchLooks, createLook, updateLook, deleteLook, fetchLookableModels, swapLookOrder, FITTING_STATUSES, type CampaignLook, type LookableModel } from "../../lib/queries/looks";
 import { fetchDeliverables, createDeliverable, updateDeliverable, setDeliverableStatus, deleteDeliverable, DELIVERABLE_STATUSES, type DeliverableItem, type DeliverableStatus } from "../../lib/queries/deliverableTracker";
 import { fetchOrgAuditLog, type AuditLogEntry } from "../../lib/queries/auditLog";
-import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, type Contract } from "../../lib/queries/contracts";
+import { fetchCampaignContracts, createContract, sendContract, markContractExecuted, deleteContract, resolveContractMergeTags, stripOptionalSections, type Contract } from "../../lib/queries/contracts";
+import {
+  fetchDvureDefaultTemplate, fetchOrgTemplates, fetchTemplateById, createTemplate, updateTemplateContent, setOrgDefaultTemplate,
+  convertDocxToHtml, extractPdfText, type ContractTemplate,
+} from "../../lib/queries/contractTemplates";
 import { fetchShootDays, saveShootDays, createShootDay, type ShootDay } from "../../lib/queries/deliverables";
 import { createCasting, fetchCastings, updateCasting, deleteCasting, type Casting } from "../../lib/queries/castings";
 import { fetchScheduleEvents } from "../../lib/queries/schedule";
@@ -63,44 +67,153 @@ const PARTNERED_AGENCIES = ["Vantage Model Management","Meridian Models","Solenn
 // one — the old copy claimed "Edit" with nothing on the screen to edit.
 const CONTRACT_DURATIONS = ["30 days", "90 days", "6 months", "1 year", "2 years", "In perpetuity"];
 
-function ContractModal({ talent, onSend, onLater }: { talent: Talent; onSend: (duration: string) => void; onLater: (duration: string) => void }) {
+// Replaces what used to be a bare metadata summary ("a contract has
+// been generated based on this rate") with the actual resolved document
+// — the org's default template with {{model_name}}/{{day_rate}}/
+// {{territory}}/{{duration}}/{{brand_name}} filled in from the deal
+// terms below, editable inline before it's ever sent. onSend/onLater
+// both receive the exact HTML shown at the moment they're clicked, so
+// "Review Later" preserves whatever the brand already tweaked rather
+// than discarding it.
+const ADD_NEW_OUTLINE = "__add_new__";
+
+function ContractModal({ talent, orgId, orgName, campaign, realCampaignId, onSend, onLater, onClose, onGoToSettings }: {
+  talent: Talent; orgId: string; orgName: string; campaign?: Campaign; realCampaignId?: string | null;
+  onSend: (params: { duration: string; documentHtml: string; contractTemplateId: string | null }) => void;
+  onLater: (params: { duration: string; documentHtml: string; contractTemplateId: string | null }) => void;
+  onClose: () => void;
+  onGoToSettings: () => void;
+}) {
+  const { profile, org } = useAuth();
   const [duration, setDuration] = useState("1 year");
+  const [templates, setTemplates] = useState<ContractTemplate[]>([]);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  // "Add new outline" doesn't resolve to a real template — picking it
+  // opens this chooser instead of the document editor, replacing
+  // whatever was selected before (never a real, sendable state itself).
+  const [addingNew, setAddingNew] = useState(false);
+  const [oneOff, setOneOff] = useState(false);
+  const [documentHtml, setDocumentHtml] = useState("");
+  const [editedByHand, setEditedByHand] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchOrgTemplates(orgId).then(list => {
+      setTemplates(list);
+      const first = list[0] ?? null;
+      setTemplateId(first?.id ?? null);
+      setLoading(false);
+    });
+  }, [orgId]);
+
+  // Re-resolves merge tags whenever the template or usage-rights
+  // duration changes — but only while the brand hasn't hand-edited the
+  // text yet, so switching "Usage Rights" doesn't clobber an edit
+  // they've already made to the body. Skipped entirely in one-off mode
+  // — there's no backing template to re-resolve from.
+  useEffect(() => {
+    if (editedByHand || oneOff || addingNew) return;
+    const t = templates.find(x => x.id === templateId);
+    if (!t) { setDocumentHtml(""); return; }
+    const stripped = stripOptionalSections(t.contentHtml ?? "", {
+      includeOvertime: !!campaign?.overtimeIncluded,
+      includeAdditionalServices: !!campaign?.additionalServicesIncluded,
+    });
+    setDocumentHtml(resolveContractMergeTags(stripped, {
+      modelName: talent.name, dayRate: talent.rate, territory: "United States", duration, brandName: orgName,
+      projectName: campaign?.name, modelEmail: talent.modelEmail,
+      projectType: campaign?.type, shootLocation: campaign?.location ?? undefined,
+      shootDates: campaign?.shootStartDate ? `${campaign.shootStartDate}${campaign.shootEndDate ? ` – ${campaign.shootEndDate}` : ""}` : undefined,
+      brandAddress: org?.address ?? undefined,
+      senderName: profile?.fullName, senderTitle: org?.title ?? undefined,
+      sentDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      projectId: realCampaignId ?? undefined,
+      overtimeRate: campaign?.overtimeRate != null ? `$${campaign.overtimeRate}` : undefined,
+      overtimeIncrementMinutes: campaign?.overtimeIncrementMinutes != null ? String(campaign.overtimeIncrementMinutes) : undefined,
+      overtimeIncludedHours: campaign?.overtimeIncludedHours != null ? String(campaign.overtimeIncludedHours) : undefined,
+    }));
+  }, [templateId, duration, templates, editedByHand, oneOff, addingNew, talent.name, talent.rate, talent.modelEmail, orgName, campaign, org?.address, org?.title, profile?.fullName, realCampaignId]);
+
+  function handleTemplateChange(value: string) {
+    if (value === ADD_NEW_OUTLINE) { setAddingNew(true); return; }
+    setTemplateId(value);
+    setEditedByHand(false);
+    setOneOff(false);
+  }
+
+  function startOneOff() {
+    setAddingNew(false);
+    setOneOff(true);
+    setTemplateId(null);
+    setDocumentHtml("<p></p>");
+    setEditedByHand(true);
+  }
+
+  const canSend = !loading && !addingNew && (templates.length > 0 || oneOff);
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="glass-strong border rounded-md w-full max-w-md mx-4 overflow-hidden shadow-xl">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <div className="text-heading text-sm">Contract Generated</div>
-          <button onClick={()=>onLater(duration)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="glass-strong border rounded-md w-full max-w-2xl overflow-hidden shadow-xl max-h-[90vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
+          <div className="text-heading text-sm">Contract for {talent.name}</div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
         </div>
-        <div className="p-5 space-y-4">
-          <div className="bg-secondary border border-border rounded-md p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <FileCheck size={16} className="text-foreground shrink-0"/>
-              <div>
-                <div className="text-sm font-semibold">{talent.name}</div>
-                <div className="text-xs text-muted-foreground">CF-2025-{900 + talent.id} · {talent.agency}</div>
-              </div>
+        <div className="p-5 space-y-3 overflow-y-auto">
+          <div className="bg-secondary border border-border rounded-md p-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+            <div className="flex items-center gap-2">
+              <FileCheck size={14} className="text-foreground shrink-0"/>
+              <span className="font-medium">{talent.agency}</span>
             </div>
-            {[["Day Rate", talent.rate],["Agency Commission", talent.agency==="Independent" ? "N/A — independent" : "20%"],["Territory","United States"]].map(([k,v])=>(
-              <div key={k} className="flex justify-between items-center text-xs py-1 border-b border-border">
-                <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
-              </div>
-            ))}
-            <div className="flex justify-between items-center text-xs py-1">
+            <div><span className="text-muted-foreground">Offered Rate </span><span className="font-medium">{talent.rate}</span></div>
+            <div><span className="text-muted-foreground">Territory </span><span className="font-medium">United States</span></div>
+            <div className="flex items-center gap-1">
               <span className="text-muted-foreground">Usage Rights</span>
-              <select value={duration} onChange={e=>setDuration(e.target.value)}
-                className="bg-transparent text-right font-medium focus:outline-none cursor-pointer">
+              <select value={duration} onChange={e=>setDuration(e.target.value)} className="bg-transparent font-medium focus:outline-none cursor-pointer">
                 {CONTRACT_DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
+            {!oneOff && (
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">Outline</span>
+                <select value={addingNew ? ADD_NEW_OUTLINE : (templateId ?? "")} onChange={e=>handleTemplateChange(e.target.value)} className="bg-transparent font-medium focus:outline-none cursor-pointer">
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  <option value={ADD_NEW_OUTLINE}>+ Add new outline…</option>
+                </select>
+              </div>
+            )}
           </div>
-          <div className="text-xs text-muted-foreground leading-relaxed">
-            A contract has been generated based on {talent.name}'s booking rate.
-          </div>
+          {loading ? (
+            <div className="text-xs text-muted-foreground py-6 text-center">Loading your contract outline…</div>
+          ) : addingNew ? (
+            <div className="border border-border rounded-md p-5 space-y-3">
+              <div className="text-sm font-medium">Add a new outline</div>
+              <button onClick={startOneOff}
+                className="w-full text-left p-3 rounded-md border border-border hover:border-foreground transition-colors cursor-pointer">
+                <div className="text-sm font-medium">Use a one-off outline for just this contract</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Write or paste text for this send only — nothing is saved as a reusable outline.</div>
+              </button>
+              <button onClick={onGoToSettings}
+                className="w-full text-left p-3 rounded-md border border-border hover:border-foreground transition-colors cursor-pointer">
+                <div className="text-sm font-medium">Create a new standard outline</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Set up a reusable outline in Settings → Organization — this contract's editor reopens once it's saved.</div>
+              </button>
+              <button onClick={()=>setAddingNew(false)} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 cursor-pointer">Cancel</button>
+            </div>
+          ) : templates.length === 0 && !oneOff ? (
+            <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2 space-y-2">
+              <div>No contract outline set yet.</div>
+              <div className="flex gap-2">
+                <Btn variant="outline" size="sm" onClick={startOneOff}>One-off for this contract</Btn>
+                <Btn variant="outline" size="sm" onClick={onGoToSettings}>Create a standard outline</Btn>
+              </div>
+            </div>
+          ) : (
+            <RichTextEditor value={documentHtml} onChange={html=>{ setDocumentHtml(html); setEditedByHand(true); }} minHeight="260px"/>
+          )}
         </div>
-        <div className="px-5 pb-5 flex gap-2">
-          <Btn variant="primary" onClick={()=>onSend(duration)}>Send Contract</Btn>
-          <Btn variant="outline" onClick={()=>onLater(duration)}>Review Later</Btn>
+        <div className="px-5 pb-5 pt-2 flex gap-2 shrink-0">
+          <Btn variant="primary" disabled={!canSend} onClick={()=>onSend({ duration, documentHtml, contractTemplateId: templateId })}>Send Contract</Btn>
+          <Btn variant="outline" disabled={!canSend} onClick={()=>onLater({ duration, documentHtml, contractTemplateId: templateId })}>Review Later</Btn>
         </div>
       </div>
     </div>
@@ -408,8 +521,9 @@ function CampaignSidebar({ campaign, section, onSection, onBack, onNewCampaign, 
         ))}
       </div>
       <div className="px-3 pb-3 border-t border-border pt-3">
-        <button onClick={onNewCampaign}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors">
+        <button onClick={onNewCampaign} disabled={needsContractTemplate(accountOrg)}
+          title={needsContractTemplate(accountOrg) ? "Choose a contract outline in Settings first" : undefined}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-foreground text-primary-foreground text-xs font-medium rounded-md hover:bg-foreground/90 transition-colors disabled:opacity-40 disabled:pointer-events-none">
           <Plus size={13}/> New Project
         </button>
       </div>
@@ -503,15 +617,17 @@ function formatCountdown(targetMs: number, nowMs: number): string {
   return `${minutes}m`;
 }
 
-function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded, duplicates, shim, campaign, orgDefaultFinalizationHours, onFinalized }: {
+function Moodboard({ talent, setTalent, comments, onPostComment, onContractPrompt, onViewAgency, onBook, realCampaignId, onIndependentAdded, duplicates, shim, campaign, orgDefaultFinalizationHours, onFinalized, onGoToProjectDetails }: {
   talent: Talent[]; setTalent: (fn: (prev: Talent[]) => Talent[], opts?: { declineReason?: string }) => void; comments: CardComment[]; onPostComment: (talentId: number, text: string) => void; onContractPrompt: (t: Talent) => void; onViewAgency: (agency: string) => void; onBook: (ids: number[]) => void;
   realCampaignId?: string | null; onIndependentAdded?: () => void; duplicates?: DuplicatesShim; shim: SubmissionShim;
   // campaign is undefined only for the mock/demo board (no realCampaignId)
   // — the finalization countdown and Finalize button simply don't render
   // in that case, same as every other real-data-only affordance here.
   campaign?: Campaign; orgDefaultFinalizationHours?: number; onFinalized?: () => Promise<unknown>;
+  onGoToProjectDetails?: () => void;
 }) {
   const [showIndependentModal, setShowIndependentModal] = useState(false);
+  const [negotiationTalent, setNegotiationTalent] = useState<Talent | null>(null);
   // Booked is drag-locked (see COLUMNS/onDrop below) — the only way a
   // card gets there is a real fully_executed contract, checked here
   // against the model's own real modelId via the same shim ContractsTab
@@ -588,6 +704,13 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
   const [savingNote, setSavingNote] = useState(false);
   const [declineAllConfirm, setDeclineAllConfirm] = useState(false);
   const [lockedDropError, setLockedDropError] = useState<string | null>(null);
+  const [projectDetailsError, setProjectDetailsError] = useState(false);
+  // Location + a real shoot start date are required before a candidate
+  // can move to Hold (the contract needs real values, not permanently-
+  // blank tags) — checked here rather than only at New Project's Publish
+  // gate, since that gate can't retroactively cover campaigns created
+  // before this existed (the real AW25 dev campaign has neither set).
+  const missingProjectDetails = !!campaign && (!campaign.location || !campaign.shootStartDate);
 
   // ─── Finalization ───────────────────────────────────────────────────
   const boardFinalized = !!campaign?.boardFinalizedAt;
@@ -708,6 +831,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     }
     const prev = talent.find(t => t.id === id);
     if (!prev) return;
+    if (newStage === "selected" && missingProjectDetails) { setProjectDetailsError(true); return; }
     const prevStage = prev.stage;
     const prevPosition = prev.boardPosition;
     moveTo(id, newStage, nextPositionFor(newStage));
@@ -732,6 +856,8 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     const targetT = talent.find(t => t.id === targetId);
     if (!draggedT || !targetT) return;
     if (locked) { setLockedDropError(draggedT.name); return; }
+    const enteringHoldCheck = draggedT.stage !== dropStage && dropStage === "selected";
+    if (enteringHoldCheck && missingProjectDetails) { setProjectDetailsError(true); return; }
 
     const columnCards = talent
       .filter(t => t.stage === targetT.stage && t.id !== draggedId)
@@ -767,7 +893,17 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
     function targetsAt(x: number, y: number) {
       const el = document.elementFromPoint(x, y);
       const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
-      const colEl = el?.closest("[data-column]") as HTMLElement | null;
+      let colEl = el?.closest("[data-column]") as HTMLElement | null;
+      if (!colEl) {
+        // Columns are flush (gap-0, border-r as the seam) but fractional
+        // widths mean the exact boundary pixel can round to neither box's
+        // hit-testing area — elementFromPoint lands on whatever's behind
+        // them instead. Fall back to whichever column's rect the pointer's
+        // x-coordinate falls within, so releasing right on the seam still
+        // registers as a drop instead of silently cancelling.
+        const cols = Array.from(document.querySelectorAll<HTMLElement>("[data-column]"));
+        colEl = cols.find(c => { const r = c.getBoundingClientRect(); return x >= r.left && x <= r.right; }) ?? null;
+      }
       const colId = (colEl?.dataset.column as BoardColId | undefined) ?? null;
       return { cardEl, colId };
     }
@@ -909,6 +1045,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                       draggable={false}
                       onCommentClick={()=>{setCommentModalTalent(t);setCommentDraft("");}}
                       onNoteClick={()=>{setNoteModalTalent(t);setNoteDraft(t.note ?? "");}}
+                      onNegotiateClick={()=>setNegotiationTalent(t)}
                       onExpand={()=>setExpandedTalent(t)}
                       flipped={expandedTalent?.id === t.id}
                       onFlippedChange={v=>{ if (!v) setExpandedTalent(null); }}
@@ -973,6 +1110,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                           onDragStart={()=>setDragging(t.id)}
                           onCommentClick={()=>{setCommentModalTalent(t);setCommentDraft("");}}
                           onNoteClick={()=>{setNoteModalTalent(t);setNoteDraft(t.note ?? "");}}
+                      onNegotiateClick={()=>setNegotiationTalent(t)}
                           onExpand={()=>setExpandedTalent(t)}
                           flipped={expandedTalent?.id === t.id}
                           onFlippedChange={v=>{ if (!v) setExpandedTalent(null); }}
@@ -983,7 +1121,7 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
                           duplicateBadge={t.duplicateFlag ? "Multiple agencies" : undefined}
                           commentCount={commentsFor(t.id).length}
                           boutiqueAgencies={t.boutiqueAgencies}
-                          rate={t.rate}
+                          rate={col.id!=="submitted" ? t.rate : undefined}
                           score={t.score}
                         />
                       );
@@ -1148,6 +1286,26 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
           </div>
         )}
 
+        {negotiationTalent && realCampaignId && profile && (() => {
+          const negotiationModelId = shim.get(negotiationTalent.id)?.modelId;
+          const negotiationContract = contracts.find(c => c.modelId === negotiationModelId);
+          if (!negotiationContract) return null;
+          return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setNegotiationTalent(null)}>
+              <div className="glass-strong border rounded-md w-full max-w-sm mx-4 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+                <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
+                  <div className="text-sm font-semibold truncate">Rate negotiation — {negotiationTalent.name}</div>
+                  <button onClick={()=>setNegotiationTalent(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+                </div>
+                <div className="p-3">
+                  <NegotiationThread contractId={negotiationContract.id} campaignId={realCampaignId} viewerRole="brand" viewerProfileId={profile.id}
+                    currentRate={negotiationContract.dayRate} onRateChanged={async ()=>{ setContracts(await fetchCampaignContracts(realCampaignId)); }}/>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Real internal comment board, collapsible — brand-team-only,
             same scope as the "Brand Team" thread in Messaging, but that
             one is mock-only (never wired to the database). This one
@@ -1259,6 +1417,23 @@ function Moodboard({ talent, setTalent, comments, onPostComment, onContractPromp
             </div>
             <div className="px-5 pb-5">
               <Btn variant="outline" onClick={()=>setLockedDropError(null)}>Okay</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {projectDetailsError && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setProjectDetailsError(false)}>
+          <div className="glass-strong border border-urgent rounded-md w-80 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-border">
+              <div className="text-heading text-sm text-urgent">Must complete project details</div>
+            </div>
+            <div className="p-5 text-sm text-muted-foreground">
+              This project needs its Location and Shoot Date set before candidates can move to Hold — the contract needs real values for both.
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" onClick={()=>{ setProjectDetailsError(false); onGoToProjectDetails?.(); }}>Go to Project Details</Btn>
+              <Btn variant="outline" onClick={()=>setProjectDetailsError(false)}>Cancel</Btn>
             </div>
           </div>
         </div>
@@ -1531,18 +1706,17 @@ function CastingTab({ campaignId }: { campaignId: string }) {
 const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = { draft: "Draft — Not Sent", awaiting_signature: "Awaiting Signature", fully_executed: "Fully Executed" };
 const CONTRACT_STATUS_VARIANT: Record<ContractStatus, "active"|"pending"|"draft"> = { draft: "draft", awaiting_signature: "pending", fully_executed: "active" };
 
-// Real contracts (migration 0032) generated off actually booked talent
-// — the "Generate Contract" picker only ever offers models who are both
-// really booked on this campaign and don't already have one, so a
-// contract's day_rate always traces back to a real booking. No real
+// Real contracts (migration 0032) generated off actually booked talent —
+// created automatically the moment a submission is approved (see
+// generateContractFor, Moodboard's onContractPrompt). No real
 // e-signature exists yet, so "Mark Signed" just records that signature
 // happened outside the system (paper, DocuSign, email) — an honest MVP
 // posture, not a faked in-app sign flow.
-function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaignId: string | null; talent: Talent[]; shim: SubmissionShim; profileId?: string }) {
+function ContractsTab({ realCampaignId }: { realCampaignId: string | null }) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(!!realCampaignId);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Contract | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
@@ -1553,19 +1727,6 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
   }
   useEffect(() => { if (realCampaignId) reload(); else setLoading(false); }, [realCampaignId]);
 
-  const contractedModelIds = new Set(contracts.map(c=>c.modelId));
-  const uncontractedBooked = talent.filter(t => t.stage==="booked" && !contractedModelIds.has(shim.get(t.id)?.modelId ?? ""));
-
-  async function handleGenerate(t: Talent, sendImmediately: boolean) {
-    const realModelId = shim.get(t.id)?.modelId;
-    if (!realCampaignId || !realModelId || !profileId) return;
-    setShowPicker(false);
-    setError(null);
-    const dayRate = Number(String(t.rate).replace(/[^0-9.]/g, "")) || 0;
-    const { error: err } = await createContract({ campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT/100, createdByProfileId: profileId, sendImmediately });
-    if (err) { setError(err); return; }
-    await reload();
-  }
   async function handleSend(c: Contract) {
     if (!realCampaignId) return;
     setBusyId(c.id);
@@ -1584,6 +1745,18 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
     if (err) { setError(err); return; }
     await reload();
   }
+  // Draft-only — enforced server-side (contracts_delete_draft_only,
+  // 0096), not just by this button being hidden for other statuses.
+  async function confirmDeleteDraft() {
+    if (!realCampaignId || !deleteConfirm) return;
+    setBusyId(deleteConfirm.id);
+    setError(null);
+    const { error: err } = await deleteContract(deleteConfirm.id, realCampaignId);
+    setBusyId(null);
+    setDeleteConfirm(null);
+    if (err) { setError(err); return; }
+    await reload();
+  }
 
   if (!realCampaignId) {
     return (
@@ -1591,7 +1764,6 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
         <div className="max-w-2xl space-y-4">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-heading text-sm">Contracts</h2>
-            <Btn variant="primary" size="sm" icon={<Plus size={13}/>} disabled>Generate Contract</Btn>
           </div>
           {[["CF-2025-0841","James Whitfield","Fully Executed","$2,850","06/14/2025"],
             ["CF-2025-0842","Amara Diallo","Awaiting Signature","$2,300","06/14/2025"],
@@ -1620,12 +1792,11 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
       <div className="max-w-2xl space-y-4">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-heading text-sm">Contracts</h2>
-          <Btn variant="primary" size="sm" icon={<Plus size={13}/>} disabled={uncontractedBooked.length===0} onClick={()=>setShowPicker(true)}>Generate Contract</Btn>
         </div>
         {error && <div className="text-xs text-red-500">{error}</div>}
         {contracts.length===0 ? (
           <div className="glass-subtle border border-dashed rounded-md p-8 text-center text-sm text-muted-foreground">
-            No contracts yet — approving a submission generates one automatically, or use Generate Contract for any already-booked model.
+            No contracts yet — approving a submission generates one automatically.
           </div>
         ) : contracts.map(c=>(
           <div key={c.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
@@ -1639,30 +1810,32 @@ function ContractsTab({ realCampaignId, talent, shim, profileId }: { realCampaig
               <Badge label={CONTRACT_STATUS_LABEL[c.status]} variant={CONTRACT_STATUS_VARIANT[c.status]}/>
               {c.status==="draft" && <Btn variant="outline" size="sm" disabled={busyId===c.id} onClick={()=>handleSend(c)}>{busyId===c.id?"Sending…":"Send"}</Btn>}
               {c.status==="awaiting_signature" && <Btn variant="outline" size="sm" disabled={busyId===c.id} onClick={()=>handleMarkSigned(c)}>{busyId===c.id?"Saving…":"Mark Signed"}</Btn>}
+              {/* Draft only — the RLS policy (0096) is the real gate;
+                  hiding this for sent/executed contracts just keeps the
+                  UI from offering an action that would fail anyway. */}
+              {c.status==="draft" && (
+                <button onClick={()=>setDeleteConfirm(c)} title="Delete draft" className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-urgent hover:bg-secondary cursor-pointer">
+                  <Trash2 size={13}/>
+                </button>
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {showPicker && (
-        <Modal onClose={()=>setShowPicker(false)} maxWidth="max-w-sm">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="text-heading text-sm">Generate Contract</div>
-            <button onClick={()=>setShowPicker(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setDeleteConfirm(null)}>
+          <div className="glass-strong border rounded-md w-full max-w-sm mx-4 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-border text-sm font-semibold">Delete draft contract?</div>
+            <div className="p-5 text-xs text-muted-foreground">
+              {deleteConfirm.modelName}'s draft contract ({deleteConfirm.contractNumber}) will be permanently deleted. It's never been sent, so nothing to preserve — this can't be undone.
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" disabled={busyId===deleteConfirm.id} onClick={confirmDeleteDraft}>{busyId===deleteConfirm.id ? "Deleting…" : "Delete"}</Btn>
+              <Btn variant="outline" onClick={()=>setDeleteConfirm(null)}>Cancel</Btn>
+            </div>
           </div>
-          <div className="p-4 space-y-1 max-h-72 overflow-y-auto">
-            {uncontractedBooked.map(t=>(
-              <button key={t.id} onClick={()=>handleGenerate(t, false)}
-                className="w-full text-left px-3 py-2.5 rounded-md hover:bg-secondary cursor-pointer transition-colors flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium">{t.name}</div>
-                  <div className="text-xs text-muted-foreground">{t.agency} · {t.rate}</div>
-                </div>
-                <Plus size={13} className="text-muted-foreground"/>
-              </button>
-            ))}
-          </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
@@ -2569,6 +2742,83 @@ function FinalizationWindowModal({ campaign, orgDefaultHours, onClose, onSave }:
   );
 }
 
+// Fix path for Location/Shoot Date(s) — required before candidates can
+// move to Hold (needsProjectDetails, Moodboard) but not required to save
+// a draft, so campaigns created before this existed (or drafts still in
+// progress) need a real place to fill them in after the fact. Also
+// covers turning Overtime/Additional Services on or off post-creation.
+function ProjectDetailsModal({ campaign, onClose, onSave }: {
+  campaign: Campaign; onClose: () => void;
+  onSave: (params: Parameters<typeof updateCampaignProjectDetails>[1]) => Promise<{ error: string | null }>;
+}) {
+  const [location, setLocation] = useState(campaign.location ?? "");
+  const [shootStartDate, setShootStartDate] = useState(campaign.shootStartDate ?? "");
+  const [shootEndDate, setShootEndDate] = useState(campaign.shootEndDate ?? "");
+  const [overtimeIncluded, setOvertimeIncluded] = useState(!!campaign.overtimeIncluded);
+  const [overtimeRate, setOvertimeRate] = useState(campaign.overtimeRate != null ? String(campaign.overtimeRate) : "");
+  const [overtimeIncludedHours, setOvertimeIncludedHours] = useState(campaign.overtimeIncludedHours != null ? String(campaign.overtimeIncludedHours) : "");
+  const [overtimeIncrementMinutes, setOvertimeIncrementMinutes] = useState(campaign.overtimeIncrementMinutes != null ? String(campaign.overtimeIncrementMinutes) : "15");
+  const [additionalServicesIncluded, setAdditionalServicesIncluded] = useState(!!campaign.additionalServicesIncluded);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await onSave({
+      location: location.trim() || undefined,
+      shootStartDate: shootStartDate || undefined,
+      shootEndDate: shootEndDate || undefined,
+      overtimeIncluded,
+      overtimeRate: overtimeIncluded && overtimeRate ? Number(overtimeRate) : undefined,
+      overtimeIncrementMinutes: overtimeIncluded && overtimeIncrementMinutes ? Number(overtimeIncrementMinutes) : undefined,
+      overtimeIncludedHours: overtimeIncluded && overtimeIncludedHours ? Number(overtimeIncludedHours) : undefined,
+      additionalServicesIncluded,
+    });
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onClose();
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-sm">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-heading text-sm">Project Details</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-4">
+        <TextInput label="Location" placeholder="City, state, or studio address" value={location} onChange={e=>setLocation(e.target.value)}/>
+        <div className="grid grid-cols-2 gap-4">
+          <TextInput label="Shoot Start" type="date" value={shootStartDate} onChange={e=>setShootStartDate(e.target.value)}/>
+          <TextInput label="Shoot End (optional)" type="date" value={shootEndDate} onChange={e=>setShootEndDate(e.target.value)}/>
+        </div>
+        <div className="border border-border rounded-md p-3.5 space-y-3">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={overtimeIncluded} onChange={e=>setOvertimeIncluded(e.target.checked)} className="mt-0.5 cursor-pointer"/>
+            <div className="text-sm">Include overtime terms</div>
+          </label>
+          {overtimeIncluded && (
+            <div className="grid grid-cols-3 gap-3 pl-6">
+              <TextInput label="Rate ($/hr)" type="number" value={overtimeRate} onChange={e=>setOvertimeRate(e.target.value)}/>
+              <TextInput label="Included Hrs" type="number" value={overtimeIncludedHours} onChange={e=>setOvertimeIncludedHours(e.target.value)}/>
+              <TextInput label="Increment (min)" type="number" value={overtimeIncrementMinutes} onChange={e=>setOvertimeIncrementMinutes(e.target.value)}/>
+            </div>
+          )}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={additionalServicesIncluded} onChange={e=>setAdditionalServicesIncluded(e.target.checked)} className="mt-0.5 cursor-pointer"/>
+            <div className="text-sm">Include additional services clause</div>
+          </label>
+        </div>
+        {error && <div className="text-xs text-red-500">{error}</div>}
+      </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <Btn variant="primary" disabled={saving} onClick={handleSave}>{saving ? "Saving…" : "Save"}</Btn>
+        <Btn variant="outline" disabled={saving} onClick={onClose}>Cancel</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 // Reached by clicking a mother/boutique agency name from a candidate
 // card. Deliberately minimal — real agency profiles (roster size,
 // standing partnership history, etc.) are follow-up work; this just
@@ -2612,13 +2862,14 @@ function AgencyProfileScreen({ agencyName, campaign, talent, onBack }: {
   );
 }
 
-function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onArchived, onCampaignChanged }: {
+function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSection, onBack, onNewCampaign, onHome, onArchived, onCampaignChanged, onGoToSettings }: {
   campaigns: Campaign[]; realIdShim: Map<number, string>; campaignId: number; section: CampaignSection; onSection: (s: CampaignSection) => void; onBack: () => void; onNewCampaign: () => void; onHome: () => void; onArchived?: () => void;
   // Refetches the campaigns list without navigating away — unlike
   // onArchived, which also kicks back to the campaigns list. Finalizing
   // a board (or editing its finalization window) needs the former: the
   // brand stays put and watches the board switch to its clean view.
   onCampaignChanged?: () => Promise<unknown>;
+  onGoToSettings: () => void;
 }) {
   const { profile, org } = useAuth();
   const { setOpen: setMobileNavOpen } = useMobileNav();
@@ -2648,6 +2899,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   const [extensions, setExtensions] = useState<SubmissionExtension[]>([]);
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [showFinalizationModal, setShowFinalizationModal] = useState(false);
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
   const [viewingAgency, setViewingAgency] = useState<string|null>(null);
   const [focusAgency, setFocusAgency] = useState<string|null>(null);
   const [bookModal, setBookModal] = useState<{ ids: number[] } | null>(null);
@@ -2772,12 +3024,15 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
   // Fires from the "Contract Generated" modal at approval time — before
   // a real booking necessarily exists yet, which is why contracts key
   // off model_id directly rather than requiring a booking_id.
-  async function generateContractFor(t: Talent, sendImmediately: boolean, duration: string) {
+  async function generateContractFor(t: Talent, sendImmediately: boolean, params: { duration: string; documentHtml: string; contractTemplateId: string | null }) {
     if (!realCampaignId || !profile) return; // mock campaign — nothing real to persist
     const realModelId = shim.get(t.id)?.modelId;
     if (!realModelId) return;
     const dayRate = Number(String(t.rate).replace(/[^0-9.]/g, "")) || 0;
-    await createContract({ campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT / 100, createdByProfileId: profile.id, sendImmediately, duration });
+    await createContract({
+      campaignId: realCampaignId, modelId: realModelId, dayRate, agencyPct: DEFAULT_AGENCY_PCT / 100, createdByProfileId: profile.id,
+      sendImmediately, duration: params.duration, documentHtml: params.documentHtml, contractTemplateId: params.contractTemplateId ?? undefined,
+    });
   }
 
   function openBookModal(ids: number[]) {
@@ -2905,15 +3160,20 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="glass-subtle border rounded-md p-4">
-                    <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Project Details</div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Project Details</div>
+                      <button onClick={()=>setShowProjectDetailsModal(true)} className="text-[10px] text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer">Edit</button>
+                    </div>
                     {[
                       ["Type", campaign.type],
                       ["Talent needed", String(campaign.talentNeeded)],
                       ["Status", campaign.status === "drafts" ? "Draft" : campaign.status === "archived" ? "Archived" : "Active"],
                       [campaign.dueLabel?.includes("overdue") ? "Ended on" : "Ends on", campaign.due || "—"],
+                      ["Location", campaign.location || "Not set"],
+                      ["Shoot Date(s)", campaign.shootStartDate ? `${campaign.shootStartDate}${campaign.shootEndDate ? ` – ${campaign.shootEndDate}` : ""}` : "Not set"],
                       ...(campaign.territory ? [["Territory", campaign.territory]] : []),
                     ].map(([k,v])=>(
-                      <div key={k} className={cx("flex justify-between py-1.5 border-b border-border last:border-0 text-xs", k==="Ended on" && "text-[#C0392B]")}>
+                      <div key={k} className={cx("flex justify-between py-1.5 border-b border-border last:border-0 text-xs", k==="Ended on" && "text-[#C0392B]", (k==="Location"||k==="Shoot Date(s)")&&v==="Not set" && "text-urgent")}>
                         <span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span>
                       </div>
                     ))}
@@ -2971,7 +3231,8 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
 
           {section==="moodboard" && <Moodboard talent={talent} setTalent={persistingSetTalent} comments={comments} onPostComment={handlePostComment} onContractPrompt={t=>setContractModal(t)} onViewAgency={setViewingAgency} onBook={openBookModal} realCampaignId={realCampaignId} onIndependentAdded={()=>{ if (realCampaignId) refetchTalent(realCampaignId); }} duplicates={duplicates} shim={shim}
             campaign={campaign} orgDefaultFinalizationHours={org?.defaultFinalizationHours}
-            onFinalized={async()=>{ if (realCampaignId) await refetchTalent(realCampaignId); await onCampaignChanged?.(); }}/>}
+            onFinalized={async()=>{ if (realCampaignId) await refetchTalent(realCampaignId); await onCampaignChanged?.(); }}
+            onGoToProjectDetails={()=>onSection("overview")}/>}
 
 
           {section==="crew" && (
@@ -3039,7 +3300,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
               : <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">This campaign predates Deliverables and has no saved project record to attach items to — create a new campaign to use Deliverables.</div>
           )}
 
-          {section==="contracts" && <ContractsTab realCampaignId={realCampaignId} talent={talent} shim={shim} profileId={profile?.id}/>}
+          {section==="contracts" && <ContractsTab realCampaignId={realCampaignId}/>}
 
           {section==="payments" && <CampaignPaymentsTab realCampaignId={realCampaignId} payees={payees} loading={payeesLoading} reload={()=>reloadPayees(realCampaignId)}/>}
 
@@ -3050,10 +3311,21 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
         </div>
       </div>
 
-      {contractModal && (
-        <ContractModal talent={contractModal}
-          onSend={async (duration)=>{ await generateContractFor(contractModal, true, duration); setContractModal(null); }}
-          onLater={async (duration)=>{ await generateContractFor(contractModal, false, duration); setContractModal(null); }}/>
+      {contractModal && org && (
+        <ContractModal talent={contractModal} orgId={org.id} orgName={org.name} campaign={campaign} realCampaignId={realCampaignId}
+          onClose={()=>{
+            // ContractModal only ever opens as the direct result of a fresh
+            // Submitted→Hold drop (onContractPrompt, fired from moveWithUndo/
+            // reorderOnto below) — there's no other call site that reopens it
+            // for an already-settled Hold candidate. So closing without
+            // Send/Review Later always means "this move shouldn't have
+            // happened" and reverting to Submitted is safe.
+            persistingSetTalent(prev => prev.map(t => t.id === contractModal.id ? { ...t, stage: "submitted" } : t));
+            setContractModal(null);
+          }}
+          onSend={async (params)=>{ await generateContractFor(contractModal, true, params); setContractModal(null); }}
+          onLater={async (params)=>{ await generateContractFor(contractModal, false, params); setContractModal(null); }}
+          onGoToSettings={()=>{ setContractModal(null); onGoToSettings(); }}/>
       )}
       {bookModal && (
         <Modal onClose={()=>{ if (!bookSaving) setBookModal(null); }} maxWidth="max-w-md">
@@ -3070,7 +3342,7 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
                     <div className="text-sm font-medium">{t?.name ?? "Model"}</div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <FieldLabel>Day rate</FieldLabel>
+                        <FieldLabel>Agreed Rate</FieldLabel>
                         <input type="number" value={f.dayRate} onChange={e=>setBookForm(prev=>({ ...prev, [id]: { ...f, dayRate: e.target.value } }))}
                           placeholder="950" className="w-full bg-input-background border border-border rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-foreground"/>
                       </div>
@@ -3106,6 +3378,16 @@ function CampaignWorkspace({ campaigns, realIdShim, campaignId, section, onSecti
           onClose={()=>setShowFinalizationModal(false)}
           onSave={async hours=>{
             const { error } = await updateCampaignFinalizationHours(realCampaignId, hours);
+            if (error) return { error };
+            await onCampaignChanged?.();
+            return { error: null };
+          }}/>
+      )}
+      {showProjectDetailsModal && realCampaignId && (
+        <ProjectDetailsModal campaign={campaign}
+          onClose={()=>setShowProjectDetailsModal(false)}
+          onSave={async params=>{
+            const { error } = await updateCampaignProjectDetails(realCampaignId, params);
             if (error) return { error };
             await onCampaignChanged?.();
             return { error: null };
@@ -3487,8 +3769,9 @@ const OVERDUE_ACTIONS = [
   { id:4, type:"Payment",  msg:"Payment due for Ines Ferreira booking — 1 day overdue.",              campaignId:2, due:"Jul 14, 2026" },
 ];
 
-function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { campaigns: Campaign[]; openCampaign: (id: number) => void; onNewCampaign: () => void; updatedAt?: number }) {
+function CampaignsList({ campaigns, openCampaign, onNewCampaign, onGoToSettings, updatedAt }: { campaigns: Campaign[]; openCampaign: (id: number) => void; onNewCampaign: () => void; onGoToSettings: () => void; updatedAt?: number }) {
   const currentUser = useCurrentUser();
+  const { org } = useAuth();
   const { setOpen: setMobileNavOpen } = useMobileNav();
   const [tab, setTab] = useState("active");
   const filtered = campaigns.filter(c=>c.status===(tab==="active"?"active":tab==="drafts"?"drafts":"archived"));
@@ -3496,9 +3779,11 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { 
   // guarantees no two cards on screen at once ever show the same photo.
   // AW26 Runway Presentation (id 5) deliberately gets no cover — direct request.
   const covers = assignCampaignCovers(filtered.map(c=>c.id).filter(id=>id!==5));
+  const templateGated = needsContractTemplate(org);
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <TopBar title="Projects" sub={`${currentUser?.org ?? ""} · Brand`} updatedAt={updatedAt} onMenuClick={()=>setMobileNavOpen(true)}/>
+      <ContractTemplateGateBanner org={org} onGoToSettings={onGoToSettings}/>
       <div className="flex items-center justify-between gap-1 px-6 pt-5 border-b border-border shrink-0">
         <div className="flex items-center gap-1">
           {["active","drafts","archived"].map(t=>(
@@ -3508,8 +3793,10 @@ function CampaignsList({ campaigns, openCampaign, onNewCampaign, updatedAt }: { 
               )}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
           ))}
         </div>
-        <button onClick={onNewCampaign}
-          className="mb-2 flex items-center gap-2 px-4 py-2 bg-foreground text-primary-foreground text-sm font-medium rounded-md hover:bg-foreground/90 transition-colors cursor-pointer shrink-0">
+        <button onClick={templateGated ? onGoToSettings : onNewCampaign}
+          title={templateGated ? "Choose a contract outline first" : undefined}
+          className={cx("mb-2 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer shrink-0",
+            templateGated ? "bg-secondary text-muted-foreground hover:text-foreground" : "bg-foreground text-primary-foreground hover:bg-foreground/90")}>
           <Plus size={14}/> New Project
         </button>
       </div>
@@ -3580,6 +3867,14 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
   const [customType, setCustomType] = useState("");
   const [name, setName] = useState("");
   const [shootStart, setShootStart] = useState("");
+  const [location, setLocation] = useState("");
+  const [shootDateStart, setShootDateStart] = useState("");
+  const [shootDateEnd, setShootDateEnd] = useState("");
+  const [overtimeIncluded, setOvertimeIncluded] = useState(false);
+  const [overtimeRate, setOvertimeRate] = useState("");
+  const [overtimeIncludedHours, setOvertimeIncludedHours] = useState("");
+  const [overtimeIncrementMinutes, setOvertimeIncrementMinutes] = useState("15");
+  const [additionalServicesIncluded, setAdditionalServicesIncluded] = useState(false);
   const [submissionOpen, setSubmissionOpen] = useState("");
   const [submissionClose, setSubmissionClose] = useState("");
   const [talentNeeded, setTalentNeeded] = useState("3");
@@ -3618,6 +3913,14 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
       budget: budget ? Number(budget) : undefined,
       hasInPersonCasting,
+      location: location.trim() || undefined,
+      shootStartDate: shootDateStart || undefined,
+      shootEndDate: shootDateEnd || undefined,
+      overtimeIncluded,
+      overtimeRate: overtimeIncluded && overtimeRate ? Number(overtimeRate) : undefined,
+      overtimeIncrementMinutes: overtimeIncluded && overtimeIncrementMinutes ? Number(overtimeIncrementMinutes) : undefined,
+      overtimeIncludedHours: overtimeIncluded && overtimeIncludedHours ? Number(overtimeIncludedHours) : undefined,
+      additionalServicesIncluded,
     });
     setSaving(false);
     if (error || !id) { setSaveError(error ?? "Couldn't save draft."); return; }
@@ -3640,6 +3943,14 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
       talentNeeded: talentNeeded ? Number(talentNeeded) : undefined,
       budget: budget ? Number(budget) : undefined,
       hasInPersonCasting,
+      location: location.trim() || undefined,
+      shootStartDate: shootDateStart || undefined,
+      shootEndDate: shootDateEnd || undefined,
+      overtimeIncluded,
+      overtimeRate: overtimeIncluded && overtimeRate ? Number(overtimeRate) : undefined,
+      overtimeIncrementMinutes: overtimeIncluded && overtimeIncrementMinutes ? Number(overtimeIncrementMinutes) : undefined,
+      overtimeIncludedHours: overtimeIncluded && overtimeIncludedHours ? Number(overtimeIncludedHours) : undefined,
+      additionalServicesIncluded,
     });
     if (error || !id) { setSaving(false); setSaveError(error ?? "Couldn't publish campaign."); return; }
     const { error: distError } = await distributeCampaignToAgencies(id, selectedAgencies, profile.id);
@@ -3687,9 +3998,23 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               </div>
               <TextInput label="Talent Needed" placeholder="e.g. 3" type="number" value={talentNeeded} onChange={e=>setTalentNeeded(e.target.value)}/>
               <TextInput label="Budget" placeholder="e.g. 18000" type="number" value={budget} onChange={e=>setBudget(e.target.value)}/>
-              <TextInput label="Shoot Date" placeholder="MM/DD/YYYY" type="date" value={shootStart} onChange={e=>setShootStart(e.target.value)}/>
             </div>
-            <TextInput label="Location" placeholder="City, state, or studio address"/>
+            <div>
+              <TextInput label="Project Deadline" placeholder="MM/DD/YYYY" type="date" value={shootStart} onChange={e=>setShootStart(e.target.value)}/>
+              <p className="text-xs text-muted-foreground mt-1">Drives the countdown shown on your project cards — not the shoot itself. Set the real shoot date(s) below.</p>
+            </div>
+            <div>
+              <FieldLabel>Shoot Date(s)</FieldLabel>
+              <p className="text-xs text-muted-foreground mb-2">Required before candidates can move to Hold — this is what goes on the contract.</p>
+              <div className="grid grid-cols-2 gap-4">
+                <TextInput label="Start" placeholder="MM/DD/YYYY" type="date" value={shootDateStart} onChange={e=>setShootDateStart(e.target.value)}/>
+                <TextInput label="End (optional)" placeholder="MM/DD/YYYY" type="date" value={shootDateEnd} onChange={e=>setShootDateEnd(e.target.value)}/>
+              </div>
+            </div>
+            <div>
+              <TextInput label="Location" placeholder="City, state, or studio address" value={location} onChange={e=>setLocation(e.target.value)}/>
+              <p className="text-xs text-muted-foreground mt-1">Required before candidates can move to Hold.</p>
+            </div>
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input type="checkbox" checked={hasInPersonCasting} onChange={e=>setHasInPersonCasting(e.target.checked)} className="mt-0.5 cursor-pointer"/>
               <div>
@@ -3704,6 +4029,25 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
                 <TextInput label="Opens" placeholder="MM/DD/YYYY" type="date" value={submissionOpen} onChange={e=>setSubmissionOpen(e.target.value)}/>
                 <TextInput label="Closes" placeholder="MM/DD/YYYY" type="date" value={submissionClose} onChange={e=>setSubmissionClose(e.target.value)}/>
               </div>
+            </div>
+            <div className="border border-border rounded-md p-3.5 space-y-3">
+              <FieldLabel>Overtime &amp; Additional Services</FieldLabel>
+              <p className="text-xs text-muted-foreground -mt-2">Off by default — these become sections 3.2/3.3 of the contract only when turned on for this project.</p>
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={overtimeIncluded} onChange={e=>setOvertimeIncluded(e.target.checked)} className="mt-0.5 cursor-pointer"/>
+                <div className="text-sm">Include overtime terms</div>
+              </label>
+              {overtimeIncluded && (
+                <div className="grid grid-cols-3 gap-3 pl-6">
+                  <TextInput label="Rate ($/hr)" type="number" placeholder="e.g. 150" value={overtimeRate} onChange={e=>setOvertimeRate(e.target.value)}/>
+                  <TextInput label="Included Hours" type="number" placeholder="e.g. 8" value={overtimeIncludedHours} onChange={e=>setOvertimeIncludedHours(e.target.value)}/>
+                  <TextInput label="Increment (min)" type="number" placeholder="e.g. 15" value={overtimeIncrementMinutes} onChange={e=>setOvertimeIncrementMinutes(e.target.value)}/>
+                </div>
+              )}
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={additionalServicesIncluded} onChange={e=>setAdditionalServicesIncluded(e.target.checked)} className="mt-0.5 cursor-pointer"/>
+                <div className="text-sm">Include additional services clause</div>
+              </label>
             </div>
           </>)}
           {step===2&&(<><div><h2 className="text-heading text-base mb-0.5">Talent Requirements</h2><p className="text-sm text-muted-foreground">Agencies match their roster to these requirements.</p></div>
@@ -3766,7 +4110,7 @@ function CreateCampaign({ onBack, onCreated }: { onBack: () => void; onCreated: 
               <Btn variant="ghost" size="sm" disabled={!name.trim() || saving} onClick={handleSaveDraft}>Save draft</Btn>
             </div>
             {step<4?<Btn variant="primary" disabled={!name.trim()} onClick={()=>setStep(step+1)}>Continue <ChevronRight size={13}/></Btn>
-              :<Btn variant="primary" icon={<Check size={13}/>} disabled={!name.trim() || selectedAgencies.length===0 || saving} onClick={handlePublish}>{saving?"Publishing…":"Publish Project"}</Btn>}
+              :<Btn variant="primary" icon={<Check size={13}/>} disabled={!name.trim() || !location.trim() || !shootDateStart || selectedAgencies.length===0 || saving} onClick={handlePublish}>{saving?"Publishing…":"Publish Project"}</Btn>}
           </div>
         </div>
       </div>
@@ -5389,6 +5733,141 @@ function AuditLogPanel() {
   );
 }
 
+// The one mandatory choice a new brand account has to make (needsContractTemplate,
+// accessGate.ts) before the actions that matter — creating a project,
+// sending a contract — unlock. Three ways in, all three land in the
+// same editor afterward: "easily editable first and foremost" applies
+// equally whether the content came from DVURE's own template, an
+// upload, or a blank page.
+//
+// "Use DVURE Standard" copies the DVURE-owned template's content into a
+// new ORG-owned row rather than pointing straight at it — RLS only lets
+// a brand write templates where org_id = their own org, so the DVURE
+// row (org_id null) itself is never directly editable by anyone. The
+// copy is what makes "editable" actually true once they've picked it.
+function ContractTemplateSettings() {
+  const { org, profile, refreshIdentity } = useAuth();
+  const [mode, setMode] = useState<"loading" | "picking" | "editing">("loading");
+  const [current, setCurrent] = useState<ContractTemplate | null>(null);
+  const [draftHtml, setDraftHtml] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!org?.defaultContractTemplateId) { setMode("picking"); setCurrent(null); return; }
+    fetchTemplateById(org.defaultContractTemplateId).then(t => {
+      if (!active) return;
+      setCurrent(t);
+      setDraftHtml(t?.contentHtml ?? "");
+      setMode("editing");
+    });
+    return () => { active = false; };
+  }, [org?.defaultContractTemplateId]);
+
+  async function finishPicking(name: string, source: "dvure_default" | "uploaded" | "authored", contentHtml: string, file?: File) {
+    if (!org || !profile) return;
+    setBusy(true);
+    setError(null);
+    const { template, error: err } = await createTemplate({ orgId: org.id, name, source, contentHtml, createdByProfileId: profile.id, file });
+    if (err || !template) { setBusy(false); setError(err ?? "Couldn't save this template."); return; }
+    const { error: setErr } = await setOrgDefaultTemplate(org.id, template.id);
+    if (setErr) { setBusy(false); setError(setErr); return; }
+    await refreshIdentity();
+    setCurrent(template);
+    setDraftHtml(contentHtml);
+    setMode("editing");
+    setBusy(false);
+  }
+
+  async function handleUseDvureDefault() {
+    const dvure = await fetchDvureDefaultTemplate();
+    await finishPicking("DVURE Template", "dvure_default", dvure?.contentHtml ?? "");
+  }
+
+  async function handleUploadFile(file: File) {
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    let html = "";
+    if (file.name.toLowerCase().endsWith(".docx")) {
+      const r = await convertDocxToHtml(file);
+      if (r.error) { setBusy(false); setError(r.error); return; }
+      html = r.html ?? "";
+    } else if (file.name.toLowerCase().endsWith(".pdf")) {
+      const r = await extractPdfText(file);
+      if (r.error) { setBusy(false); setError(r.error); return; }
+      html = r.html ?? "";
+      setNotice("Text auto-extracted from your PDF — review it carefully before using this as your default. PDF layout (columns, tables) isn't preserved, only the words themselves.");
+    } else {
+      setNotice("We can only auto-convert .docx and .pdf — paste your contract text below.");
+    }
+    await finishPicking(file.name, "uploaded", html, file);
+    setBusy(false);
+  }
+
+  async function handleWriteFromScratch() {
+    await finishPicking("Untitled Contract", "authored", "<p></p>");
+  }
+
+  async function handleSaveEdits() {
+    if (!current) return;
+    setBusy(true);
+    setError(null);
+    const { error: err } = await updateTemplateContent(current.id, draftHtml);
+    setBusy(false);
+    if (err) { setError(err); return; }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  if (mode === "loading") return null;
+
+  if (mode === "picking") {
+    return (
+      <div className="glass-subtle border rounded-md p-4 space-y-3">
+        <FieldLabel>Default Contract Outline</FieldLabel>
+        <p className="text-xs text-muted-foreground">
+          Every contract sent from your Model Board starts from this outline. Choose one to unlock creating projects and sending contracts.
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Btn variant="primary" size="sm" disabled={busy} onClick={handleUseDvureDefault}>Use DVURE Template</Btn>
+          <label className="inline-block">
+            <span className={cx("inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-border cursor-pointer hover:bg-secondary", busy && "opacity-40 pointer-events-none")}>
+              Upload Your Own (.docx / .pdf)
+            </span>
+            <input type="file" accept=".docx,.pdf" className="hidden" disabled={busy}
+              onChange={e=>{ const f = e.target.files?.[0]; if (f) handleUploadFile(f); }}/>
+          </label>
+          <Btn variant="outline" size="sm" disabled={busy} onClick={handleWriteFromScratch}>Write From Scratch</Btn>
+        </div>
+        {error && <div className="text-xs text-red-500">{error}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-subtle border rounded-md p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <FieldLabel>Default Contract Outline</FieldLabel>
+          <p className="text-xs text-muted-foreground mt-0.5">{current?.name} — resolved into every contract you send, with {"{{model_name}}"}, {"{{day_rate}}"}, {"{{territory}}"}, {"{{duration}}"}, {"{{brand_name}}"} filled in automatically.</p>
+        </div>
+        <button onClick={()=>setMode("picking")} className="text-[10px] text-muted-foreground hover:text-foreground hover:underline underline-offset-2 cursor-pointer shrink-0 ml-3">Change outline</button>
+      </div>
+      {notice && <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">{notice}</div>}
+      <RichTextEditor value={draftHtml} onChange={setDraftHtml} minHeight="240px"/>
+      <div className="flex items-center gap-2">
+        <Btn variant="primary" size="sm" disabled={busy} onClick={handleSaveEdits}>{busy ? "Saving…" : "Save"}</Btn>
+        {saved && <span className="text-xs text-muted-foreground">Saved.</span>}
+      </div>
+      {error && <div className="text-xs text-red-500">{error}</div>}
+    </div>
+  );
+}
+
 function SettingsScreen({ onLogout }: { onLogout: () => void }) {
   const user = useCurrentUser();
   const { org, refreshIdentity } = useAuth();
@@ -5526,6 +6005,7 @@ function SettingsScreen({ onLogout }: { onLogout: () => void }) {
                   </div>
                   {finalizationHoursError && <div className="text-xs text-red-500">{finalizationHoursError}</div>}
                 </div>
+                <ContractTemplateSettings/>
                 <SupportTicketForm defaultCategory="delete_organization"/>
               </div>
             )}
@@ -5675,12 +6155,12 @@ export default function BrandApp({ onLogout }: { onLogout: () => void }) {
       <MobileNavProvider>
       <div className="h-screen flex bg-background overflow-hidden">
         {activeCampaignId != null ? (
-          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onArchived={async()=>{ await refetchCampaigns(); backToCampaigns(); }} onCampaignChanged={refetchCampaigns}/>
+          <CampaignWorkspace campaigns={allCampaigns} realIdShim={realIdShim} campaignId={activeCampaignId} section={campaignSection} onSection={setCampaignSection} onBack={backToCampaigns} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onHome={()=>handleGlobalNav("campaigns")} onArchived={async()=>{ await refetchCampaigns(); backToCampaigns(); }} onCampaignChanged={refetchCampaigns} onGoToSettings={()=>setView("settings")}/>
         ) : (
           <>
             <BrandSidebar active={globalNav} onNav={handleGlobalNav} onLogout={onLogout}/>
             <main className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} updatedAt={campaignsUpdatedAt}/>}
+              {view==="campaigns"        && <CampaignsList campaigns={allCampaigns} openCampaign={openCampaign} onNewCampaign={()=>{ setView("create-campaign"); navigate("/brand"); }} onGoToSettings={()=>setView("settings")} updatedAt={campaignsUpdatedAt}/>}
               {view==="schedule"         && <ScheduleScreen campaigns={allCampaigns} realIdShim={realIdShim} openCampaign={openCampaign}/>}
               {view==="create-campaign"  && <CreateCampaign onBack={()=>setView("campaigns")} onCreated={handleCampaignCreated}/>}
               {view==="contracts-global" && <GlobalContracts/>}

@@ -1,14 +1,27 @@
 import { useState, useContext, createContext, useEffect, useRef } from "react";
-import { Bell, X, ChevronDown, Settings, Lock, Camera, Menu, Info } from "lucide-react";
+import { Bell, X, ChevronDown, Settings, Lock, Camera, Menu, Info, Send, Check } from "lucide-react";
 import { useAuth, type OrgInfo } from "./auth";
-import { getAccessGate } from "./accessGate";
+import { getAccessGate, needsContractTemplate } from "./accessGate";
 import { ACTIVITY_EVENTS } from "./mockData";
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead, type AppNotification } from "../../lib/queries/notifications";
+import { fetchThread, postMessage, postOffer, acceptOffer, type NegotiationEntry, type NegotiationAuthorRole } from "../../lib/queries/rateNegotiations";
 import dvureMarkD from "../../assets/dvure-mark-d.png";
 import dvureMarkWordmark from "../../assets/dvure-mark-wordmark.png";
 import dvureMarkSignature from "../../assets/dvure-mark-signature.png";
 
 export const cx = (...cs: (string | false | undefined)[]) => cs.filter(Boolean).join(" ");
+
+// ToS 7.17 — a minor's contract is signed by the identified guardian,
+// not the minor. is_model_minor (0086) is the real, server-enforced
+// version of this same check; this is just the client-side mirror,
+// shared across ModelApp (signing), AgencyApp (roster), and CompCard
+// (the Model Board's minor badge) so all three agree on the same math.
+export function isMinor(dateOfBirth: string | null | undefined): boolean {
+  if (!dateOfBirth) return false;
+  const eighteenYearsAgo = new Date();
+  eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
+  return new Date(dateOfBirth) > eighteenYearsAgo;
+}
 
 // City/state/country-code fragment -> {flag, full country name}. Covers
 // the fragments actually used in this app's location strings (US state
@@ -181,13 +194,13 @@ export function DvureMark({ size = 24, className }: { size?: number; className?:
   return <img src={dvureMarkD} alt="DVURE" style={{ height: size, width: "auto" }} className={cx("inline-block", className)}/>;
 }
 
-export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, onBlur, readOnly }: {
-  label?: string; placeholder: string; type?: string; defaultValue?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; readOnly?: boolean;
+export function TextInput({ label, placeholder, type="text", defaultValue, value, onChange, onBlur, readOnly, min, max }: {
+  label?: string; placeholder: string; type?: string; defaultValue?: string; value?: string; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; readOnly?: boolean; min?: string; max?: string;
 }) {
   return (
     <div>
       {label && <FieldLabel>{label}</FieldLabel>}
-      <input type={type} placeholder={placeholder} defaultValue={defaultValue} value={value} onChange={onChange} onBlur={onBlur} readOnly={readOnly}
+      <input type={type} placeholder={placeholder} defaultValue={defaultValue} value={value} onChange={onChange} onBlur={onBlur} readOnly={readOnly} min={min} max={max}
         className="w-full bg-input-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-foreground"/>
     </div>
   );
@@ -577,14 +590,230 @@ export function GateBanner({ org }: { org: OrgInfo | undefined }) {
   );
 }
 
+// Separate from GateBanner (payment/verification/trial) on purpose —
+// needsContractTemplate (accessGate.ts) is its own single-reason check,
+// not one of that gate's three. Shown on the screens that actually
+// need it (Projects list, Model Board) rather than globally, matching
+// how GateBanner itself is only rendered on the screens its own gate
+// affects.
+export function ContractTemplateGateBanner({ org, onGoToSettings }: { org: OrgInfo | undefined; onGoToSettings?: () => void }) {
+  if (!needsContractTemplate(org)) return null;
+  return (
+    <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-border text-xs bg-secondary">
+      <Lock size={13} className="shrink-0 text-muted-foreground"/>
+      <span className="text-foreground flex-1">Choose a contract outline before creating a project or sending a contract.</span>
+      {onGoToSettings && (
+        <button onClick={onGoToSettings} className="font-medium text-foreground hover:underline underline-offset-2 cursor-pointer shrink-0">
+          Go to Settings
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ToolbarBtn({ onClick, label, className }: { onClick: () => void; label: string; className?: string }) {
+  return (
+    <button type="button" onMouseDown={e=>e.preventDefault()} onClick={onClick}
+      className={cx("min-w-[26px] h-[26px] px-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer", className)}>
+      {label}
+    </button>
+  );
+}
+
+// A contract template is the only thing in this app that needs actual
+// rich text — no WYSIWYG library exists anywhere in this repo, and a
+// contract's own needs (headings, bold/italic, lists, paragraphs) don't
+// justify pulling one in. document.execCommand is deprecated but still
+// functional across current browsers for exactly this narrow feature
+// set; worth revisiting with a real library if the editor's needs ever
+// grow past this.
+//
+// Deliberately semi-controlled, not fully controlled: the DOM is only
+// overwritten from the `value` prop when it changed from OUTSIDE (a
+// different document loaded) while the editor isn't focused — syncing
+// on every keystroke would reset the cursor, since onChange feeds the
+// exact same string right back in as the next `value`.
+export function RichTextEditor({ value, onChange, readOnly, className, minHeight = "200px" }: {
+  value: string; onChange?: (html: string) => void; readOnly?: boolean; className?: string; minHeight?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (document.activeElement !== ref.current && ref.current.innerHTML !== value) {
+      ref.current.innerHTML = value;
+    }
+  }, [value]);
+
+  function handleInput() {
+    if (ref.current) onChange?.(ref.current.innerHTML);
+  }
+  function exec(cmd: string, arg?: string) {
+    ref.current?.focus();
+    document.execCommand(cmd, false, arg);
+    handleInput();
+  }
+
+  return (
+    <div className={cx("border border-border rounded-md overflow-hidden bg-input-background", className)}>
+      {!readOnly && (
+        <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-secondary/50 flex-wrap">
+          <ToolbarBtn onClick={()=>exec("bold")} label="B" className="font-bold"/>
+          <ToolbarBtn onClick={()=>exec("italic")} label="I" className="italic"/>
+          <div className="w-px h-4 bg-border mx-1"/>
+          <ToolbarBtn onClick={()=>exec("formatBlock", "H1")} label="H1"/>
+          <ToolbarBtn onClick={()=>exec("formatBlock", "H2")} label="H2"/>
+          <ToolbarBtn onClick={()=>exec("formatBlock", "P")} label="¶"/>
+          <div className="w-px h-4 bg-border mx-1"/>
+          <ToolbarBtn onClick={()=>exec("insertUnorderedList")} label="•"/>
+          <ToolbarBtn onClick={()=>exec("insertOrderedList")} label="1."/>
+        </div>
+      )}
+      <div ref={ref} contentEditable={!readOnly} suppressContentEditableWarning onInput={handleInput}
+        style={{ minHeight }}
+        className={cx("px-3 py-2.5 text-sm overflow-y-auto focus:outline-none max-h-[50vh]",
+          "[&_h1]:text-lg [&_h1]:font-bold [&_h1]:mb-3",
+          // Section headers (h2) get real breathing room above and a
+          // hairline rule — without this, a multi-section legal document
+          // reads as one unbroken wall of text (there's no h2 top-margin
+          // by default, only bottom). First h2 skips the top margin/rule
+          // so it doesn't float away from the title.
+          "[&_h2]:text-sm [&_h2]:font-bold [&_h2]:uppercase [&_h2]:tracking-wide [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:pt-4 [&_h2]:border-t [&_h2]:border-border",
+          "[&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1",
+          "[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2 [&_li]:mb-0.5 [&_p]:mb-2 [&_p:last-child]:mb-0"
+        )}
+      />
+    </div>
+  );
+}
+
 // Reusable frosted modal shell — overlay + glass card. Use for new
 // surfaces; existing bespoke modals keep their own markup for now.
+//
+// max-h-[90vh] + overflow-y-auto on the card itself (not just its
+// children) — without this, a card taller than the viewport had no way
+// to scroll at all: the outer overlay is `fixed inset-0` (unaffected by
+// page scroll) and the card had `overflow-hidden`, so anything past the
+// bottom edge was permanently unreachable, on any device, in any
+// browser. Found via EditModelModal/AddModelModal's minor/guardian
+// fields, tall enough to overflow a real viewport, not just this one.
 export function Modal({ onClose, maxWidth = "max-w-md", children }: { onClose: () => void; maxWidth?: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className={cx("glass-strong border rounded-xl w-full overflow-hidden shadow-xl", maxWidth)} onClick={e=>e.stopPropagation()}>
+      <div className={cx("glass-strong border rounded-xl w-full shadow-xl max-h-[90vh] overflow-y-auto", maxWidth)} onClick={e=>e.stopPropagation()}>
         {children}
       </div>
+    </div>
+  );
+}
+
+const NEGOTIATION_ROLE_LABEL: Record<NegotiationAuthorRole, string> = { brand: "Brand", agency: "Agency", model: "Model" };
+
+// One thread, three embeddings (CompCard popup for the brand, the
+// Roster card's Active Negotiations block for the agency, ContractsView
+// for the model) — each passes its own viewerRole/viewerProfileId
+// rather than this component calling useAuth() itself, so it stays
+// usable from all three apps without assuming which kind of session is
+// signed in. Not real-time — fetches on mount and after every send,
+// same posture as the existing campaign comment panel (campaignComments.ts)
+// this app already uses everywhere else instead of a live subscription.
+export function NegotiationThread({ contractId, campaignId, viewerRole, viewerProfileId, currentRate, onRateChanged }: {
+  contractId: string; campaignId: string; viewerRole: NegotiationAuthorRole; viewerProfileId: string;
+  currentRate: number; onRateChanged?: () => void;
+}) {
+  const [entries, setEntries] = useState<NegotiationEntry[] | null>(null);
+  const [text, setText] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    fetchThread(contractId).then(setEntries);
+  }
+  useEffect(reload, [contractId]);
+
+  // The one offer still open for a response — the most recent 'offer'
+  // entry, provided no 'accept' has landed after it. Only that offer
+  // gets an Accept button; older superseded offers are history, not
+  // live proposals.
+  let pendingOffer: NegotiationEntry | null = null;
+  if (entries) {
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i].kind === "accept") break;
+      if (entries[i].kind === "offer") { pendingOffer = entries[i]; break; }
+    }
+  }
+
+  async function handleSend() {
+    if (!text.trim() && !amount.trim()) return;
+    setBusy(true);
+    setError(null);
+    const { error: err } = amount.trim()
+      ? await postOffer(contractId, viewerProfileId, viewerRole, Number(amount), text.trim() || undefined)
+      : await postMessage(contractId, viewerProfileId, viewerRole, text.trim());
+    setBusy(false);
+    if (err) { setError(err); return; }
+    setText(""); setAmount("");
+    reload();
+  }
+
+  async function handleAccept(offerAmount: number) {
+    setBusy(true);
+    setError(null);
+    const { error: err } = await acceptOffer({ contractId, campaignId, amount: offerAmount });
+    setBusy(false);
+    if (err) { setError(err); return; }
+    reload();
+    onRateChanged?.();
+  }
+
+  return (
+    <div className="border border-border rounded-md flex flex-col overflow-hidden">
+      <div className="px-3 py-2 border-b border-border bg-secondary/40 text-xs font-medium flex items-center justify-between">
+        <span>Rate negotiation</span>
+        <span className="font-mono text-muted-foreground">Current: ${currentRate.toLocaleString()}/day</span>
+      </div>
+      <div className="flex-1 overflow-y-auto max-h-64 p-3 space-y-2">
+        {entries === null ? (
+          <div className="text-xs text-muted-foreground text-center py-4">Loading…</div>
+        ) : entries.length === 0 ? (
+          <div className="text-xs text-muted-foreground text-center py-4">No offers or messages yet — send one below.</div>
+        ) : entries.map(e => (
+          <div key={e.id} className={cx("text-xs rounded-md px-2.5 py-1.5", e.kind==="offer" ? "bg-secondary border border-border" : e.kind==="accept" ? "bg-foreground/5 text-center" : "")}>
+            {e.kind === "message" && (
+              <div><span className="font-medium">{NEGOTIATION_ROLE_LABEL[e.authorRole]}</span> ({e.authorName}): {e.text}</div>
+            )}
+            {e.kind === "offer" && (
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="font-medium">{NEGOTIATION_ROLE_LABEL[e.authorRole]}</span> offered <span className="font-mono font-semibold">${e.amount?.toLocaleString()}/day</span>
+                  {e.text && <div className="text-muted-foreground mt-0.5">{e.text}</div>}
+                </div>
+                {pendingOffer?.id === e.id && e.authorRole !== viewerRole && (
+                  <Btn size="sm" variant="outline" disabled={busy} onClick={()=>handleAccept(e.amount!)} icon={<Check size={11}/>}>Accept</Btn>
+                )}
+              </div>
+            )}
+            {e.kind === "accept" && (
+              <div className="text-muted-foreground">Agreed on <span className="font-mono font-semibold text-foreground">${e.amount?.toLocaleString()}/day</span> by {NEGOTIATION_ROLE_LABEL[e.authorRole]}</div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="p-2 border-t border-border flex items-center gap-1.5">
+        <input value={text} onChange={ev=>setText(ev.target.value)} placeholder="Message…"
+          className="flex-1 min-w-0 border border-border rounded-md bg-input-background px-2 py-1.5 text-xs focus:outline-none focus:border-foreground"/>
+        <div className="flex items-center border border-border rounded-md bg-input-background px-1.5 w-20 shrink-0">
+          <span className="text-xs text-muted-foreground">$</span>
+          <input value={amount} onChange={ev=>setAmount(ev.target.value.replace(/[^0-9]/g,""))} placeholder="Counter"
+            className="w-full min-w-0 bg-transparent px-1 py-1.5 text-xs focus:outline-none"/>
+        </div>
+        <button onClick={handleSend} disabled={busy || (!text.trim() && !amount.trim())} title="Send"
+          className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center bg-foreground text-primary-foreground disabled:opacity-40 cursor-pointer">
+          <Send size={12}/>
+        </button>
+      </div>
+      {error && <div className="px-3 pb-2 text-[10px] text-red-500">{error}</div>}
     </div>
   );
 }

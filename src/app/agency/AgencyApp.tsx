@@ -1,15 +1,16 @@
 import { useState, useMemo, useEffect } from "react";
-import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight, AlertCircle, Share2 } from "lucide-react";
-import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox, MobileNavDrawer, Chip } from "../shared/ui";
+import { LogOut, Plus, Send, MessageSquare, Inbox, Users2, CreditCard, X, UserPlus, Search, ChevronRight, AlertCircle, Share2, Pencil, Archive, Star } from "lucide-react";
+import { cx, XBox, Badge, Btn, Stat, TopBar, TextInput, FSelect, Textarea, FieldLabel, Modal, CurrentUserProvider, useCurrentUser, CountryFlag, DvureSignature, DvureMark, OrgLogoBox, MobileNavDrawer, Chip, isMinor, NegotiationThread } from "../shared/ui";
 import { BOOKINGS, bookingBreakdown, MOCK_NOW, CAMPAIGNS, CAMPAIGN_AGENCY_THREADS, ORG_COUNTRY } from "../shared/mockData";
 import type { RosterModel, CampaignThreadMessage, RepresentationExclusivity } from "../shared/types";
 import { useAuth } from "../shared/auth";
 import { updateOrgLogo } from "../../lib/queries/auth";
 import {
   fetchAgencyRoster, checkPossibleModelDuplicate, addNewModelToRoster, linkModelToExistingRoster,
-  setModelIntakeDetails, type RelationshipTerms, type ModelSex,
+  setModelIntakeDetails, endRepresentationRelationship, notifyAdultTransitions, type RelationshipTerms, type ModelSex,
 } from "../../lib/queries/roster";
 import { createModelDocument, uploadModelDocumentFile, type DocumentCategory } from "../../lib/queries/documents";
+import { fetchActiveNegotiationsForAgency, type ActiveNegotiation } from "../../lib/queries/rateNegotiations";
 import { findCampaignIdByName } from "../../lib/queries/campaigns";
 import { insertSubmission } from "../../lib/queries/submissions";
 import { createModelInvite } from "../../lib/queries/invites";
@@ -517,6 +518,13 @@ const CURATED_REPRESENTATION_TYPES = [
   "Mother Agency / Mother Management", "Market / Booking Agency", "Modeling Agency",
   "Management", "Exclusive Representation", "Non-Exclusive Representation", "Other",
 ];
+// Sanity bounds on date_of_birth (0091) — a real CHECK constraint on
+// model_profiles backs this up regardless of which RPC writes the
+// column, this is just the UI-level first line of defense. Deliberately
+// no floor above 0 — infant/baby modeling is real.
+const DOB_MAX = new Date().toISOString().slice(0, 10);
+const DOB_MIN = new Date(new Date().setFullYear(new Date().getFullYear() - 150)).toISOString().slice(0, 10);
+
 const CURATED_TERRITORIES = [
   "New York", "Los Angeles", "Miami", "Chicago", "Paris", "Milan", "London", "Tokyo", "Shanghai",
   "United States", "Europe", "North America", "Worldwide",
@@ -683,6 +691,14 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
       height: "—", exp: "—", hasLogin: false,
       relationshipId: relationshipId!, relationshipType: representationType, isMotherAgency,
       territories, exclusivity, effectiveStartDate, effectiveEndDate: effectiveEndDate || null,
+      // This is a local optimistic-update object, not a refetch — has to
+      // mirror what setModelIntakeDetails just persisted, or EditModelModal
+      // (opened on this same row before any reload) would show blank
+      // fields for a model that in fact already has real data saved.
+      dateOfBirth: dateOfBirth || null,
+      guardianName: isMinorInput ? guardianName.trim() || null : null,
+      guardianEmail: isMinorInput ? email.trim() || null : null,
+      guardianRelationship: isMinorInput ? guardianRelationship.trim() || null : null,
     };
     setSaving(false);
     setResult({ model: newModel, overlapWarning });
@@ -730,7 +746,7 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
             onChange={e=>setEmail(e.target.value)} onBlur={runDuplicateCheck}/>
           <div className="grid grid-cols-2 gap-3">
             <TextInput label={isMinorInput ? "Guardian's Phone" : "Phone"} placeholder="Optional" value={phone} onChange={e=>setPhone(e.target.value)} onBlur={runDuplicateCheck}/>
-            <TextInput label="Date of Birth" placeholder="YYYY-MM-DD" type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} onBlur={runDuplicateCheck}/>
+            <TextInput label="Date of Birth" placeholder="YYYY-MM-DD" type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} onBlur={runDuplicateCheck} min={DOB_MIN} max={DOB_MAX}/>
           </div>
           {isMinorInput && (
             <div className="text-[10px] text-muted-foreground -mt-1.5">This model is a minor — their DVURE account and invite go to the guardian's email above, not a separate child email.</div>
@@ -863,42 +879,229 @@ function AddModelModal({ onClose, onAdded }: { onClose: () => void; onAdded: (m:
   );
 }
 
-function RosterView({ roster, onModelAdded }: { roster: RosterModel[]; onModelAdded: (m: RosterModel) => void }) {
+// The one-click fix for a model who's since turned 18 with guardian
+// info still on file — a real, separate clear rather than just leaving
+// the fields to go stale, since set_model_intake_details (0091) can now
+// distinguish "leave alone" from "wipe it" via p_clear_guardian_info.
+function EditModelModal({ model, onClose, onSaved }: { model: RosterModel; onClose: () => void; onSaved: (patch: Partial<RosterModel>) => void }) {
+  const [dateOfBirth, setDateOfBirth] = useState(model.dateOfBirth ?? "");
+  const [guardianName, setGuardianName] = useState(model.guardianName ?? "");
+  const [guardianEmail, setGuardianEmail] = useState(model.guardianEmail ?? "");
+  const [guardianRelationship, setGuardianRelationship] = useState(model.guardianRelationship ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const minorNow = isMinor(dateOfBirth);
+  const hasStaleGuardianInfo = !minorNow && !!(model.guardianName || model.guardianEmail || model.guardianRelationship);
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await setModelIntakeDetails(model.id, {
+      dateOfBirth: dateOfBirth || undefined,
+      guardianName: minorNow ? guardianName.trim() || undefined : undefined,
+      guardianEmail: minorNow ? guardianEmail.trim() || undefined : undefined,
+      guardianRelationship: minorNow ? guardianRelationship.trim() || undefined : undefined,
+    });
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onSaved({
+      dateOfBirth: dateOfBirth || null,
+      guardianName: minorNow ? (guardianName.trim() || model.guardianName) : model.guardianName,
+      guardianEmail: minorNow ? (guardianEmail.trim() || model.guardianEmail) : model.guardianEmail,
+      guardianRelationship: minorNow ? (guardianRelationship.trim() || model.guardianRelationship) : model.guardianRelationship,
+    });
+    onClose();
+  }
+
+  async function handleMarkAdult() {
+    setSaving(true);
+    setError(null);
+    const { error: err } = await setModelIntakeDetails(model.id, { clearGuardianInfo: true });
+    setSaving(false);
+    if (err) { setError(err); return; }
+    onSaved({ guardianName: null, guardianEmail: null, guardianRelationship: null });
+    onClose();
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth="max-w-md">
+      <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div className="text-heading text-sm">Edit {model.name}</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+      </div>
+      <div className="p-5 space-y-3">
+        <TextInput label="Date of Birth" placeholder="YYYY-MM-DD" type="date" value={dateOfBirth} onChange={e=>setDateOfBirth(e.target.value)} min={DOB_MIN} max={DOB_MAX}/>
+
+        {hasStaleGuardianInfo && (
+          <div className="border border-border rounded-md p-3 space-y-2 bg-secondary/30">
+            <div className="text-xs font-medium">Now an adult — guardian info still on file</div>
+            <div className="text-[10px] text-muted-foreground">{model.guardianName} is on record as {model.name}'s guardian, but this date of birth makes them 18+. Clear it once they're no longer signing on {model.name}'s behalf.</div>
+            <Btn variant="outline" size="sm" onClick={handleMarkAdult} disabled={saving}>{saving ? "Clearing…" : "Mark as adult — clear guardian info"}</Btn>
+          </div>
+        )}
+
+        {minorNow && (
+          <div className="border border-border rounded-md p-3 space-y-2.5 bg-secondary/30">
+            <div className="text-xs font-medium">Parent/Guardian</div>
+            <TextInput label="Guardian Full Name" placeholder="e.g. Maria Petrov" value={guardianName} onChange={e=>setGuardianName(e.target.value)}/>
+            <TextInput label="Guardian Email" placeholder="parent@example.com" type="email" value={guardianEmail} onChange={e=>setGuardianEmail(e.target.value)}/>
+            <TextInput label="Relationship" placeholder="e.g. Mother" value={guardianRelationship} onChange={e=>setGuardianRelationship(e.target.value)}/>
+          </div>
+        )}
+
+        {error && <div className="text-xs text-urgent bg-urgent/5 border border-urgent rounded-md px-3 py-2">{error}</div>}
+      </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <Btn variant="primary" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Save"}</Btn>
+        <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function RosterView({ roster, onModelAdded, onModelUpdated, onModelArchived }: {
+  roster: RosterModel[]; onModelAdded: (m: RosterModel) => void; onModelUpdated: (id: string, patch: Partial<RosterModel>) => void; onModelArchived: (id: string) => void;
+}) {
+  const { org, profile } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [invitingModel, setInvitingModel] = useState<RosterModel | null>(null);
+  const [editingModel, setEditingModel] = useState<RosterModel | null>(null);
+  const [archiveConfirm, setArchiveConfirm] = useState<RosterModel | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [tab, setTab] = useState<"active" | "archived">("active");
+  const [archivedRoster, setArchivedRoster] = useState<RosterModel[] | null>(null);
+  const [negotiations, setNegotiations] = useState<ActiveNegotiation[]>([]);
+  const [openNegotiation, setOpenNegotiation] = useState<ActiveNegotiation | null>(null);
+
+  useEffect(() => {
+    if (tab === "archived" && org && archivedRoster === null) {
+      fetchAgencyRoster(org.id, org.name, "inactive").then(setArchivedRoster);
+    }
+  }, [tab, org, archivedRoster]);
+
+  useEffect(() => { fetchActiveNegotiationsForAgency().then(setNegotiations); }, []);
+
+  async function confirmArchive() {
+    if (!archiveConfirm?.relationshipId) return;
+    setArchiving(true);
+    const { error } = await endRepresentationRelationship(archiveConfirm.relationshipId);
+    setArchiving(false);
+    if (error) return;
+    onModelArchived(archiveConfirm.id);
+    setArchivedRoster(null); // stale — refetch next time the Archived tab is opened
+    setArchiveConfirm(null);
+  }
+
+  const shown = tab === "active" ? roster : (archivedRoster ?? []);
+
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Your full talent roster — it's the agency's responsibility to add models here.</p>
         <Btn variant="primary" size="sm" icon={<UserPlus size={12}/>} onClick={()=>setShowAdd(true)}>Add Model</Btn>
       </div>
+      <div className="flex items-center gap-1 border-b border-border">
+        {(["active", "archived"] as const).map(t=>(
+          <button key={t} onClick={()=>setTab(t)}
+            className={cx("px-3 py-2 text-xs font-medium capitalize border-b-2 -mb-px transition-colors",
+              tab===t ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            {t}
+          </button>
+        ))}
+      </div>
       <div className="space-y-2">
-        {roster.map(m=>(
-          <div key={m.id} className="glass-subtle border rounded-md p-4 flex items-center gap-4">
-            <XBox className="w-12 h-12 rounded-md shrink-0"/>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold flex items-center gap-1.5">{m.name} <CountryFlag location={m.location} className="text-xs"/></div>
-              <div className="text-xs text-muted-foreground">{m.location} · {m.email}</div>
-              {(m.relationshipType || (m.territories && m.territories.length > 0)) && (
-                <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                  {m.relationshipType}{m.relationshipType && m.territories?.length ? " · " : ""}{m.territories?.join(", ")}
+        {shown.map(m=>{
+          const turnedAdult = !!m.guardianName && !!m.dateOfBirth && !isMinor(m.dateOfBirth);
+          const modelNegotiations = tab==="active" ? negotiations.filter(n => n.modelId === m.id) : [];
+          return (
+            <div key={m.id} className="glass-subtle border rounded-md overflow-hidden">
+              <div className="p-4 flex items-center gap-4">
+                <XBox className="w-12 h-12 rounded-md shrink-0"/>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold flex items-center gap-1.5">
+                    {m.name} <CountryFlag location={m.location} className="text-xs"/>
+                    {!!m.dateOfBirth && isMinor(m.dateOfBirth) && <Star size={10} className="text-muted-foreground shrink-0" fill="currentColor"/>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{m.location} · {m.email}</div>
+                  {(m.relationshipType || (m.territories && m.territories.length > 0)) && (
+                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                      {m.relationshipType}{m.relationshipType && m.territories?.length ? " · " : ""}{m.territories?.join(", ")}
+                    </div>
+                  )}
+                  {turnedAdult && (
+                    <button onClick={()=>setEditingModel(m)} className="mt-1 text-[10px] font-medium text-urgent hover:underline underline-offset-2 cursor-pointer">
+                      Turned 18 — update record
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs font-mono">{m.rate}</div>
+                {m.hasLogin ? (
+                  <Badge label="Has login" variant="active"/>
+                ) : tab==="active" ? (
+                  <Btn variant="outline" size="sm" onClick={()=>setInvitingModel(m)}>Invite to <DvureSignature size={11}/></Btn>
+                ) : null}
+                {tab==="active" && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={()=>setEditingModel(m)} title="Edit" className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer"><Pencil size={13}/></button>
+                    <button onClick={()=>setArchiveConfirm(m)} title="Archive — no longer representing this model" className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-urgent hover:bg-secondary cursor-pointer"><Archive size={13}/></button>
+                  </div>
+                )}
+              </div>
+              {modelNegotiations.length > 0 && (
+                <div className="px-4 pb-3 pt-1 border-t border-border bg-secondary/30">
+                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-1.5">Active Negotiations</div>
+                  <div className="space-y-1">
+                    {modelNegotiations.map(n => (
+                      <button key={n.contractId} onClick={()=>setOpenNegotiation(n)}
+                        className="w-full flex items-center justify-between text-xs px-2 py-1.5 rounded-md hover:bg-secondary cursor-pointer transition-colors">
+                        <span>{n.campaignName} — {n.brandName}</span>
+                        <span className="font-mono font-medium">${n.dayRate.toLocaleString()}/day</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
-            <div className="text-xs font-mono">{m.rate}</div>
-            {m.hasLogin ? (
-              <Badge label="Has login" variant="active"/>
-            ) : (
-              <Btn variant="outline" size="sm" onClick={()=>setInvitingModel(m)}>Invite to <DvureSignature size={11}/></Btn>
-            )}
+          );
+        })}
+        {shown.length===0 && (
+          <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">
+            {tab==="active" ? "No models yet — add your first one." : "Nothing archived."}
           </div>
-        ))}
-        {roster.length===0 && (
-          <div className="border border-dashed border-border rounded-md p-10 text-center text-sm text-muted-foreground">No models yet — add your first one.</div>
         )}
       </div>
       {showAdd && <AddModelModal onClose={()=>setShowAdd(false)} onAdded={onModelAdded}/>}
       {invitingModel && <InviteModelModal model={invitingModel} onClose={()=>setInvitingModel(null)}/>}
+      {editingModel && <EditModelModal model={editingModel} onClose={()=>setEditingModel(null)} onSaved={patch=>onModelUpdated(editingModel.id, patch)}/>}
+      {archiveConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setArchiveConfirm(null)}>
+          <div className="glass-strong border rounded-md w-full max-w-sm mx-4 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-border text-sm font-semibold">Archive {archiveConfirm.name}?</div>
+            <div className="p-5 text-xs text-muted-foreground">
+              They'll drop off your active roster — you can still see them under Archived, but they won't be submittable to new campaigns until you represent them again.
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <Btn variant="primary" onClick={confirmArchive} disabled={archiving}>{archiving ? "Archiving…" : "Archive"}</Btn>
+              <Btn variant="outline" onClick={()=>setArchiveConfirm(null)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+      {openNegotiation && profile && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={()=>setOpenNegotiation(null)}>
+          <div className="glass-strong border rounded-md w-full max-w-sm mx-4 overflow-hidden shadow-xl" onClick={e=>e.stopPropagation()}>
+            <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
+              <div className="text-sm font-semibold truncate">{openNegotiation.campaignName} — {openNegotiation.brandName}</div>
+              <button onClick={()=>setOpenNegotiation(null)} className="text-muted-foreground hover:text-foreground"><X size={14}/></button>
+            </div>
+            <div className="p-3">
+              <NegotiationThread contractId={openNegotiation.contractId} campaignId={openNegotiation.campaignId} viewerRole="agency" viewerProfileId={profile.id}
+                currentRate={openNegotiation.dayRate} onRateChanged={async ()=>{ setNegotiations(await fetchActiveNegotiationsForAgency()); }}/>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1152,7 +1355,14 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   const [realInvitations, setRealInvitations] = useState<AgencyInvitation[]>([]);
   const [submitCampaign, setSubmitCampaign] = useState<string | undefined>(undefined);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const invitations: Invitation[] = [...INVITATIONS, ...realInvitations];
+  // INVITATIONS (mock) used to be merged in here too — real distributed
+  // campaigns now exist with the same names as the mock seed rows they
+  // were originally modeled on ("AW25 Womenswear Campaign" etc.), so
+  // concatenating both produced literal duplicate cards and a React key
+  // collision (same campaign name used as the key twice). Real data only
+  // now; INVITATIONS is still used by AgencyMessagingView's own
+  // still-mock threads, untouched here.
+  const invitations: Invitation[] = realInvitations;
 
   function selectView(v: View) {
     setView(v);
@@ -1163,6 +1373,11 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
     let active = true;
     if (org) fetchAgencyRoster(org.id, org.name).then(r => { if (active) setRoster(r); });
     if (org) fetchAgencyInvitations(org.id).then(inv => { if (active) setRealInvitations(inv); });
+    // Fire-and-forget — no cron in this repo, so "check for a birthday"
+    // piggybacks on the roster actually being opened (see roster.ts's
+    // own comment on notifyAdultTransitions). Not awaited: it only
+    // writes a notification server-side, nothing here depends on it.
+    if (org) notifyAdultTransitions();
     return () => { active = false; };
   }, [org?.id, org?.name]);
 
@@ -1172,6 +1387,23 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
   // model into local state.
   function addModel(m: RosterModel) {
     setRoster(prev => [...prev, m]);
+  }
+
+  // EditModelModal already succeeded server-side by the time this fires —
+  // just reflects the same fields into local state so the roster row
+  // (and the turned-18 chip, which reads dateOfBirth/guardianName off
+  // this same object) updates without a full refetch.
+  function updateModel(id: string, patch: Partial<RosterModel>) {
+    setRoster(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
+  }
+
+  // Archiving flips agency_model_relationships.status to 'inactive'
+  // (end_representation_relationship) — fetchAgencyRoster's active-only
+  // filter means this model simply won't be in the next fetch, but
+  // dropping it from local state now avoids the flash of it lingering
+  // until a refetch happens.
+  function removeModel(id: string) {
+    setRoster(prev => prev.filter(m => m.id !== id));
   }
 
   return (
@@ -1221,7 +1453,7 @@ export default function AgencyApp({ onLogout }: { onLogout: () => void }) {
             <div className="flex-1 overflow-auto p-4 md:p-6">
               {view === "invitations" && <InvitationsView invitations={invitations} onSubmitTalent={(campaign)=>{ setSubmitCampaign(campaign); setView("submit"); }}/>}
               {view === "submit" && <SubmitTalentView roster={roster} invitations={invitations} onGoToRoster={()=>setView("roster")} initialCampaign={submitCampaign}/>}
-              {view === "roster" && <RosterView roster={roster} onModelAdded={addModel}/>}
+              {view === "roster" && <RosterView roster={roster} onModelAdded={addModel} onModelUpdated={updateModel} onModelArchived={removeModel}/>}
               {view === "payments" && <PaymentsView/>}
               {view === "messaging" && <AgencyMessagingView/>}
             </div>

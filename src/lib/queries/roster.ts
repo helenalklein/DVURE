@@ -6,16 +6,21 @@ function parseRate(rate: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string): Promise<RosterModel[]> {
+// status defaults to "active" (the working roster) — pass "inactive" for
+// the Archived view. Same query either way; only the filter changes, so
+// archiving via end_representation_relationship (which flips this same
+// status column) moves a model between the two views without a separate
+// archived-models table or a soft-delete flag of its own.
+export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string, status: "active" | "inactive" = "active"): Promise<RosterModel[]> {
   const { data, error } = await supabase
     .from("agency_model_relationships")
     .select(`
       id, relationship_type, is_mother_agency, territories, exclusivity,
       effective_start_date, effective_end_date,
-      model_id, model_profiles(id, full_name, email, location, default_day_rate, height, experience, profile_id)
+      model_id, model_profiles(id, full_name, email, location, default_day_rate, height, experience, profile_id, date_of_birth, guardian_name, guardian_email, guardian_relationship)
     `)
     .eq("agency_org_id", agencyOrgId)
-    .eq("status", "active");
+    .eq("status", status);
 
   if (error || !data) return [];
 
@@ -40,6 +45,10 @@ export async function fetchAgencyRoster(agencyOrgId: string, agencyName: string)
         exclusivity: r.exclusivity as RepresentationExclusivity,
         effectiveStartDate: r.effective_start_date as string,
         effectiveEndDate: (r.effective_end_date as string | null) ?? null,
+        dateOfBirth: (m.date_of_birth as string | null) ?? null,
+        guardianName: (m.guardian_name as string | null) ?? null,
+        guardianEmail: (m.guardian_email as string | null) ?? null,
+        guardianRelationship: (m.guardian_relationship as string | null) ?? null,
       };
     });
 }
@@ -180,6 +189,14 @@ export async function setModelIntakeDetails(modelId: string, details: {
   // holder and the only one who can sign; this just lets a 16/17 year
   // old also be reachable directly (e.g. day-of, on set).
   secondaryEmail?: string; secondaryPhone?: string;
+  // Lets an agency fix a wrong DOB after intake (0091) — separate from
+  // add_new_model_to_roster's own p_date_of_birth, which only ever runs
+  // once, at creation.
+  dateOfBirth?: string;
+  // The "mark as adult" action — an explicit wipe, not just omitting the
+  // guardian fields above (coalesce(nullif(x,''), old) can update them
+  // but can never clear one back to null on its own).
+  clearGuardianInfo?: boolean;
 }): Promise<{ error: string | null }> {
   const { error } = await supabase.rpc("set_model_intake_details", {
     p_model_id: modelId,
@@ -189,8 +206,21 @@ export async function setModelIntakeDetails(modelId: string, details: {
     p_guardian_relationship: details.guardianRelationship || null,
     p_secondary_email: details.secondaryEmail || null,
     p_secondary_phone: details.secondaryPhone || null,
+    p_date_of_birth: details.dateOfBirth || null,
+    p_clear_guardian_info: details.clearGuardianInfo ?? false,
   });
   return { error: error?.message ?? null };
+}
+
+// Fire-and-forget — called once from the roster fetch path (AgencyApp),
+// never awaited/blocking. No scheduled-job infra exists in this repo
+// (see notify_adult_transitions', 0091, own comment), so this is what
+// stands in for "check on the 18th birthday": whenever an agency staffer
+// next opens their roster, any model who's since turned 18 with
+// guardian info still on file gets one real notification, deduped
+// server-side so it only ever fires once per model.
+export async function notifyAdultTransitions(): Promise<void> {
+  await supabase.rpc("notify_adult_transitions");
 }
 
 // The one field on a model's profile the model sets for themselves.

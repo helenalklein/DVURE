@@ -565,9 +565,6 @@ for Minor Models, subject to any requirements established by DVURE.
 A Minor Model may not create or maintain an independent DVURE Account
 or independently accept bookings, execute agreements, control payment
 instructions, or otherwise act as an authorized User of the Platform.
-A parent or legal guardian must be identified and approved as the
-authorized adult responsible for the Minor Model's participation in
-the Platform.
 Where DVURE provides for electronic execution of an agreement,
 consent, release, booking, or other document concerning a Minor Model,
 the applicable parent or legal guardian must execute such document on

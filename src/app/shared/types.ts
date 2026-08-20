@@ -64,6 +64,10 @@ export interface Talent {
   // — a plain sort key, not an id. null means "not set yet" (sorts
   // last, stable fallback to id order).
   boardPosition?: number | null;
+  // Drives isMinor() (shared/ui.tsx) for the Model Board's minor badge —
+  // same client-side mirror of is_model_minor() (0086) used everywhere
+  // else this matters (ModelApp signing, AgencyApp roster).
+  dateOfBirth?: string | null;
 }
 
 export type IconFn = (props: { size?: number; className?: string }) => JSX.Element | null;
@@ -112,6 +116,14 @@ export interface RosterModel {
   effectiveStartDate?: string;
   effectiveEndDate?: string | null;
   sex?: string;
+  // Minor lifecycle (0086/0091) — dateOfBirth drives isMinor() client-side
+  // the same way is_model_minor() does server-side; guardianName present
+  // alongside a now-18+ dateOfBirth is exactly the "needs updating" state
+  // the roster's turned-18 chip and notify_adult_transitions() both key off.
+  dateOfBirth?: string | null;
+  guardianName?: string | null;
+  guardianEmail?: string | null;
+  guardianRelationship?: string | null;
 }
 
 // ─── CAMPAIGN MESSAGING ─────────────────────────────────────────────────
@@ -194,6 +206,21 @@ export interface Campaign {
   // (submission_close + finalizationHours hours later). Non-null means
   // the Model Board has switched to its clean, Booked-only permanent view.
   boardFinalizedAt?: string | null;
+  // Physical shoot details — distinct from `due`/dueDateISO (the
+  // submissions/board deadline). Required before candidates can move to
+  // Hold (needsProjectDetails, accessGate.ts) since the contract needs
+  // real values for these, not permanently-blank merge tags.
+  location?: string | null;
+  shootStartDate?: string | null;
+  shootEndDate?: string | null;
+  // Sections 3.2/3.3 of the DVURE contract — optional per-project add-ons,
+  // default off. overtimeRate/IncrementMinutes/IncludedHours only matter
+  // when overtimeIncluded is true.
+  overtimeIncluded?: boolean;
+  overtimeRate?: number | null;
+  overtimeIncrementMinutes?: number | null;
+  overtimeIncludedHours?: number | null;
+  additionalServicesIncluded?: boolean;
 }
 
 // A physical runway show — the shared event. Not owned by any one

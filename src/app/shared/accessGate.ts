@@ -40,3 +40,16 @@ export function getAccessGate(org: OrgInfo | undefined): AccessGate {
 
   return { gated: true, reason: "trial_expired" };
 }
+
+// A separate, single-purpose check — not folded into getAccessGate
+// above, which is a different-shaped gate already shared by three
+// unrelated reasons (payment/verification/trial) across several
+// call sites. This one governs exactly two actions: creating a project
+// and sending a contract (the latter already enforced inside
+// ContractModal itself, which can't send with zero templates to choose
+// from) — never general browsing, matching this app's existing gate
+// philosophy. Agencies/models never see this; only a brand needs to
+// pick a template before using their account for real work.
+export function needsContractTemplate(org: OrgInfo | undefined): boolean {
+  return !!org && org.orgType === "brand" && !org.defaultContractTemplateId;
+}

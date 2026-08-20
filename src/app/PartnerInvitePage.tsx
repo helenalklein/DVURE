@@ -27,6 +27,8 @@ export default function PartnerInvitePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [companyTitle, setCompanyTitle] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +156,7 @@ export default function PartnerInvitePage() {
       email, password, fullName, role: invite!.inviteeOrgType === "brand" ? "brand_staff" : "agency_staff",
     });
     if (signUpErr) { setBusy(false); setError(signUpErr); return; }
-    const { error: orgErr } = await completeOrgSignup(companyName, invite!.inviteeOrgType);
+    const { error: orgErr } = await completeOrgSignup(companyName, invite!.inviteeOrgType, companyTitle, companyAddress);
     setBusy(false);
     if (orgErr) { setError(orgErr); return; }
     // Once org exists, the signedIn effect above picks it up and attempts
@@ -204,11 +206,13 @@ export default function PartnerInvitePage() {
       ) : (
         <div className="space-y-3 text-left">
           <TextInput label={invite.inviteeOrgType === "brand" ? "Brand Name" : "Agency Name"} placeholder="" value={companyName} onChange={e=>setCompanyName(e.target.value)}/>
+          <TextInput label="Company Address" placeholder="123 Broadway, New York, NY" value={companyAddress} onChange={e=>setCompanyAddress(e.target.value)}/>
           <TextInput label="Your Name" placeholder="" value={fullName} onChange={e=>setFullName(e.target.value)}/>
+          <TextInput label="Your Title" placeholder="e.g. Creative Director" value={companyTitle} onChange={e=>setCompanyTitle(e.target.value)}/>
           <TextInput label="Work Email" type="email" placeholder="you@company.com" value={email} onChange={e=>setEmail(e.target.value)}/>
           <TextInput label="Password" type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)}/>
           {error && <div className="flex items-center gap-1.5 text-xs text-red-500"><AlertCircle size={12}/> {error}</div>}
-          <Btn variant="primary" fullWidth disabled={!companyName || !fullName || !email || password.length < 6 || busy} onClick={handleCreateAccount}>
+          <Btn variant="primary" fullWidth disabled={!companyName || !companyAddress || !fullName || !companyTitle || !email || password.length < 6 || busy} onClick={handleCreateAccount}>
             {busy ? "Creating…" : "Create Account"}
           </Btn>
         </div>

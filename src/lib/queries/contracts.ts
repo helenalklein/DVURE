@@ -16,12 +16,13 @@ export interface Contract {
   sentAt: string | null;
   executedAt: string | null;
   createdAt: string;
+  documentHtml: string | null;
 }
 
 export async function fetchCampaignContracts(campaignId: string): Promise<Contract[]> {
   const { data, error } = await supabase
     .from("contracts")
-    .select("id, contract_number, model_id, day_rate, agency_pct, territory, duration, status, sent_at, executed_at, created_at, model_profiles(full_name)")
+    .select("id, contract_number, model_id, day_rate, agency_pct, territory, duration, status, sent_at, executed_at, created_at, document_html, model_profiles(full_name)")
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];
@@ -38,11 +39,13 @@ export async function fetchCampaignContracts(campaignId: string): Promise<Contra
     sentAt: r.sent_at,
     executedAt: r.executed_at,
     createdAt: r.created_at,
+    documentHtml: r.document_html ?? null,
   }));
 }
 
 export interface ModelContract {
   id: string;
+  campaignId: string;
   contractNumber: string;
   campaignName: string;
   brandName: string;
@@ -56,6 +59,7 @@ export interface ModelContract {
   modelSignatureName: string | null;
   signedByModelAt: string | null;
   createdAt: string;
+  documentHtml: string | null;
 }
 
 // contracts_select_own_model (0083) scopes this to the model's own
@@ -64,12 +68,13 @@ export interface ModelContract {
 export async function fetchContractsForModel(modelId: string): Promise<ModelContract[]> {
   const { data, error } = await supabase
     .from("contracts")
-    .select("id, contract_number, day_rate, agency_pct, territory, duration, status, sent_at, executed_at, model_signature_name, signed_by_model_at, created_at, campaigns(name, organizations(name))")
+    .select("id, campaign_id, contract_number, day_rate, agency_pct, territory, duration, status, sent_at, executed_at, model_signature_name, signed_by_model_at, created_at, document_html, campaigns(name, organizations(name))")
     .eq("model_id", modelId)
     .order("created_at", { ascending: false });
   if (error || !data) return [];
   return (data as any[]).map((r) => ({
     id: r.id,
+    campaignId: r.campaign_id,
     contractNumber: r.contract_number,
     campaignName: r.campaigns?.name ?? "Unknown project",
     brandName: r.campaigns?.organizations?.name ?? "Unknown brand",
@@ -83,6 +88,7 @@ export async function fetchContractsForModel(modelId: string): Promise<ModelCont
     modelSignatureName: r.model_signature_name,
     signedByModelAt: r.signed_by_model_at,
     createdAt: r.created_at,
+    documentHtml: r.document_html ?? null,
   }));
 }
 
@@ -97,9 +103,119 @@ export async function signContractAsModel(contractId: string, typedName: string)
   return { error: error?.message ?? null };
 }
 
+// Escape the resolved value itself — it's plain deal-term text (a
+// model's name, a rate) landing inside HTML, not something already
+// safe to inject raw.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Wraps a resolved merge tag in a visible "the system filled this in"
+// marker — inline styles, not Tailwind classes, since this HTML is
+// stored as a raw string and rendered via a contenteditable's innerHTML
+// (RichTextEditor), never through JSX/Tailwind's build-time class scan.
+// var(--foreground) still resolves correctly there: CSS custom properties
+// cascade to any DOM subtree regardless of how the markup was inserted.
+// Neutral black/gray, not a brand accent color — this app's color scheme
+// is black/white by design, real palette work deferred to a designer.
+function mergeFieldSpan(label: string, value: string): string {
+  return `<span data-merge-field="${label}" title="Auto-filled: ${label}" style="background:rgba(30,28,26,0.08);border-bottom:1px solid var(--foreground);border-radius:2px;padding:0 2px;">${escapeHtml(value)}</span>`;
+}
+
+// The empty counterpart — any {{tag}} the template references that
+// isn't in the known set below (a field this fixed tag list doesn't
+// cover yet, e.g. something the brand's own uploaded contract asks for)
+// renders as a visibly blank, fillable-looking placeholder instead of
+// either leaking raw "{{tag}}" syntax into the document or silently
+// deleting a spot that needs real input.
+function blankFieldSpan(label: string): string {
+  return `<span data-merge-field-blank="${label}" title="Needs input: ${label}" style="background:rgba(110,103,93,0.12);border-bottom:1px dashed var(--muted-foreground);border-radius:2px;padding:0 4px;color:var(--muted-foreground);">[${label}]</span>`;
+}
+
+function tagLabel(tag: string): string {
+  return tag.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+// Removes an entire optional section (0100's <div data-optional-section="...">
+// wrapper around 3.2 Overtime / 3.3 Additional Services) when the
+// project hasn't opted into it, rather than leaving it in with blank
+// tags — these are terms that plainly don't apply to a project that
+// never turned them on, not deal points someone forgot to fill in. Runs
+// before resolveContractMergeTags so there's nothing left inside a
+// stripped section for the tag resolver to touch. Non-greedy match is
+// safe here: content_html never nests one data-optional-section inside
+// another.
+export function stripOptionalSections(html: string, flags: { includeOvertime: boolean; includeAdditionalServices: boolean }): string {
+  let out = html;
+  if (!flags.includeOvertime) {
+    out = out.replace(/<div data-optional-section="overtime">[\s\S]*?<\/div>\s*/, "");
+  }
+  if (!flags.includeAdditionalServices) {
+    out = out.replace(/<div data-optional-section="additional_services">[\s\S]*?<\/div>\s*/, "");
+  }
+  return out;
+}
+
+// Updates just the rendered Day Rate value inside an already-resolved
+// document — used when a negotiation (rateNegotiations.ts) lands on a
+// new number after the document was frozen. A full re-resolve isn't an
+// option: only the resolved HTML is stored on the contract row, not the
+// original template with its {{day_rate}} tag still in it. Targets the
+// exact span mergeFieldSpan("Day Rate", ...) would have produced at
+// send time — if a brand's template never referenced {{day_rate}} at
+// all (no span to find), this is a harmless no-op; the new number still
+// lands in contracts.day_rate, which is what every other view reads.
+export function patchDayRateInDocument(html: string, formattedAmount: string): string {
+  return html.replace(/<span data-merge-field="Day Rate"[^>]*>.*?<\/span>/, mergeFieldSpan("Day Rate", formattedAmount));
+}
+
+// Not a real templating engine — this fixed tag set is all a contract
+// template needs to reference from the deal terms already on the modal
+// that resolves it (ContractModal, BrandApp.tsx). Every known tag
+// renders as a labeled "auto-filled" field (mergeFieldSpan); anything
+// else shaped like {{a_tag}} that isn't recognized renders as a visibly
+// blank field instead (blankFieldSpan) rather than silently vanishing.
+export function resolveContractMergeTags(html: string, tags: {
+  modelName: string; dayRate: string; territory: string; duration: string; brandName: string; contractNumber?: string;
+  projectName?: string; modelEmail?: string;
+  projectType?: string; shootDates?: string; shootLocation?: string; brandAddress?: string;
+  senderName?: string; senderTitle?: string; sentDate?: string; projectId?: string;
+  overtimeRate?: string; overtimeIncrementMinutes?: string; overtimeIncludedHours?: string;
+}): string {
+  const known: Record<string, string> = {
+    model_name: tags.modelName,
+    day_rate: tags.dayRate,
+    territory: tags.territory,
+    duration: tags.duration,
+    brand_name: tags.brandName,
+    contract_number: tags.contractNumber ?? "",
+    project_name: tags.projectName ?? "",
+    model_email: tags.modelEmail ?? "",
+    project_type: tags.projectType ?? "",
+    shoot_dates: tags.shootDates ?? "",
+    shoot_location: tags.shootLocation ?? "",
+    brand_address: tags.brandAddress ?? "",
+    sender_name: tags.senderName ?? "",
+    sender_title: tags.senderTitle ?? "",
+    sent_date: tags.sentDate ?? "",
+    project_id: tags.projectId ?? "",
+    overtime_rate: tags.overtimeRate ?? "",
+    overtime_increment: tags.overtimeIncrementMinutes ?? "",
+    overtime_included_hours: tags.overtimeIncludedHours ?? "",
+  };
+  return html.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, rawTag: string) => {
+    const tag = rawTag.toLowerCase();
+    const label = tagLabel(tag);
+    if (tag in known && known[tag]) return mergeFieldSpan(label, known[tag]);
+    return blankFieldSpan(label);
+  });
+}
+
 // contract_number is server-generated (set_contract_number() trigger,
 // 0032) — never client-supplied, so two brands generating a contract at
-// the same moment can't collide on the same number.
+// the same moment can't collide on the same number. documentHtml is
+// written here, once — the resolved snapshot at creation time, not
+// re-resolved later even if the source template changes afterward.
 export async function createContract(params: {
   campaignId: string;
   modelId: string;
@@ -109,6 +225,8 @@ export async function createContract(params: {
   duration?: string;
   createdByProfileId: string;
   sendImmediately?: boolean;
+  contractTemplateId?: string;
+  documentHtml?: string;
 }): Promise<{ id: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from("contracts")
@@ -122,6 +240,8 @@ export async function createContract(params: {
       status: params.sendImmediately ? "awaiting_signature" : "draft",
       sent_at: params.sendImmediately ? new Date().toISOString() : null,
       created_by_profile_id: params.createdByProfileId,
+      contract_template_id: params.contractTemplateId ?? null,
+      document_html: params.documentHtml ?? null,
     })
     .select("id")
     .single();
@@ -170,5 +290,15 @@ export async function markContractExecuted(
       artifactHash: hash,
     });
   }
+  return { error: error?.message ?? null };
+}
+
+// Draft-only, enforced server-side (contracts_delete_draft_only, 0096) —
+// a contract that's ever been sent or executed can't be deleted through
+// this or any other path; the RLS policy is the real gate, this call
+// just fails with a permission error if status isn't 'draft'.
+export async function deleteContract(contractId: string, campaignId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("contracts").delete().eq("id", contractId);
+  if (!error) logAuditEvent({ action: "contract.deleted", objectType: "contract", objectId: contractId, campaignId });
   return { error: error?.message ?? null };
 }

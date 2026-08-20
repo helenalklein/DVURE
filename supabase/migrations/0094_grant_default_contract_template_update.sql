@@ -1,0 +1,12 @@
+-- Found live-testing "Use DVURE Standard" in Settings: setOrgDefaultTemplate's
+-- update to organizations.default_contract_template_id failed with
+-- "permission denied for table organizations". 0092 added the column
+-- but never granted UPDATE on it -- organizations locks self-editable
+-- columns down to an explicit per-column grant (0019/0048/0088) rather
+-- than a blanket UPDATE, specifically so an org can't PATCH its own
+-- verification_status/subscription_status/etc. through the same door.
+-- default_contract_template_id is exactly the same kind of harmless
+-- self-edit logo_url/default_finalization_hours already are. Row access
+-- stays gated by organizations_update's existing RLS (id = my_org_id()
+-- and my_access_level() = 'administrator'), unchanged.
+grant update (default_contract_template_id) on organizations to authenticated;

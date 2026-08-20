@@ -16,6 +16,11 @@ export interface OrgInfo {
   orgType: OrgType;
   accessLevel: AccessLevel;
   title: string | null;
+  // Required at signup (complete_org_signup + set_signup_title_and_address,
+  // 0098) so the brand's own contract signature block can auto-fill a
+  // real value instead of asking every sender to type it into a blank
+  // template. Nullable at the DB level for pre-existing orgs.
+  address: string | null;
   verificationStatus: VerificationStatus;
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: string | null;
@@ -33,6 +38,11 @@ export interface OrgInfo {
   // finalizationHours (0088). Brand-only setting, edited in Settings >
   // Organization; defaults to 48 server-side.
   defaultFinalizationHours: number;
+  // Null means "hasn't chosen a contract template yet" (0092) — the
+  // exact state needsContractTemplate() (accessGate.ts) gates on. Never
+  // auto-defaulted at signup; picking one (even DVURE's own) is meant
+  // to be an explicit choice.
+  defaultContractTemplateId: string | null;
 }
 
 export interface ModelAgencyInfo {
@@ -84,7 +94,7 @@ interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUpBrandOrAgency: (params: { email: string; password: string; fullName: string; role: "brand_staff" | "agency_staff" }) => Promise<{ error: string | null }>;
   signUpIndependentModel: (params: { email: string; password: string; fullName: string }) => Promise<{ error: string | null }>;
-  completeOrgSignup: (orgName: string, orgType: OrgType) => Promise<{ error: string | null }>;
+  completeOrgSignup: (orgName: string, orgType: OrgType, title: string, address: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshIdentity: () => Promise<void>;
 }
@@ -164,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgType: orgRow.org_type,
         accessLevel: membership.access_level,
         title: membership.title,
+        address: orgRow.address,
         verificationStatus: orgRow.verification_status,
         subscriptionStatus: orgRow.subscription_status,
         trialEndsAt: orgRow.trial_ends_at,
@@ -172,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         selfDescribedServices: orgRow.self_described_services,
         foundingMember: !!orgRow.founding_member,
         defaultFinalizationHours: orgRow.default_finalization_hours ?? 48,
+        defaultContractTemplateId: orgRow.default_contract_template_id ?? null,
       },
     });
   }, []);
@@ -224,9 +236,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const completeOrgSignup = useCallback(
-    async (orgName: string, orgType: OrgType) => {
+    async (orgName: string, orgType: OrgType, title: string, address: string) => {
       const { error } = await supabase.rpc("complete_org_signup", { p_org_name: orgName, p_org_type: orgType });
       if (error) return { error: error.message };
+      // Separate, additive call (0098) rather than passing title/address
+      // straight into complete_org_signup — see that migration's own
+      // comment for why the two are kept apart. Non-fatal if it fails:
+      // the org itself is already created at this point, and title/
+      // address can still be fixed later in Settings.
+      await supabase.rpc("set_signup_title_and_address", { p_title: title, p_org_address: address });
       const {
         data: { session },
       } = await supabase.auth.getSession();

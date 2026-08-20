@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { LogOut, Briefcase, Calendar, FileCheck, CreditCard, User, MessageSquare, ChevronLeft, ChevronRight, PenLine } from "lucide-react";
-import { cx, Badge, TopBar, Stat, CurrentUserProvider, DvureMark, DvureSignature, MobileNavDrawer, Btn } from "../shared/ui";
+import { cx, Badge, TopBar, Stat, CurrentUserProvider, DvureMark, DvureSignature, MobileNavDrawer, Btn, isMinor, RichTextEditor, NegotiationThread } from "../shared/ui";
 import { CAMPAIGNS, CAMPAIGN_AGENCY_THREADS } from "../shared/mockData";
 import { useAuth } from "../shared/auth";
 import { fetchPendingConfirmationsForModel, fetchInvoicesForModel, type Invoice, type InvoiceStatus } from "../../lib/queries/payments";
 import { fetchBookingsForModel, type ModelBooking } from "../../lib/queries/bookings";
 import { fetchContractsForModel, signContractAsModel, type ModelContract, type ContractStatus } from "../../lib/queries/contracts";
+import { postOffer } from "../../lib/queries/rateNegotiations";
 import { updateMyPronouns } from "../../lib/queries/roster";
 import PaymentConfirmQueue from "../shared/PaymentConfirmQueue";
 import { CompCard } from "../shared/CompCard";
@@ -308,23 +309,15 @@ function normalizeName(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-// ToS 7.17 — a minor's contract is signed by the identified guardian,
-// not the minor. is_model_minor (0086) is the real, server-enforced
-// version of this same check; this is just the client-side mirror so
-// the UI can ask for the right name up front instead of failing after
-// a submit.
-function isMinor(dateOfBirth: string | null | undefined): boolean {
-  if (!dateOfBirth) return false;
-  const eighteenYearsAgo = new Date();
-  eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
-  return new Date(dateOfBirth) > eighteenYearsAgo;
-}
-
-function ContractSignBox({ contract, onSigned }: { contract: ModelContract; onSigned: () => void }) {
-  const { modelProfile } = useAuth();
+function ContractSignBox({ contract, onSigned, onCountered }: { contract: ModelContract; onSigned: () => void; onCountered: () => void }) {
+  const { profile, modelProfile } = useAuth();
   const [typedName, setTypedName] = useState("");
   const [signing, setSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [countering, setCountering] = useState(false);
+  const [counterAmount, setCounterAmount] = useState("");
+  const [counterNote, setCounterNote] = useState("");
+  const [sendingCounter, setSendingCounter] = useState(false);
 
   const minor = isMinor(modelProfile?.dateOfBirth);
   const expectedName = minor ? modelProfile?.guardianName : modelProfile?.fullName;
@@ -343,6 +336,19 @@ function ContractSignBox({ contract, onSigned }: { contract: ModelContract; onSi
     onSigned();
   }
 
+  async function submitCounter() {
+    const amount = Number(counterAmount);
+    if (!amount || amount <= 0 || !profile) { setError("Enter a counter rate to send."); return; }
+    setSendingCounter(true);
+    setError(null);
+    const { error } = await postOffer(contract.id, profile.id, "model", amount, counterNote.trim() || undefined);
+    setSendingCounter(false);
+    if (error) { setError(error); return; }
+    setCountering(false);
+    setCounterAmount(""); setCounterNote("");
+    onCountered();
+  }
+
   if (minor && !modelProfile?.guardianName) {
     return (
       <div className="mt-3 pt-3 border-t border-border">
@@ -353,29 +359,60 @@ function ContractSignBox({ contract, onSigned }: { contract: ModelContract; onSi
 
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
-      <div className="text-xs text-muted-foreground">
-        {minor
-          ? "This model is a minor — type the parent or guardian's full legal name to sign this contract electronically."
-          : "Type your full legal name to sign this contract electronically."}
-      </div>
-      <div className="flex items-center gap-2">
-        <input value={typedName} onChange={e=>setTypedName(e.target.value)} placeholder={minor ? "Parent/guardian's full legal name" : "Full legal name"}
-          className="flex-1 border border-border rounded-md px-3 py-1.5 text-base bg-input-background focus:outline-none focus:border-foreground"
-          style={{ fontFamily: "cursive" }}/>
-        <Btn size="sm" onClick={submit} disabled={signing} icon={<PenLine size={13}/>}>{signing ? "Signing…" : "Sign"}</Btn>
-      </div>
+      {countering ? (
+        <div className="space-y-2">
+          <div className="text-xs text-muted-foreground">Propose a different rate instead of signing — sent to the brand and your agency.</div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-border rounded-md bg-input-background px-2 w-28 shrink-0">
+              <span className="text-sm text-muted-foreground">$</span>
+              <input value={counterAmount} onChange={e=>setCounterAmount(e.target.value.replace(/[^0-9]/g,""))} placeholder={String(contract.dayRate)}
+                className="w-full bg-transparent px-1 py-1.5 text-sm focus:outline-none"/>
+            </div>
+            <input value={counterNote} onChange={e=>setCounterNote(e.target.value)} placeholder="Optional note"
+              className="flex-1 border border-border rounded-md px-3 py-1.5 text-sm bg-input-background focus:outline-none focus:border-foreground"/>
+          </div>
+          <div className="flex gap-2">
+            <Btn size="sm" onClick={submitCounter} disabled={sendingCounter}>{sendingCounter ? "Sending…" : "Send Counter"}</Btn>
+            <Btn size="sm" variant="outline" onClick={()=>setCountering(false)}>Cancel</Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="text-xs text-muted-foreground">
+            {minor
+              ? "This model is a minor — type the parent or guardian's full legal name to sign this contract electronically."
+              : "Type your full legal name to sign this contract electronically."}
+          </div>
+          <div className="flex items-center gap-2">
+            <input value={typedName} onChange={e=>setTypedName(e.target.value)} placeholder={minor ? "Parent/guardian's full legal name" : "Full legal name"}
+              className="flex-1 border border-border rounded-md px-3 py-1.5 text-base bg-input-background focus:outline-none focus:border-foreground"
+              style={{ fontFamily: "cursive" }}/>
+            <Btn size="sm" onClick={submit} disabled={signing} icon={<PenLine size={13}/>}>{signing ? "Signing…" : "Sign"}</Btn>
+            <Btn size="sm" variant="outline" onClick={()=>setCountering(true)}>Counter</Btn>
+          </div>
+        </>
+      )}
       {error && <div className="text-xs text-red-500">{error}</div>}
     </div>
   );
 }
 
 function ContractsView() {
-  const { modelProfile } = useAuth();
+  const { profile, modelProfile } = useAuth();
   const [contracts, setContracts] = useState<ModelContract[] | null>(null);
+  // NegotiationThread owns its own message list internally and only
+  // refetches it on mount or after its own send/accept — a counter sent
+  // through ContractSignBox (a sibling, not the thread's own input) has
+  // no way to tell it a new message exists. Bumping this and folding it
+  // into the thread's key forces a remount (and so a fresh fetch)
+  // whenever anything on this screen reloads, not just the thread's own
+  // actions.
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   function reload() {
     if (!modelProfile) { setContracts([]); return; }
     fetchContractsForModel(modelProfile.id).then(setContracts);
+    setReloadNonce(n => n + 1);
   }
 
   useEffect(reload, [modelProfile?.id]);
@@ -392,14 +429,32 @@ function ContractsView() {
               <div className="text-sm font-semibold">{c.campaignName}</div>
               <div className="text-xs text-muted-foreground">{c.brandName} · {c.contractNumber}</div>
             </div>
-            <Badge {...CONTRACT_STATUS_BADGE[c.status]}/>
+            <div className="text-right shrink-0">
+              <Badge {...CONTRACT_STATUS_BADGE[c.status]}/>
+              {c.sentAt && <div className="text-[10px] text-muted-foreground mt-1">Sent {new Date(c.sentAt).toLocaleDateString()}</div>}
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border text-xs">
-            <div><div className="text-muted-foreground">Day rate</div><div className="font-mono font-medium">${c.dayRate.toLocaleString()}</div></div>
+            <div><div className="text-muted-foreground">{c.status==="fully_executed" ? "Agreed Rate" : "Offered Rate"}</div><div className="font-mono font-medium">${c.dayRate.toLocaleString()}</div></div>
             <div><div className="text-muted-foreground">Territory</div><div className="font-medium">{c.territory}</div></div>
             <div><div className="text-muted-foreground">Duration</div><div className="font-medium">{c.duration}</div></div>
           </div>
-          {c.status === "awaiting_signature" && <ContractSignBox contract={c} onSigned={reload}/>}
+          {c.status === "awaiting_signature" && profile && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <NegotiationThread key={`${c.id}-${reloadNonce}`} contractId={c.id} campaignId={c.campaignId} viewerRole="model" viewerProfileId={profile.id}
+                currentRate={c.dayRate} onRateChanged={reload}/>
+            </div>
+          )}
+          {/* The actual contract text — deal terms above are the summary,
+              this is what's actually being signed. Read-only: a model
+              can review it but never edit the document they're about to
+              sign. */}
+          {c.documentHtml && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <RichTextEditor value={c.documentHtml} readOnly minHeight="0px" className="max-h-56"/>
+            </div>
+          )}
+          {c.status === "awaiting_signature" && <ContractSignBox contract={c} onSigned={reload} onCountered={reload}/>}
           {c.status === "fully_executed" && (
             <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
               {c.modelSignatureName

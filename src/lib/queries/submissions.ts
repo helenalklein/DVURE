@@ -37,6 +37,7 @@ interface ModelRow {
   photo_url: string | null;
   email: string | null;
   sex: string | null;
+  date_of_birth: string | null;
 }
 
 function formatRate(n: number | null): string {
@@ -61,7 +62,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       submitting_agency_id,
       submitting_agency:organizations!submissions_submitting_agency_id_fkey(name),
       submitted_by:profiles!submissions_submitted_by_profile_id_fkey(full_name, email),
-      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url, email, sex)
+      model_profiles(id, full_name, location, default_day_rate, height, bust, waist, dress, experience, photo_url, email, sex, date_of_birth)
     `)
     .eq("campaign_id", campaignId)
     // Without an explicit order, Postgres doesn't guarantee row order is
@@ -154,6 +155,7 @@ export async function fetchCampaignSubmissions(campaignId: string): Promise<{ ta
       exp: m?.experience ?? "",
       score: canonical.brand_score ?? 0,
       boardPosition: canonical.board_position ?? null,
+      dateOfBirth: m?.date_of_birth ?? null,
       duplicateFlag: group.length > 1,
     };
   });
